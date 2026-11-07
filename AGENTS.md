@@ -60,8 +60,10 @@ Next.js (phones)  ⇄  SpacetimeDB module "keystone" (tables, reducers, schedule
 spacetime/        SpacetimeDB module (TypeScript): tables, reducers, scheduled recompute
 apps/web/         Next.js (App Router, TS, Tailwind). Generated bindings in apps/web/lib/module_bindings/ (never edit)
 services/worker/  Node + TypeScript agent worker. Generated bindings in services/worker/src/module_bindings/ (never edit)
+services/voice/   Python 3.12 Pipecat voice agent: Talk button (WebRTC) + phone line (SignalWire). NVIDIA-only: Nemotron ASR,
+                  Nemotron Lightning (tools via worker /phone routes), Magpie TTS. Design: docs/voice-selfhost.md
 data/             Synthetic data generator (Python) + generated seed JSON in data/seed/ (committed)
-infra/            Docker Compose (Caddy + web + worker + self-hosted SpacetimeDB) for one EC2 box; deploy.sh; DEPLOY.md
+infra/            Docker Compose (Caddy + web + worker + voice + self-hosted SpacetimeDB) for one EC2 box; deploy.sh; DEPLOY.md
 docs/             tracks, contracts, demo script, scope, NVIDIA stack notes
 ```
 
