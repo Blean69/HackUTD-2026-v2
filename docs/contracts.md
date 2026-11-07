@@ -97,3 +97,29 @@ Worker-only (reject unless `ctx.sender` is in `worker`):
 |---|---|---|
 | GET | `/health` | provider status `{nvidia, tenvor_nemotron, tenvor_qwen, spacetime}` |
 | POST | `/asr?huddle_id=&speaker=` | audio chunk (webm/opus or wav) → NVIDIA ASR → calls `append_transcript` as the worker. 503 if ASR unavailable (browser speech fallback) |
+
+## 5. Plaid Sandbox (real bank-API data)
+
+Plaid is an external data source, never a second database: everything it returns is written into SpacetimeDB tables.
+Plaid calls happen only in the worker (secrets in env: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV=sandbox`).
+
+Tables (added to the module):
+| Table | Columns | Notes |
+|---|---|---|
+| `plaid_item` (**private**) | item_id pk, household_id, access_token, institution_id, institution_name, cursor, created_at | never visible to clients |
+| `bank_connection` | item_id pk, household_id, institution_name, status linking/syncing/ok/error, accounts_count, txns_count, last_synced_at, error | what the UI shows |
+| `account`, `txn` | + `source` column: `seed` or `plaid` | Plaid rows use ids `acct_plaid_<plaid account_id>`, `txn_plaid_<transaction_id>` |
+
+Reducers: `request_bank_sync(household_id)` (any client; enqueues `plaid_sync`), and worker-only `agent_save_plaid_item`,
+`agent_set_bank_connection`, `agent_upsert_accounts(rows_json)`, `agent_upsert_txns(rows_json)`, `agent_remove_txns(ids_json)`.
+New workflow `plaid_sync`: fetch accounts, balances, liabilities and `/transactions/sync` → map Plaid types/subtypes to our 8 account
+types (Nemotron explains any ambiguous mapping) → upsert → `recompute_household` → `data_quality` check. All of it traced.
+
+Worker HTTP (adds to section 4):
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/plaid/link_token` `{household_id}` | `/link/token/create` (products: transactions, liabilities, investments) → `{link_token}` for Plaid Link in the browser |
+| POST | `/plaid/exchange` `{household_id, public_token}` | exchange → `agent_save_plaid_item` → queue `plaid_sync` |
+| POST | `/plaid/sandbox_connect` `{household_id, username?}` | demo shortcut, no Link UI: `/sandbox/public_token/create` on First Platypus Bank (`ins_109508`) with `user_transactions_dynamic` (default) or `user_good`, then same as exchange |
+
+Sandbox test login in Plaid Link: `user_good` / `pass_good` (shown as a hint in our UI; these are Plaid's public sandbox values).

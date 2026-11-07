@@ -21,6 +21,7 @@
 - Deployed behind HTTPS with a QR code
 
 ## P1: makes it win (overnight)
+- Plaid Sandbox: connect a bank (Link + one-tap sandbox connect) → `plaid_sync` workflow → tables
 - What-if simulator + coach with visible tool calls
 - Scam Shield (Nguyen story) + transaction anomaly classifier (data_quality workflow on sandbox creation)
 - NVIDIA ASR via `POST /asr` (browser speech stays the fallback)

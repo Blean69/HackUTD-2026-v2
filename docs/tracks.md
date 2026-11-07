@@ -14,6 +14,7 @@ obligations, a "what if" simulator, or something nobody has thought of yet.
 | Their example | Our feature |
 |---|---|
 | Conversational coach | Coach that answers by calling tools on the family's own (synthetic) data, with every call visible |
+| Whole picture across institutions | Real bank-API data: connect a bank through **Plaid Sandbox** (Link on the judge's phone, or one-tap sandbox connect). Accounts, liabilities and transaction history flow into the same room |
 | 3+ health indicators | Six indicators computed live: liquidity runway, DTI, credit utilization, savings rate, net-worth trend, emergency fund |
 | Forecast balances & obligations | 90-day cash forecast with bills and loan payments marked, plus the low point |
 | What-if simulator | Natural-language scenarios ("open a second bakery location") → simulated impact, shared with the whole family |
@@ -29,7 +30,7 @@ external APIs/services, (4) real-world applicability.
 |---|---|
 | Beyond a chatbot | Most runs start without a chat: a Huddle ending, a new sandbox (data audit), a simulation request |
 | Multi-step workflows | huddle, what_if, coach, scam_check, data_quality. Each emits plan → tool calls → results → decision, live in the glass box |
-| Tool integration | Internal tools (ledger queries, forecast, simulator, anomaly classifier, scam detector) and external APIs (FRED interest rates, College Scorecard tuition data, NVIDIA ASR) |
+| Tool integration | Internal tools (ledger queries, forecast, simulator, anomaly classifier, scam detector) and external APIs (Plaid Sandbox banking, FRED interest rates, College Scorecard tuition data, NVIDIA ASR) |
 | Real-world | Elder scams and opaque household finances are real, expensive problems |
 | NVIDIA stack depth | Nemotron reasoning model for planning, a small Nemotron for extraction, NVIDIA ASR for voice, self-hosted Nemotron on our own NVIDIA GPU cloud (tenvor.io) as live failover |
 

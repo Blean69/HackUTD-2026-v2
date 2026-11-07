@@ -21,7 +21,7 @@ Tracks: **PNC** (360° Financial Health Navigator) · **NVIDIA** (Nemotron beyon
 | [docs/scope.md](docs/scope.md) | Timeline, P0/P1/P2, owners |
 | [docs/nvidia-stack.md](docs/nvidia-stack.md) | Nemotron model ids, ASR, self-hosting on tenvor.io |
 
-Tasks, ideas, questions and decisions: [GitHub issues](https://github.com/Blean69/HackUTD-2026/issues) (also on the team Project board).
+Tasks, ideas, questions and decisions: [GitHub issues](https://github.com/Blean69/HackUTD-2026/issues) on the team [Project board](https://github.com/users/Blean69/projects/4).
 Concept map: https://claude.ai/artifact/15RkwA4UTwAaN8g3spMcnk
 
 ## Run it

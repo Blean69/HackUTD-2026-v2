@@ -36,6 +36,7 @@ Next.js (phones)  ⇄  SpacetimeDB module "keystone" (tables, reducers, schedule
 ## Hard rules
 
 1. **Spacetime powers the primary functionality.** No side database, no REST data API, no websockets of our own.
+   External sources (Plaid Sandbox, FRED, College Scorecard) are read by the worker and written into tables.
    If state matters, it is a SpacetimeDB table.
 2. **Nemotron is the primary model for every agent.** Qwen on tenvor.io is fallback only. Every trace event records the
    provider and model that answered. Never silently swap models in a judged demo.
