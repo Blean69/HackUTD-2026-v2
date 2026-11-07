@@ -21,7 +21,7 @@ Tracks: **PNC** (360° Financial Health Navigator) · **NVIDIA** (Nemotron beyon
 | [docs/scope.md](docs/scope.md) | Timeline, P0/P1/P2, owners |
 | [docs/nvidia-stack.md](docs/nvidia-stack.md) | Nemotron model ids, ASR, self-hosting on tenvor.io |
 
-Team brainstorm board: *link added after first publish*
+Team brainstorm board (ideas, questions, decisions, votes): https://claude.ai/artifact/15RkwA4UTwAaN8g3spMcnk. Ask Ben for editor access.
 
 ## Run it
 See [AGENTS.md § Running locally](AGENTS.md#running-locally). Copy `.env.example` to `.env` first.
