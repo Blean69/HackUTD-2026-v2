@@ -1,0 +1,66 @@
+# Keystone edge. One hostname, automatic HTTPS (Let's Encrypt for a real DNS name, Caddy's local CA for "localhost").
+#
+#   /worker/*                                 -> worker:8787, prefix stripped   (NEXT_PUBLIC_WORKER_URL=https://<host>/worker)
+#   /v1/... what a browser/client needs       -> spacetime:3000, for everyone   (NEXT_PUBLIC_SPACETIME_URI=wss://<host>)
+#   /v1/... everything else (publish, ...)    -> spacetime:3000, ONLY from ADMIN_IPS; 403 for anyone else
+#   everything else                           -> web:3000 (Next.js)
+#
+# WebSockets work out of the box with reverse_proxy. flush_interval -1 turns off response buffering so streamed
+# responses (Next.js RSC streaming, SpacetimeDB frames, ASR replies) reach the phone immediately.
+#
+# SpacetimeDB route map (crates/client-api): the browser SDK only needs
+#   WS   /v1/database/<db>/subscribe          (live tables + reducer calls travel over this socket)
+#   POST /v1/identity/websocket-token         (short-lived token for the socket)
+# plus we also leave open, because they are what a stock client may call and are no more powerful than a subscription:
+#   POST /v1/database/<db>/call/<reducer>     (reducer by HTTP; the module's own checks apply)
+#   POST /v1/database/<db>/sql                (read-only SQL against public tables)
+#   /v1/identity, /v1/identity/*              (create/inspect anonymous identities)
+# Everything else under /v1 manages the server: POST/PUT/DELETE /v1/database[/<db>] (publish, delete), /pre_publish,
+# /names, /logs, /schema, /v1/energy/... They only work from ADMIN_IPS (the team), which is what `spacetime publish` needs.
+# ADMIN_IPS is a space-separated list of IPs/CIDRs (default 129.110.241.55/32); edit it in .env and redeploy to add a laptop.
+# This filters on the TCP peer address, which is the real client IP because Caddy is the first hop (no CDN/ALB in front).
+
+{
+	# HTTP/1.1 + HTTP/2 only: we publish TCP 80/443, not UDP 443, so don't advertise HTTP/3 to browsers.
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$PUBLIC_HOSTNAME:localhost} {
+	log {
+		output stdout
+		format console
+	}
+
+	# Agent worker (GET /health, POST /asr, POST /plaid/*). The worker never sees the /worker prefix.
+	handle /worker/* {
+		uri strip_prefix /worker
+		reverse_proxy worker:8787 {
+			flush_interval -1
+		}
+	}
+
+	# Self-hosted SpacetimeDB.
+	handle /v1/* {
+		@public path /v1/database/*/subscribe /v1/database/*/call/* /v1/database/*/sql /v1/identity /v1/identity/*
+		@admin remote_ip {$ADMIN_IPS:129.110.241.55/32}
+		route {
+			reverse_proxy @public spacetime:3000 {
+				flush_interval -1
+			}
+			reverse_proxy @admin spacetime:3000 {
+				flush_interval -1
+			}
+			respond "SpacetimeDB management API is restricted to the team" 403
+		}
+	}
+
+	# The app.
+	handle {
+		encode zstd gzip
+		reverse_proxy web:3000 {
+			flush_interval -1
+		}
+	}
+}

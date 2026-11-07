@@ -17,6 +17,7 @@
   "license": "ISC",
   "dependencies": {
     "openai": "^6.0.0",
+    "plaid": "^51.0.0",
     "spacetimedb": "2.14.1",
     "tsx": "^4.20.0",
     "zod": "^4.1.0"

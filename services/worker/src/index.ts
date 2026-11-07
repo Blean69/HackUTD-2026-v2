@@ -8,6 +8,7 @@ import { HouseholdLoader } from './db/household.js';
 import { SpacetimeHistory } from './db/history.js';
 import { createHttpServer, registerCoreRoutes } from './http.js';
 import { router } from './router.js';
+import { attachPlaid } from './plaid/index.js'; // also registers the /plaid/* routes
 import { JobQueue, parseJobInput } from './jobs.js';
 import { RealExternalApis } from './tools/external.js';
 import { buildRegistry } from './tools/index.js';
@@ -85,6 +86,7 @@ async function start(): Promise<void> {
 }
 
 async function run(conn: DbConnection): Promise<void> {
+  await attachPlaid(conn);
   const sink = new SpacetimeSink(conn);
   const loader = new HouseholdLoader(conn);
   const history = new SpacetimeHistory(conn);

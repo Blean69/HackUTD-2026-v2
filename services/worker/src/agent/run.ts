@@ -127,6 +127,10 @@ export class RunContext {
     if (res.failovers?.length) {
       this.emit(agent, 'message', `Switched provider after ${res.failovers.map((f) => `${f.provider}: ${truncate(f.error, 80)}`).join('; ')}`, { failovers: res.failovers }, { provider: res.provider, model: res.model });
     }
+    if (res.modelSwitch?.length) {
+      const m = res.modelSwitch[0]!;
+      this.emit(agent, 'message', `Model ${m.from} is not available for this API key (${m.reason}); answered by ${res.model}`, { switched: res.modelSwitch }, { provider: res.provider, model: res.model });
+    }
     if (res.reasoning) {
       const first = res.reasoning.split(/(?<=[.!?])\s/)[0] ?? res.reasoning;
       this.emit(agent, 'thought', `${opts.thoughtTitle ?? 'Thinking'}: ${truncate(first, 160)}`, { reasoning: truncate(res.reasoning, 1800) }, meta(res));

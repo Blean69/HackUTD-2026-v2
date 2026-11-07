@@ -22,7 +22,7 @@ cd services/worker
 npm install
 npm run seed      # data/seed/*.json -> seed_* reducers (batched) -> recompute_household. Idempotent.
 npm run dev       # tsx watch: claims jobs, serves :8787
-npm test          # 72 unit/integration tests, no network, no database, no keys
+npm test          # 79 unit/integration tests, no network, no database, no keys
 npm run typecheck
 ```
 
@@ -34,13 +34,15 @@ Docker: `docker build -t keystone-worker services/worker` (node:24-slim + ffmpeg
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `LLM_PROVIDER_ORDER` | `nvidia,tenvor_nemotron,tenvor_qwen` | Failover order. Add/remove `local` to control the keyless provider; it is appended last unless `LLM_LOCAL_FALLBACK=0`. Set to `local` for a fully offline run. |
+| `LLM_PROVIDER_ORDER` | `nvidia,tenvor_qwen` | Failover order. Nemotron on NVIDIA first, Qwen on tenvor.io as fallback only. `tenvor_nemotron` is still accepted if you list it. A provider whose key, model or base URL is empty is skipped silently. `local` (keyless rules) is appended last unless `LLM_LOCAL_FALLBACK=0`; set the order to `local` for a fully offline run. |
 | `NVIDIA_API_KEY`, `NVIDIA_BASE_URL` | none, `https://integrate.api.nvidia.com/v1` | Provider `nvidia`. Enabled only with a key. |
 | `NEMOTRON_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Planning + tool use ("agent" role). |
 | `NEMOTRON_FAST_MODEL` | `nvidia/nemotron-3.5-lightning-30b-a3b` | Extraction / classification / structured output ("fast" role). |
-| `TENVOR_BASE_URL`, `TENVOR_API_KEY`, `TENVOR_NEMOTRON_MODEL`, `TENVOR_QWEN_MODEL` | | Providers `tenvor_nemotron` and `tenvor_qwen` (vLLM). Each needs the key and its model id. |
+| `TENVOR_BASE_URL`, `TENVOR_API_KEY`, `TENVOR_QWEN_MODEL` (optional `TENVOR_NEMOTRON_MODEL`) | | Provider `tenvor_qwen` (vLLM). Needs base URL, key and model id; an empty `TENVOR_BASE_URL=` line disables tenvor. |
 | `NVIDIA_RPM` / `TENVOR_RPM` | `36` / `0` | Requests per minute per provider (free NVIDIA tier is about 40). 0 = unlimited. |
 | `LLM_CONCURRENCY`, `LLM_TIMEOUT_MS`, `LLM_RETRIES` | `4`, `60000`, `1` | Global in-flight cap, per-request timeout, retries per provider before failing over. |
+| `LLM_429_WAIT_MS` | `3000` | On HTTP 429 the worker waits/backs off on the same provider for up to this long (honouring Retry-After) before failing over, so Nemotron answers whenever possible. |
+| `AGENT_THINKING` | `1` | Enable Nemotron reasoning for plans, tool-loop steps and the huddle summary; `reasoning_content` is shown as `thought` events. `0` = fastest. |
 | `AGENT_MAX_STEPS` | `6` | Tool-loop iterations for the coach. |
 | `DEMO_MODE` | `cache_first` | `cache_first` replays an earlier identical run (see below); `live` always calls the LLM. |
 | `SPACETIME_URI`, `SPACETIME_DB`, `WORKER_SECRET` | `ws://localhost:3000`, `keystone`, `keystone-dev-secret` | Must match the published module. The identity token is saved in `.worker-token` (gitignored) so the worker keeps its identity. |
@@ -103,8 +105,10 @@ Jobs whose workflow is not registered stay `queued` for another worker.
 
 `openai` npm client against any OpenAI-compatible endpoint; `chat_template_kwargs: {enable_thinking}` is sent in the body
 (`low_effort` for Super, `reasoning_budget` on NVIDIA when thinking), `reasoning_content` becomes a `thought` event.
-Failover on error / timeout / 429 with exponential backoff (honours Retry-After), a cooldown for dead providers, a global
-concurrency cap and a per-provider sliding-window RPM limiter. Structured output = forced tool call + zod validation,
+Failover on error / timeout with exponential backoff, and on 429 a short wait (up to `LLM_429_WAIT_MS`, honouring Retry-After)
+before moving on, a cooldown for dead providers, a global concurrency cap and a per-provider sliding-window RPM limiter.
+Whatever provider answers is what the trace says: a Qwen answer is labelled `tenvor_qwen` with the model id the server returned,
+and a `Switched provider after nvidia: ...` message precedes it. `run_started` carries the provider that was tried first. Structured output = forced tool call + zod validation,
 one retry with the validation error, then the local provider.
 
 ## HTTP (`src/http.ts`)

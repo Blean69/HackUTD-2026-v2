@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# docker compose with the right file and env file, from anywhere. Used on the box (/opt/keystone/infra/dc) and by deploy.sh.
+#   infra/dc ps | infra/dc logs -f --tail=100 worker | infra/dc restart worker | infra/dc down
+# Reads <repo>/.env, so COMPOSE_PROFILES=selfhost-db there switches the self-hosted database on for every command.
+# NOTE: `infra/dc config` prints the worker's env_file (your API keys) in clear text; use `infra/dc config -q` to only validate.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+exec docker compose --env-file .env -f infra/docker-compose.yml "$@"

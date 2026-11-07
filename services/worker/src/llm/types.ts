@@ -55,6 +55,8 @@ export interface ChatResult {
   latencyMs: number;
   tokensIn: number;
   tokensOut: number;
+  /** Models of the same provider that were skipped (HTTP 404 for this key) before `model` answered. */
+  modelSwitch?: { from: string; to: string; reason: string }[];
   /** Providers that failed before this one answered (for the trace). */
   failovers?: { provider: ProviderId; error: string }[];
 }

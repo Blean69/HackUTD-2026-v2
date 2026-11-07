@@ -4,7 +4,7 @@ import { loadConfig } from '../config.js';
 import { LLMClient, buildLLMClient } from './client.js';
 import { RateLimiter, Semaphore } from './limiter.js';
 import { LocalProvider } from './local.js';
-import { OpenAICompatProvider, buildBody } from './openai.js';
+import { OpenAICompatProvider, buildBody, portableSchema } from './openai.js';
 import { extractFromLines, findDate, findMoney, parseScenarioPrompt } from './rules.js';
 import { structured } from './structured.js';
 import { LLMError, type ChatRequest, type ChatResult, type LLMProvider, type ProviderId } from './types.js';
@@ -48,6 +48,36 @@ describe('LLMClient failover', () => {
     expect(r.content).toBe('offline answer');
     expect(r.failovers?.map((f) => f.provider)).toEqual(['nvidia', 'tenvor_nemotron']);
   });
+  it('on 429 waits on the same provider (up to ~3 s) so Nemotron can still answer, honouring Retry-After', async () => {
+    const sleeps: number[] = [];
+    const nv = fake('nvidia', (n) => (n === 0 ? new LLMError('HTTP 429', 429, 1000) : ok('nvidia')));
+    const qw = fake('tenvor_qwen', () => ok('tenvor_qwen'));
+    const c = new LLMClient([nv, qw], { retriesPerProvider: 0, sleep: async (ms) => void sleeps.push(ms) });
+    expect((await c.chat(req)).provider).toBe('nvidia');
+    expect(qw.calls).toBe(0);
+    expect(sleeps[0]!).toBeGreaterThanOrEqual(1000);
+    expect(sleeps[0]!).toBeLessThan(1200);
+  });
+  it('a persistent 429 fails over to Qwen after at most ~3 s of waiting, and the result says tenvor_qwen', async () => {
+    const sleeps: number[] = [];
+    const nv = fake('nvidia', () => new LLMError('HTTP 429', 429));
+    const qw = fake('tenvor_qwen', () => ok('tenvor_qwen'));
+    const c = new LLMClient([nv, qw], { retriesPerProvider: 0, backoffBaseMs: 500, sleep: async (ms) => void sleeps.push(ms) });
+    const r = await c.chat(req);
+    expect(r.provider).toBe('tenvor_qwen');
+    expect(r.model).toBe('tenvor_qwen-model');
+    expect(r.failovers?.[0]?.provider).toBe('nvidia');
+    const waited = sleeps.reduce((a, b) => a + b, 0);
+    expect(waited).toBeLessThanOrEqual(3000 + 100 * sleeps.length);
+    expect(waited).toBeGreaterThanOrEqual(2500);
+  });
+  it('primary() skips a provider that is cooling down', async () => {
+    let t = 0;
+    const c = new LLMClient([fake('nvidia', () => new LLMError('down', 500)), fake('tenvor_qwen', () => ok('tenvor_qwen'))], { retriesPerProvider: 0, now: () => t, sleep: async () => undefined });
+    expect(c.primary().provider).toBe('nvidia');
+    await c.chat(req);
+    expect(c.primary()).toEqual({ provider: 'tenvor_qwen', model: 'tenvor_qwen-model' });
+  });
   it('a 400 does not burn retries; it moves on immediately', async () => {
     const nv = fake('nvidia', () => new LLMError('bad request', 400, undefined, false));
     const tv = fake('tenvor_qwen', () => ok('tenvor_qwen'));
@@ -71,11 +101,21 @@ describe('LLMClient failover', () => {
     const c = new LLMClient([fake('nvidia', () => new LLMError('x', 500))], { retriesPerProvider: 0, sleep: async () => undefined });
     await expect(c.chat(req)).rejects.toThrow(/all LLM providers failed/);
   });
+  it('default order is nvidia,tenvor_qwen; providers with an empty key, model or base URL are skipped silently', () => {
+    expect(loadConfig({}).providerOrder).toEqual(['nvidia', 'tenvor_qwen']);
+    const env = { NVIDIA_API_KEY: 'k', TENVOR_API_KEY: 't', TENVOR_NEMOTRON_MODEL: '', TENVOR_QWEN_MODEL: 'Qwen/Qwen3-30B-A3B' };
+    const c = loadConfig({ ...env, LLM_PROVIDER_ORDER: 'nvidia,tenvor_nemotron,tenvor_qwen' });
+    expect(c.providers.find((p) => p.id === 'tenvor_nemotron')!.enabled).toBe(false);
+    expect(buildLLMClient(c).providers.map((p) => p.id)).toEqual(['nvidia', 'tenvor_qwen', 'local']);
+    expect(loadConfig({ ...env, TENVOR_BASE_URL: '' }).providers.find((p) => p.id === 'tenvor_qwen')!.enabled).toBe(false);
+    expect(loadConfig({ NVIDIA_API_KEY: 'k', NEMOTRON_MODEL: '' }).providers[0]!.enabled).toBe(true); // empty model falls back to the default id
+    expect(loadConfig({ NVIDIA_API_KEY: 'k', NVIDIA_BASE_URL: '' }).providers[0]!.enabled).toBe(false);
+  });
   it('builds from config: no keys -> local only; keys -> nvidia first, local appended', () => {
     expect(buildLLMClient(loadConfig({})).providers.map((p) => p.id)).toEqual(['local']);
     const withKey = buildLLMClient(loadConfig({ NVIDIA_API_KEY: 'k', TENVOR_API_KEY: 't', TENVOR_QWEN_MODEL: 'qwen' }));
     expect(withKey.providers.map((p) => p.id)).toEqual(['nvidia', 'tenvor_qwen', 'local']);
-    expect(withKey.providers[0]!.modelFor('agent')).toBe('nvidia/nemotron-3-super-120b-a12b');
+    expect(withKey.providers[0]!.modelFor('agent')).toBe('nvidia/nemotron-3-ultra-550b-a55b');
     expect(withKey.providers[0]!.modelFor('fast')).toBe('nvidia/nemotron-3.5-lightning-30b-a3b');
   });
 });
@@ -101,7 +141,7 @@ describe('limiters', () => {
 });
 
 describe('OpenAI-compatible provider', () => {
-  const cfg = loadConfig({ NVIDIA_API_KEY: 'k' }).providers[0]!;
+  const cfg = loadConfig({ NVIDIA_API_KEY: 'k', NEMOTRON_MODEL: 'nvidia/nemotron-3-super-120b-a12b' }).providers[0]!;
   it('sends enable_thinking in chat_template_kwargs and maps reasoning_content + tool calls + usage', async () => {
     let sent: any;
     const fetchFn = vi.fn(async (_url: unknown, init?: RequestInit) => {
@@ -124,6 +164,42 @@ describe('OpenAI-compatible provider', () => {
     expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
     expect(body.tool_choice).toEqual({ type: 'function', function: { name: 'extract' } });
     expect(body.reasoning_budget).toBeUndefined();
+  });
+  it('falls back to the next Nemotron when the configured model answers 404 for this key, and says so', async () => {
+    const seen: string[] = [];
+    const fetchFn = vi.fn(async (_url: unknown, init?: { body?: string }) => {
+      const model = JSON.parse(String(init?.body)).model as string;
+      seen.push(model);
+      if (model.includes('super')) return new Response('{"status":404,"title":"Not Found"}', { status: 404, headers: { 'content-type': 'application/problem+json' } });
+      return new Response(JSON.stringify({ model, choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    const p = new OpenAICompatProvider(cfg, { timeoutMs: 5000, fetch: fetchFn as never, fallbackModels: ['nvidia/nemotron-3-ultra-550b-a55b'] });
+    expect(p.modelFor('agent')).toBe('nvidia/nemotron-3-super-120b-a12b');
+    const r = await p.call(req);
+    expect(r.model).toBe('nvidia/nemotron-3-ultra-550b-a55b');
+    expect(r.modelSwitch).toEqual([expect.objectContaining({ from: 'nvidia/nemotron-3-super-120b-a12b', to: 'nvidia/nemotron-3-ultra-550b-a55b' })]);
+    expect(p.modelFor('agent')).toBe('nvidia/nemotron-3-ultra-550b-a55b'); // remembered: no second 404 probe
+    await p.call(req);
+    expect(seen).toEqual(['nvidia/nemotron-3-super-120b-a12b', 'nvidia/nemotron-3-ultra-550b-a55b', 'nvidia/nemotron-3-ultra-550b-a55b']);
+  });
+  it('sends Ultra its own effort knob and the tool-call flag', () => {
+    const body = buildBody(cfg, 'nvidia/nemotron-3-ultra-550b-a55b', { role: 'agent', messages: [], thinking: true, tools: [{ name: 't', description: 'd', parameters: {} }] });
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: true, medium_effort: true, force_nonempty_content: true });
+  });
+  it('strips numeric/length constraints from tool schemas for non-NVIDIA providers (tenvor 400s on them) but keeps them as hints', () => {
+    const schema = { type: 'object', properties: { months: { type: 'integer', minimum: 1, maximum: 60, description: 'Horizon' }, format: { type: 'string', maxLength: 10 } }, additionalProperties: false };
+    const out = portableSchema(schema) as { properties: Record<string, { description?: string; minimum?: number; maxLength?: number }> };
+    expect(out.properties.months).toEqual({ type: 'integer', description: 'Horizon (min 1, max 60)' });
+    expect(out.properties.format).toEqual({ type: 'string', description: '(max 10 characters)' }); // a property NAMED "format" survives
+    const tv = { ...cfg, id: 'tenvor_qwen' as const, agentModel: 'qwen', fastModel: 'qwen' };
+    const tools = [{ name: 'define', description: 'd', parameters: schema }];
+    expect(JSON.stringify(buildBody(tv, 'qwen', { role: 'fast', messages: [], tools }).tools)).not.toContain('maximum');
+    expect(JSON.stringify(buildBody(cfg, cfg.fastModel, { role: 'fast', messages: [], tools }).tools)).toContain('maximum');
+  });
+  it('tenvor answers without reasoning unless TENVOR_THINKING=1; NVIDIA keeps the toggle', () => {
+    const tv = { ...cfg, id: 'tenvor_qwen' as const, agentModel: 'qwen', fastModel: 'qwen' };
+    expect(buildBody(tv, 'qwen', { role: 'agent', messages: [], thinking: true }).chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(buildBody(cfg, cfg.agentModel, { role: 'agent', messages: [], thinking: true }).chat_template_kwargs).toMatchObject({ enable_thinking: true });
   });
   it('maps HTTP 429 to a retryable LLMError', async () => {
     const fetchFn = vi.fn(async () => new Response(JSON.stringify({ error: { message: 'slow down' } }), { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '2' } }));

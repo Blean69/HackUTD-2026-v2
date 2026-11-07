@@ -76,7 +76,7 @@ describe('config', () => {
     const c = loadConfig({});
     expect(c.demoMode).toBe('cache_first');
     expect(c.port).toBe(8787);
-    expect(c.providers[0]!.agentModel).toBe('nvidia/nemotron-3-super-120b-a12b');
+    expect(c.providers[0]!.agentModel).toBe('nvidia/nemotron-3-ultra-550b-a55b');
     expect(c.providers[0]!.rpm).toBeLessThanOrEqual(40);
     expect(c.dataGovApiKey).toBe('DEMO_KEY');
   });

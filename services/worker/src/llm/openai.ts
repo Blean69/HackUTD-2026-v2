@@ -5,6 +5,8 @@ import { LLMError, type ChatMessage, type ChatRequest, type ChatResult, type LLM
 
 export interface OpenAIProviderOptions {
   timeoutMs: number;
+  /** Models to try when the configured one answers 404 for this key (nvidia only). Default: see DEFAULT_NVIDIA_AGENT_FALLBACKS. */
+  fallbackModels?: string[];
   /** Injected in tests. */
   fetch?: typeof fetch;
 }
@@ -32,11 +34,43 @@ export function toOpenAIMessages(messages: ChatMessage[]): unknown[] {
   });
 }
 
+const UNSUPPORTED_SCHEMA_KEYS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'minLength', 'maxLength', 'minItems', 'maxItems', 'pattern', 'format', 'multipleOf'] as const;
+
+/**
+ * tenvor.io (Qwen on vLLM) answers HTTP 400 "The tool schema could not be used" when a tool schema carries numeric/length
+ * constraints (minimum, maximum, maxLength ...). The NVIDIA API accepts them. For other providers the constraints are moved into the
+ * description (so the model still sees them); zod re-validates every answer anyway. Exported for tests.
+ */
+export function portableSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(portableSchema);
+  if (!node || typeof node !== 'object') return node;
+  const o = node as Record<string, unknown>;
+  const hints: string[] = [];
+  if (typeof o.minimum === 'number' || typeof o.maximum === 'number') hints.push(`${typeof o.minimum === 'number' ? `min ${o.minimum}` : ''}${typeof o.minimum === 'number' && typeof o.maximum === 'number' ? ', ' : ''}${typeof o.maximum === 'number' ? `max ${o.maximum}` : ''}`);
+  if (typeof o.maxLength === 'number') hints.push(`max ${o.maxLength} characters`);
+  if (typeof o.maxItems === 'number') hints.push(`at most ${o.maxItems} items`);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if ((UNSUPPORTED_SCHEMA_KEYS as readonly string[]).includes(k)) continue;
+    // a property literally named like a keyword (e.g. "format") lives under "properties", whose values are schemas
+    out[k] = k === 'properties' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as object).map(([pk, pv]) => [pk, portableSchema(pv)])) : portableSchema(v);
+  }
+  if (hints.length) out.description = `${typeof o.description === 'string' ? `${o.description} ` : ''}(${hints.join('; ')})`;
+  return out;
+}
+
 /** Build the request body. Exported for tests (the reasoning toggle must reach the wire). */
 export function buildBody(cfg: ProviderConfig, model: string, req: ChatRequest): Record<string, unknown> {
-  const thinking = req.thinking === true;
+  // Qwen on tenvor.io is the slow fallback (~37 tokens/s: one reasoning-enabled plan took 38 s), so it answers without reasoning
+  // unless TENVOR_THINKING=1. NVIDIA models keep the per-request toggle.
+  const thinking = req.thinking === true && (cfg.id === 'nvidia' || process.env.TENVOR_THINKING === '1');
   const kwargs: Record<string, unknown> = { enable_thinking: thinking };
   if (thinking && /nemotron-3-super/i.test(model)) kwargs.low_effort = true;
+  // Ultra card: effort knob is medium_effort, and tool calls + reasoning need force_nonempty_content
+  if (thinking && /nemotron-3-ultra/i.test(model)) {
+    kwargs.medium_effort = true;
+    if (req.tools?.length) kwargs.force_nonempty_content = true;
+  }
   const body: Record<string, unknown> = {
     model,
     messages: toOpenAIMessages(req.messages),
@@ -49,7 +83,7 @@ export function buildBody(cfg: ProviderConfig, model: string, req: ChatRequest):
   if (req.tools?.length) {
     body.tools = req.tools.map((t) => ({
       type: 'function',
-      function: { name: t.name, description: t.description, parameters: t.parameters },
+      function: { name: t.name, description: t.description, parameters: cfg.id === 'nvidia' ? t.parameters : portableSchema(t.parameters) },
     }));
     const c = req.toolChoice ?? 'auto';
     body.tool_choice = typeof c === 'string' ? c : { type: 'function', function: { name: c.name } };
@@ -59,15 +93,35 @@ export function buildBody(cfg: ProviderConfig, model: string, req: ChatRequest):
 
 const THINK_RE = /<think>([\s\S]*?)<\/think>/gi;
 
+/**
+ * Some NVIDIA accounts get HTTP 404 ("Function ... Not found for account") for models the public /v1/models list still
+ * shows (observed 2026-11-07 for nemotron-3-super-120b-a12b). When the configured model 404s we remember that for a while and
+ * answer with the next Nemotron on this list, so the agent role never silently depends on one model id. The trace
+ * always records the model that really answered, and run.chat adds a message when the switch happens.
+ * Override with NEMOTRON_MODEL_FALLBACKS="id1,id2" (agent role); the fast role falls back to the agent models.
+ */
+export const DEFAULT_NVIDIA_AGENT_FALLBACKS = ['nvidia/nemotron-3-ultra-550b-a55b', 'nvidia/nemotron-3.5-lightning-30b-a3b'];
+const MODEL_DOWN_MS = 15 * 60_000;
+
+function envFallbacks(): string[] {
+  const raw = process.env.NEMOTRON_MODEL_FALLBACKS;
+  if (raw === undefined) return DEFAULT_NVIDIA_AGENT_FALLBACKS;
+  return raw.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
 export class OpenAICompatProvider implements LLMProvider {
   readonly id: ProviderConfig['id'];
   private client: OpenAI;
+  /** Models this key cannot use (HTTP 404), with the time they may be tried again. */
+  private modelDownUntil = new Map<string, number>();
+  private fallbackModels: string[];
 
   constructor(
     private cfg: ProviderConfig,
     opts: OpenAIProviderOptions,
   ) {
     this.id = cfg.id;
+    this.fallbackModels = cfg.id === 'nvidia' ? (opts.fallbackModels ?? envFallbacks()) : [];
     this.client = new OpenAI({
       baseURL: cfg.baseUrl,
       apiKey: cfg.apiKey || 'not-needed',
@@ -77,12 +131,49 @@ export class OpenAICompatProvider implements LLMProvider {
     });
   }
 
-  modelFor(role: 'agent' | 'fast'): string {
+  private configured(role: 'agent' | 'fast'): string {
     return role === 'fast' ? this.cfg.fastModel : this.cfg.agentModel;
   }
 
+  /** Configured model first, then the fallbacks; models that recently answered 404 go last (retried when nothing else is left). */
+  private candidates(role: 'agent' | 'fast'): string[] {
+    const all = [...new Set([this.configured(role), ...this.fallbackModels])];
+    const t = Date.now();
+    const up = all.filter((m) => (this.modelDownUntil.get(m) ?? 0) <= t);
+    return up.length ? up : all;
+  }
+
+  /** The model that would answer right now (skips models known to 404 for this key). */
+  modelFor(role: 'agent' | 'fast'): string {
+    return this.candidates(role)[0]!;
+  }
+
   async call(req: ChatRequest): Promise<ChatResult> {
-    const model = this.modelFor(req.role);
+    const models = this.candidates(req.role);
+    const switched: { from: string; to: string; reason: string }[] = [];
+    let lastErr: LLMError | undefined;
+    for (const [i, model] of models.entries()) {
+      try {
+        const res = await this.callModel(model, req);
+        if (switched.length) res.modelSwitch = switched;
+        return res;
+      } catch (e) {
+        const err = toLLMError(e);
+        const hasNext = i < models.length - 1;
+        if (err.status === 404 && hasNext) {
+          this.modelDownUntil.set(model, Date.now() + MODEL_DOWN_MS);
+          switched.push({ from: model, to: models[i + 1]!, reason: 'HTTP 404: model not available for this API key' });
+          lastErr = err;
+          continue;
+        }
+        if (err.status === 404) this.modelDownUntil.set(model, Date.now() + MODEL_DOWN_MS);
+        throw err;
+      }
+    }
+    throw lastErr ?? new LLMError('no model configured');
+  }
+
+  private async callModel(model: string, req: ChatRequest): Promise<ChatResult> {
     const body = buildBody(this.cfg, model, req);
     const t0 = Date.now();
     let res: OpenAI.Chat.Completions.ChatCompletion;

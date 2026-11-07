@@ -20,6 +20,9 @@ export interface StructuredOptions<S extends z.ZodType> {
   task: string;
   local?: unknown;
   maxTokens?: number;
+  /** Let the model reason before the forced tool call (slower; default false). */
+  thinking?: boolean;
+  temperature?: number;
 }
 
 export interface StructuredResult<T> {
@@ -44,8 +47,8 @@ export async function structured<S extends z.ZodType>(llm: LLMLike, opts: Struct
       messages,
       tools: [{ name: opts.name, description: opts.description, parameters }],
       toolChoice: { name: opts.name },
-      thinking: false,
-      temperature: 0.2,
+      thinking: opts.thinking ?? false,
+      temperature: opts.temperature ?? 0.2,
       maxTokens: opts.maxTokens ?? 2048,
       task: opts.task,
       local: opts.local,

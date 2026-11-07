@@ -75,7 +75,7 @@ export async function runAgentLoop(run: RunContext, o: LoopOptions): Promise<Loo
   const plan = await emitPlan(run, { agent: o.agent, task: o.task, system: o.system, user: o.user, toolNames: o.tools, local: o.local });
 
   const msgs: ChatMessage[] = [
-    { role: 'system', content: `${o.system}\n\n${injectionGuard}\nUse the tools to look at real numbers before answering; cite figures from tool results. When you have enough, answer in plain language.` },
+    { role: 'system', content: `${o.system}\n\n${injectionGuard}\nUse the tools to look at real numbers before answering; cite figures from tool results. Call every tool you already know you need in the SAME step (several tool calls at once is fine and faster). When you have enough, answer in plain language.` },
     { role: 'user', content: o.user },
     { role: 'assistant', content: `My plan:\n${plan.map((s, i) => `${i + 1}. ${s}`).join('\n')}` },
     { role: 'user', content: 'Go ahead: call the tools you need, then give the final answer.' },

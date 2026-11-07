@@ -32,6 +32,8 @@ Next.js (phones)  ⇄  SpacetimeDB module "keystone" (tables, reducers, schedule
 - Work is queued as `agent_job` rows by reducers. The worker subscribes, claims, runs a multi-step Nemotron workflow,
   and writes `trace_event`s plus results back through worker-only reducers. Every phone sees each step live.
 - Deterministic math (health indicators, 90-day forecast, rule-based data-quality alerts) runs inside SpacetimeDB reducers.
+- Production: one EC2 t3.medium (52.72.164.85). Caddy terminates HTTPS and routes the SpacetimeDB API (wss), `/worker/*` and the web app.
+  SpacetimeDB is self-hosted in a container there (not Maincloud). Publishing is only allowed from the team IP.
 
 ## Hard rules
 
@@ -59,7 +61,7 @@ spacetime/        SpacetimeDB module (TypeScript): tables, reducers, scheduled r
 apps/web/         Next.js (App Router, TS, Tailwind). Generated bindings in apps/web/lib/module_bindings/ (never edit)
 services/worker/  Node + TypeScript agent worker. Generated bindings in services/worker/src/module_bindings/ (never edit)
 data/             Synthetic data generator (Python) + generated seed JSON in data/seed/ (committed)
-infra/            Deploy notes: DB on SpacetimeDB Maincloud; web + worker on AWS
+infra/            Docker Compose (Caddy + web + worker + self-hosted SpacetimeDB) for one EC2 box; deploy.sh; DEPLOY.md
 docs/             tracks, contracts, demo script, scope, NVIDIA stack notes
 ```
 
@@ -70,12 +72,21 @@ spacetime start                                                     # local Spac
 spacetime publish -s local -p spacetime keystone -y                 # (re)publish; default server is Maincloud, so pass -s local
 spacetime generate --lang typescript -p spacetime --out-dir apps/web/lib/module_bindings -y
 spacetime generate --lang typescript -p spacetime --out-dir services/worker/src/module_bindings -y
-cd services/worker && npm install && npm run seed && npm run dev    # seeds data, then runs agents + :8787 ASR
+cd services/worker && npm install && npm run seed && npm run dev    # seeds, then runs agents + :8787 HTTP. Uses real keys from .env;
+                                                                    # prefix LLM_PROVIDER_ORDER=local to save the shared NVIDIA rate limit
 cd apps/web && npm install && npm run dev                           # http://localhost:3001
 cd data && python3 generate.py --seed 2026                          # only if you change the generator
 ```
 After any change to a table or reducer: republish (add `--delete-data=always` if the schema change is breaking, then re-seed) and
 regenerate both binding folders. Commit the regenerated bindings.
+
+## Deploying
+
+See `infra/DEPLOY.md`. In short: `.env.prod` (gitignored, never committed) holds production values; `infra/deploy.sh`
+rsyncs the tree to the box and runs Docker Compose; the module is published from inside the spacetime container;
+`infra/deploy.sh --seed` seeds. The production `WORKER_SECRET` hash is a **local, uncommitted edit** of
+`spacetime/src/reducers/worker.ts` at publish time. The committed value stays the dev hash so tests pass. Never commit
+`.env`, `.env.prod`, or a production hash. Don't run `docker compose config` without `-q`; it prints secrets.
 
 ## Configuration
 

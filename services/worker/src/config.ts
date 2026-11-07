@@ -84,7 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // An absent TENVOR_BASE_URL falls back to the documented placeholder; an EMPTY one means "not configured".
   const tvBase = env.TENVOR_BASE_URL === undefined ? 'https://api.tenvor.io/v1' : env.TENVOR_BASE_URL.trim();
   const nvBase = env.NVIDIA_BASE_URL === undefined ? 'https://integrate.api.nvidia.com/v1' : env.NVIDIA_BASE_URL.trim();
-  const nemotron = str(env.NEMOTRON_MODEL, 'nvidia/nemotron-3-super-120b-a12b');
+  const nemotron = str(env.NEMOTRON_MODEL, 'nvidia/nemotron-3-ultra-550b-a55b');
   const fast = str(env.NEMOTRON_FAST_MODEL, 'nvidia/nemotron-3.5-lightning-30b-a3b');
   const tvNemotron = str(env.TENVOR_NEMOTRON_MODEL);
   const tvQwen = str(env.TENVOR_QWEN_MODEL);

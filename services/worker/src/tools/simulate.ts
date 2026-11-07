@@ -171,14 +171,18 @@ export function simulate(raw: Scenario, data: HouseholdData): SimResult {
   effect.monthly_change = round2(monthly[months]!);
   const last = path[path.length - 1]!;
   const coverage = flow.monthly_out > 0 ? round2(lowest.balance / flow.monthly_out) : 0;
-  const verdict: SimResult['verdict'] = lowest.balance < 0 ? 'shortfall' : coverage < 1 ? 'tight' : 'comfortable';
+  // Positive cash at the low point is not enough: if the plan leaves under 3 months of spending AND the household is still
+  // losing money every month at the end (the balance keeps falling after the horizon), that is not "manageable".
+  const finalMonthlyNet = round2(flow.monthly_net + effect.monthly_change);
+  const draining = finalMonthlyNet < 0 && coverage < 3;
+  const verdict: SimResult['verdict'] = lowest.balance < 0 ? 'shortfall' : coverage < 1 || draining ? 'tight' : 'comfortable';
 
   const label = scn.label ?? scn.kind.replace('_', ' ');
   const headline =
     verdict === 'shortfall'
       ? `${label}: cash would run out around month ${lowest.month} (low point ${usd(lowest.balance)}).`
       : verdict === 'tight'
-        ? `${label}: stays positive but only ${coverage} months of spending would be covered at the low point (${usd(lowest.balance)}).`
+        ? `${label}: stays positive but only ${coverage} months of spending would be covered at the low point (${usd(lowest.balance)})${draining ? `, and cash flow turns negative (${usd(finalMonthlyNet)} a month), so the balance keeps falling` : ''}.`
         : `${label}: manageable. Lowest cash ${usd(lowest.balance)} covers ${coverage} months of spending; month ${months} balance ${usd(last.scenario)}.`;
 
   const sample = new Set([0, 3, 6, 9, 12, 18, 24, months, lowest.month]);

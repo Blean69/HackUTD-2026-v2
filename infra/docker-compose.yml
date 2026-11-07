@@ -1,0 +1,93 @@
+# Keystone production stack on one box: Caddy (TLS) -> web (Next.js) + worker (agents/ASR) + self-hosted SpacetimeDB.
+#
+# ALWAYS run it from the repo root with the root .env as the compose env file (that is how ${...} below and the
+# NEXT_PUBLIC_* build args are filled in; compose would otherwise look for infra/.env). infra/dc does this for you:
+#
+#   docker compose --env-file .env -f infra/docker-compose.yml up -d --build                       # everything (default)
+#   docker compose --env-file .env -f infra/docker-compose.yml up -d --build caddy web worker     # DB on Maincloud instead
+#
+# infra/deploy.sh does exactly that over SSH. See infra/DEPLOY.md and infra/env.prod.example.
+
+name: keystone
+
+services:
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"      # ACME HTTP-01 challenge + redirect to HTTPS
+      - "443:443"
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}   # 52-72-164-85.sslip.io or keystone.tenvor.io in prod; "localhost" = Caddy's local CA
+      ADMIN_IPS: ${ADMIN_IPS:-129.110.241.55/32}       # only these client IPs may publish/delete/inspect databases through Caddy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates + ACME account: keep it, Let's Encrypt rate-limits re-issuing
+      - caddy_config:/config
+    depends_on:
+      - web
+      - worker
+
+  web:
+    build:
+      context: ../apps/web
+      args:
+        # Inlined into the browser bundle at BUILD time: changing them needs `up -d --build` again.
+        NEXT_PUBLIC_SPACETIME_URI: ${NEXT_PUBLIC_SPACETIME_URI:-wss://${PUBLIC_HOSTNAME:-localhost}}
+        NEXT_PUBLIC_SPACETIME_DB: ${NEXT_PUBLIC_SPACETIME_DB:-${SPACETIME_DB:-keystone}}
+        NEXT_PUBLIC_WORKER_URL: ${NEXT_PUBLIC_WORKER_URL:-https://${PUBLIC_HOSTNAME:-localhost}/worker}
+        NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS:-0}
+    image: keystone-web:latest
+    restart: always
+    expose:
+      - "3000"
+
+  worker:
+    build:
+      context: ../services/worker
+    image: keystone-worker:latest
+    restart: always
+    env_file: ../.env            # the root .env: NVIDIA/Tenvor/Plaid keys, SPACETIME_URI/DB, WORKER_SECRET, ...
+    environment:
+      # Pinned here because Caddy proxies to worker:8787 and the seed files are mounted below.
+      WORKER_PORT: "8787"
+      DATA_DIR: /data/seed
+    expose:
+      - "8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # lets the worker reach a SpacetimeDB running on the Docker host (local testing)
+    volumes:
+      - ../data/seed:/data/seed:ro   # `docker compose exec worker npm run seed` reads these
+      - worker_data:/app/.data       # worker identity token (WORKER_TOKEN_FILE), so restarts keep the same identity
+      - worker_cache:/app/.cache     # College Scorecard / external API cache
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # SpacetimeDB, self-hosted on this box (official image, pinned to the SDK/CLI version the repo uses, 2.14.1).
+  # - The worker talks to it inside the compose network: SPACETIME_URI=ws://spacetime:3000.
+  # - Browsers talk to wss://<PUBLIC_HOSTNAME>; Caddy forwards only what a client needs (subscribe, reducer call, sql,
+  #   identity) to everyone, and every other /v1 route (publish, delete, logs, ...) only to ADMIN_IPS. See the Caddyfile.
+  # - The port below is bound to the box's loopback only (debugging through an SSH tunnel; nothing public).
+  # Using Maincloud instead? Start the other services only: `infra/dc up -d --build caddy web worker` (see DEPLOY.md).
+  spacetime:
+    image: clockworklabs/spacetime:v2.14.1
+    command: ["start"]            # entrypoint is `spacetime`; listens on 0.0.0.0:3000 inside the container
+    restart: always
+    ports:
+      - "127.0.0.1:${SPACETIME_HOST_PORT:-3000}:3000"
+    volumes:
+      # The whole home dir: data (~/.local/share/spacetime/data) AND the identity signing keys (~/.config/spacetime/id_ecdsa)
+      # AND the container CLI's own login. Losing the keys would invalidate every token, including the database owner's,
+      # so they are persisted together. `docker compose down` keeps it; `down -v` deletes it.
+      - spacetime_home:/home/spacetime
+
+volumes:
+  caddy_data:
+  caddy_config:
+  worker_data:
+  worker_cache:
+  spacetime_home:

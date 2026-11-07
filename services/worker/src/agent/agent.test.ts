@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildLLMClient, LLMClient } from '../llm/client.js';
 import { loadConfig } from '../config.js';
 import { LocalProvider } from '../llm/local.js';
+import { LLMError } from '../llm/types.js';
 import type { ChatRequest, ChatResult, LLMProvider } from '../llm/types.js';
 import { seedAvailable, seedConversations, seedHousehold, smallHousehold, txn } from '../testing/fixtures.js';
 import { FixedExternalApis } from '../tools/external.js';
@@ -122,7 +123,7 @@ describe('cache_first replay', () => {
   });
   it('replayRun emits every stored step under the new run', async () => {
     const { d, sink } = deps(smallHousehold());
-    const run = new RunContext({ runId: 'rNew', workflow: 'coach', householdId: 'hh_test', subjectId: 's' }, { sink, llm: d.llm, registry: d.registry, toolContext: { data: smallHousehold(), external: d.external }, primary: d.primary });
+    const run = new RunContext({ runId: 'rNew', workflow: 'coach', householdId: 'hh_test', subjectId: 's' }, { sink, llm: d.llm, registry: d.registry, toolContext: { data: smallHousehold(), external: d.external }, primary: { provider: 'local', model: 'keystone-rules-v1' } });
     const events: CachedTraceEvent[] = [
       { seq: 0, tsMs: 0, agent: 'planner', type: 'run_started', title: 'x', dataJson: '{}', model: 'm', provider: 'nvidia', latencyMs: 0 },
       { seq: 1, tsMs: 1000, agent: 'coach', type: 'plan', title: 'p', dataJson: '{"steps":["a"]}', model: 'nvidia/nemotron', provider: 'nvidia', latencyMs: 900 },
@@ -267,5 +268,57 @@ describe('local provider', () => {
     const b = await lp.call({ role: 'fast', messages: [], task: 'scenario.parse', local: { prompt: 'pay off the car loan' }, toolChoice: { name: 'x' }, tools: [{ name: 'x', description: '', parameters: {} }] });
     expect(a.toolCalls).toEqual(b.toolCalls);
     expect(a.provider).toBe('local');
+  });
+});
+
+
+describe('provider failover labelling and visible reasoning', () => {
+  /** A scripted "model" that answers every workflow step and returns reasoning_content for planning and summaries. */
+  function scripted(id: 'nvidia' | 'tenvor_qwen', model: string, fail?: () => Error | null): LLMProvider {
+    return {
+      id,
+      modelFor: () => model,
+      async call(req: ChatRequest): Promise<ChatResult> {
+        const err = fail?.();
+        if (err) throw err;
+        const base = { provider: id, model, latencyMs: 80, tokensIn: 40, tokensOut: 15 };
+        if (req.task === 'huddle.extract')
+          return { ...base, content: '', toolCalls: [{ id: 'c', name: 'record_huddle_findings', arguments: JSON.stringify({ goals: [{ title: 'Open a second bakery', kind: 'business', target_amount: 250000, target_date: '2027-09-30', priority: 1, evidence_quote: 'about two hundred fifty thousand' }], concerns: [{ text: 'January looks tight' }], key_dates: [] }) }] };
+        if (req.task === 'huddle.plan') return { ...base, content: '1. Extract goals\n2. Check them against the accounts', reasoning: 'The family spoke about one big goal. I should check it against savings. Then summarize.', toolCalls: [] };
+        if (req.task === 'huddle.summary') return { ...base, content: 'One big goal is far off; start with a reserve.', reasoning: 'The gap is huge compared with monthly surplus. A reserve is the realistic first step.', toolCalls: [] };
+        return { ...base, content: 'ok', toolCalls: [] };
+      },
+    };
+  }
+  const lines = [{ speaker: 'Marisol', text: 'The contractor said about two hundred fifty thousand for the build-out of the second location.' }];
+
+  it('huddle surfaces Nemotron reasoning_content as thought events (plan and summary), each tagged with provider and model', async () => {
+    const llm = new LLMClient([scripted('nvidia', 'nvidia/nemotron-3-super-120b-a12b'), new LocalProvider()], { sleep: async () => undefined });
+    const { d, sink } = deps(smallHousehold(), { llm, agentThinking: true, primary: () => llm.primary() }, lines);
+    const out = await runJob(job('huddle', { subjectId: 'hud_t' }), d);
+    expect(out.status).toBe('done');
+    const thoughts = sink.traces.filter((t) => t.type === 'thought');
+    expect(thoughts.length).toBeGreaterThanOrEqual(2);
+    expect(thoughts.every((t) => t.provider === 'nvidia' && t.model === 'nvidia/nemotron-3-super-120b-a12b')).toBe(true);
+    expect(thoughts[0]!.title).toMatch(/^Planning: /);
+    expect(JSON.parse(thoughts[0]!.dataJson).reasoning).toMatch(/savings/);
+    const agentOrder = sink.traces.map((t) => t.type);
+    expect(agentOrder.indexOf('thought')).toBeGreaterThan(agentOrder.indexOf('run_started'));
+  });
+
+  it('when NVIDIA keeps returning 429, the run is answered by Qwen and every LLM-driven event says tenvor_qwen with the real model id', async () => {
+    const sleeps: number[] = [];
+    const nv = scripted('nvidia', 'nvidia/nemotron-3-super-120b-a12b', () => new LLMError('HTTP 429: slow down', 429));
+    const qw = scripted('tenvor_qwen', 'Qwen/Qwen3-30B-A3B');
+    const llm = new LLMClient([nv, qw, new LocalProvider()], { sleep: async (ms) => void sleeps.push(ms), backoffBaseMs: 500 });
+    const { d, sink } = deps(smallHousehold(), { llm, agentThinking: true, primary: () => llm.primary() }, lines);
+    expect((await runJob(job('huddle', { subjectId: 'hud_q' }), d)).status).toBe('done');
+    expect(sleeps.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(3000 + 400); // waited ~3 s on Nemotron, then failed over
+    expect(sleeps.length).toBeGreaterThanOrEqual(2);
+    const after = sink.traces.filter((t) => t.type !== 'run_started');
+    expect(after.every((t) => t.provider === 'tenvor_qwen' && t.model === 'Qwen/Qwen3-30B-A3B')).toBe(true);
+    expect(sink.traces.some((t) => /Switched provider after nvidia/.test(t.title))).toBe(true);
+    const providers = JSON.parse(String(sink.of('finishRun')[0]![2])) as { provider: string; model: string }[];
+    expect(providers).toEqual([expect.objectContaining({ provider: 'tenvor_qwen', model: 'Qwen/Qwen3-30B-A3B' })]);
   });
 });
