@@ -157,3 +157,40 @@ Reducers: `create_proposal(household_id, title, amount, details_json, closes_in_
 `cast_vote(proposal_id, choice, voter_name)` (one vote per identity, can change until closed), `close_proposal(proposal_id)`,
 worker-only `agent_update_proposal(proposal_id, verdict, analysis_json, run_id)`, and `seed_proposals(rows_json)` / `seed_votes(rows_json)`.
 Seed files: `data/seed/proposals.json`, `data/seed/votes.json`. `create_sandbox` copies proposals and seeded votes.
+
+## 7. Onboarding (connectors first): link a bank, pick accounts, answer questions, dashboard fills itself
+
+Route `/onboarding` (web). Every step is SpacetimeDB state, so a second family member can join mid-flow and see progress.
+
+1. **Welcome + consent.** What we read (balances, transactions, liabilities), sandbox data only.
+2. **Create household.** `start_onboarding(household_name, display_name)` → new `household` (`hh_onb_<suffix>`, owner = caller,
+   template_id ""), a `member` for the caller, and a `household_profile` row (status `connect`).
+3. **Connect a bank.** Plaid Link (sandbox) or "Use the demo bank" one-tap. The worker routes take `{household_id, select: true}`.
+   The worker exchanges the token, calls `/accounts/get`, writes `bank_account_option` rows, and sets `bank_connection.status = "selecting"`.
+   The demo bank is a **Plaid Sandbox custom user** defined in `data/plaid/sandbox_user.json` (checking, savings, credit card, mortgage,
+   auto loan, IRA, CD, about 6 months of realistic transactions). One-tap connect passes it as `override_username: "user_custom"` and
+   `override_password: <json>`. The same JSON can be saved as a named sandbox user in the Plaid Dashboard for the Link UI path.
+4. **Choose accounts.** Checkboxes (all on by default) → `select_bank_accounts(household_id, item_id, account_ids_json)` →
+   enqueues `plaid_sync`, which imports only the selected accounts (status syncing → ok).
+5. **Questions** (asked while the sync runs): members (name, role, age, income); own or rent plus home value; vehicle value;
+   top priorities (emergency fund, home, college, retirement, debt payoff, travel, business, caring for parents) plus a free-text
+   goal; risk comfort 1–5; family voting on/off; Table Mode voice consent. Saved with `save_onboarding_answers(household_id, answers_json)`,
+   which upserts members, `home_value`/`vehicle_value`, goals (source `onboarding`) and the profile.
+6. **Finish.** `finish_onboarding(household_id)` → `recompute_household` plus an `onboarding_insights` agent job: Nemotron reads accounts,
+   transactions and answers, writes 3–5 plain-English insights (alert kind `insight`), checks each goal's feasibility, and
+   suggests a first proposal. The UI then lands on the dashboard.
+
+| Table | Columns |
+|---|---|
+| `household_profile` | household_id pk, onboarding_status welcome/connect/selecting/questions/done, answers_json, risk_comfort, priorities_json, voting_enabled, voice_consent, created_at, updated_at |
+| `bank_account_option` | id pk (`{item_id}:{account_id}`), household_id, item_id, account_id, name, official_name, mask, type, subtype, balance, selected |
+
+Worker-only: `agent_set_account_options(household_id, item_id, rows_json)`. Alert `kind` gains `insight`.
+
+## 8. Phone line (planned, later): call the family's agent
+
+Call a phone number and get a warm, human-sounding voice that explains the household's finances in plain words, and that
+can run a what-if by voice and narrate the result. Design lives in `docs/voice-agent.md` (research first, build after the
+core demo is solid). Constraints already decided: Nemotron answers through the same tools as the coach; every call is a traced
+`agent_run` (workflow `phone`), so the Agent Trail shows it; callers are matched to a member (phone number on file plus a PIN);
+synthetic data only; a spoken disclosure at the start of every call that it's an AI assistant.
