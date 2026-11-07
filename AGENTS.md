@@ -66,15 +66,15 @@ docs/             tracks, contracts, demo script, scope, NVIDIA stack notes
 ## Running locally
 
 ```bash
-spacetime start                                                     # local SpacetimeDB on :3000
-spacetime publish --project-path spacetime keystone                 # (re)publish the module
-spacetime generate --lang typescript --project-path spacetime --out-dir apps/web/lib/module_bindings
-spacetime generate --lang typescript --project-path spacetime --out-dir services/worker/src/module_bindings
+spacetime start                                                     # local SpacetimeDB on :3000 (CLI 2.14.1)
+spacetime publish -s local -p spacetime keystone -y                 # (re)publish; default server is Maincloud, so pass -s local
+spacetime generate --lang typescript -p spacetime --out-dir apps/web/lib/module_bindings -y
+spacetime generate --lang typescript -p spacetime --out-dir services/worker/src/module_bindings -y
 cd services/worker && npm install && npm run seed && npm run dev    # seeds data, then runs agents + :8787 ASR
 cd apps/web && npm install && npm run dev                           # http://localhost:3001
 cd data && python3 generate.py --seed 2026                          # only if you change the generator
 ```
-After any change to a table or reducer: republish (`--delete-data` if the schema change is breaking, then re-seed) and
+After any change to a table or reducer: republish (add `--delete-data=always` if the schema change is breaking, then re-seed) and
 regenerate both binding folders. Commit the regenerated bindings.
 
 ## Configuration

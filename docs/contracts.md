@@ -100,6 +100,15 @@ Worker-only (reject unless `ctx.sender` is in `worker`):
 | `purge_transcript(huddle_id)` | deletes that huddle's transcript lines (privacy: we keep goals + short evidence quotes only) |
 | `seed_households`, `seed_members`, `seed_accounts`, `seed_txns`, `seed_credit`, `seed_obligations`, `seed_conversations` (rows_json) | bulk insert from `data/seed/` |
 
+### As built (module agent, spacetimedb 2.14.1): deviations to know
+- Card-testing alerts use kind `fraud` (critical). Extra rule alerts: `repost` (info) and a forecast `overdraft` (kind `obligation`). Rule alert ids start with `rule:`.
+- The forecast also averages irregular deposits (owner draws); set `FORECAST_INCLUDE_IRREGULAR_INCOME=false` in the module for the strict formula.
+- `goal.priority` is an `i32`. Optional account fields are `option` types. Clients see camelCase names in bindings (`healthIndicator`, `joinRoom`).
+- `start_huddle` joins an already-live huddle and merges consent names; it rejects an empty consent list.
+- Extras: `delete_sandbox` (owner only), `worker_plaid_items` view (registered workers only).
+- Exact worker-reducer arguments: see `spacetime/README.md` and the generated bindings.
+- `scenario.result_json` shape the UI expects: `apps/web/lib/types.ts` → `ScenarioResult` {summary, verdict fine/tight/risky, metrics[], series[], low_point, suggestion}.
+
 ## 4. Worker HTTP (small; everything else goes through SpacetimeDB)
 | Method | Path | Purpose |
 |---|---|---|
