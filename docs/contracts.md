@@ -142,3 +142,18 @@ Worker HTTP (adds to section 4):
 | POST | `/plaid/sandbox_connect` `{household_id, username?}` | demo shortcut, no Link UI: `/sandbox/public_token/create` on First Platypus Bank (`ins_109508`) with `user_transactions_dynamic` (default) or `user_good`, then same as exchange |
 
 Sandbox test login in Plaid Link: `user_good` / `pass_good` (shown as a hint in our UI; these are Plaid's public sandbox values).
+
+## 6. Family voting (Spacetime multiplayer feature)
+
+A family member proposes a purchase or decision; everyone in the room votes live; an agent attaches an affordability check.
+
+| Table | Columns |
+|---|---|
+| `proposal` | id pk (`prop_…`), household_id, title, amount, details_json (e.g. `{"down_pct":20,"term_months":60,"rate_pct":6.2}`), created_by_name, created_at, closes_at, status open/closed, verdict (""/fine/tight/risky), analysis_json, run_id |
+| `vote` | id pk (`{proposal_id}:{voter_key}`), proposal_id, household_id, voter_key (caller identity hex, or member id for seeded votes), voter_name, choice yes/no/abstain, updated_at |
+
+Reducers: `create_proposal(household_id, title, amount, details_json, closes_in_days, author_name)` (also enqueues an
+`agent_job` with workflow `what_if` and `subject_id` = proposal id, so the affordability check runs automatically),
+`cast_vote(proposal_id, choice, voter_name)` (one vote per identity, can change until closed), `close_proposal(proposal_id)`,
+worker-only `agent_update_proposal(proposal_id, verdict, analysis_json, run_id)`, and `seed_proposals(rows_json)` / `seed_votes(rows_json)`.
+Seed files: `data/seed/proposals.json`, `data/seed/votes.json`. `create_sandbox` copies proposals and seeded votes.
