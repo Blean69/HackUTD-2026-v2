@@ -109,6 +109,8 @@ Worker-only (reject unless `ctx.sender` is in `worker`):
 - Exact worker-reducer arguments: see `spacetime/README.md` and the generated bindings.
 - `scenario.result_json` shape the UI expects: `apps/web/lib/types.ts` → `ScenarioResult` {summary, verdict fine/tight/risky, metrics[], series[], low_point, suggestion}.
 
+- Worker as built: `agent_run.result_json` also carries `cache_key` and `effects` for cache replay, so UIs shouldn't depend on its shape. `what_if` results match `ScenarioResult` plus `scenario`, `assumptions`, `headline`. `/health` also returns `local`, `models`, `workflows`, `tools`, `demo_mode`. Plaid hooks: `services/worker/src/router.ts` (`router.add/addPrefix`) and `registerWorkflow()` in `src/workflows/index.ts`.
+
 ## 4. Worker HTTP (small; everything else goes through SpacetimeDB)
 | Method | Path | Purpose |
 |---|---|---|

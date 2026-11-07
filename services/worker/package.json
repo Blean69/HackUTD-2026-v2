@@ -1,0 +1,29 @@
+{
+  "name": "keystone-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Keystone agent worker: claims agent_job rows from SpacetimeDB, runs multi-step Nemotron workflows, writes trace events and results back. Also serves /health and /asr.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "seed": "tsx src/seed.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "openai": "^6.0.0",
+    "spacetimedb": "2.14.1",
+    "tsx": "^4.20.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
