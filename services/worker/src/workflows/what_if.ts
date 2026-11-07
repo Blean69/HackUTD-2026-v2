@@ -1,5 +1,5 @@
 // what_if: natural-language question -> structured Scenario -> simulate against real cash flow -> narrative + chart data.
-import { z } from 'zod';
+// A what_if job whose input carries a `proposal_id` is a Family-voting affordability check (proposal_check.ts) instead.
 import { emitPlan } from '../agent/loop.js';
 import type { RunContext } from '../agent/run.js';
 import { structured } from '../llm/structured.js';
@@ -7,68 +7,28 @@ import { DEBT_TYPES } from '../tools/finance.js';
 import { ScenarioSchema, type Scenario, type SimResult } from '../tools/simulate.js';
 import { truncate, usd } from '../util.js';
 import { householdBrief, textCacheKey } from './common.js';
+import { NarrativeSchema, buildScenarioResult, fallbackNarrative } from './scenario_result.js';
+import { proposalCacheKey, proposalOnError, readProposal, runProposalCheck } from './proposal_check.js';
 import type { WorkflowDef } from './types.js';
-
-const NarrativeSchema = z.object({
-  summary: z.string().min(10).max(520).describe('2-4 plain-language sentences with the key numbers'),
-  suggestion: z.string().max(260).describe('One concrete next step or adjustment'),
-});
-
-export type WebVerdict = 'fine' | 'tight' | 'risky';
-const VERDICT: Record<SimResult['verdict'], WebVerdict> = { comfortable: 'fine', tight: 'tight', shortfall: 'risky' };
-
-/** The JSON the web app renders from scenario.result_json (apps/web/lib/types.ts ScenarioResult) plus extras. */
-export function buildScenarioResult(sim: SimResult, narrative: { summary: string; suggestion: string }, data: RunContext['data']): Record<string, unknown> {
-  const e = sim.effect;
-  const metrics: { label: string; before?: number; after: number; unit: 'usd' | 'months' | 'pct' }[] = [
-    { label: `Cash in month ${sim.months}`, before: sim.ending.baseline, after: sim.ending.scenario, unit: 'usd' },
-    { label: 'Lowest cash balance', before: Math.min(...sim.series.map((p) => p.baseline)), after: sim.lowest.balance, unit: 'usd' },
-    { label: 'Monthly cash flow', before: sim.baseline.monthly_net, after: Math.round((sim.baseline.monthly_net + e.monthly_change) * 100) / 100, unit: 'usd' },
-    { label: 'Months of spending covered at the low point', after: sim.months_of_spending_covered_at_low, unit: 'months' },
-  ];
-  if (e.monthly_payment) metrics.push({ label: 'New monthly payment', after: e.monthly_payment, unit: 'usd' });
-  if (e.total_interest) metrics.push({ label: 'Total interest over the loan', after: e.total_interest, unit: 'usd' });
-  if (e.interest_saved) metrics.push({ label: `Interest saved in ${sim.months} months`, after: e.interest_saved, unit: 'usd' });
-  const low = sim.series.find((p) => p.month === sim.lowest.month);
-  return {
-    summary: narrative.summary,
-    verdict: VERDICT[sim.verdict],
-    metrics,
-    series: sim.series.map((p) => ({ date: p.date, baseline: p.baseline, scenario: p.scenario })),
-    low_point: { date: low?.date ?? data.asOf, balance: sim.lowest.balance },
-    suggestion: narrative.suggestion,
-    scenario: sim.scenario,
-    assumptions: sim.assumptions,
-    headline: sim.headline,
-  };
-}
-
-function fallbackNarrative(sim: SimResult): { summary: string; suggestion: string } {
-  const s = sim.scenario;
-  const suggestion =
-    sim.verdict === 'shortfall'
-      ? s.kind === 'purchase' || s.kind === 'new_loan'
-        ? 'Consider a larger down payment, a smaller amount or waiting until savings are higher.'
-        : 'Build a larger cash cushion before this happens, or trim monthly spending.'
-      : sim.verdict === 'tight'
-        ? 'It works on paper but leaves little room; a bigger buffer would make it safer.'
-        : 'This fits comfortably; keep the emergency fund untouched.';
-  return { summary: `${sim.headline} Without changes you would have ${usd(sim.ending.baseline)} in month ${sim.months}; with this scenario ${usd(sim.ending.scenario)}.`, suggestion };
-}
 
 export const whatIfWorkflow: WorkflowDef = {
   name: 'what_if',
 
   async cacheKey(run, job) {
+    const proposal = readProposal(job);
+    if (proposal) return proposalCacheKey(run, proposal);
     const prompt = String(job.input.prompt ?? '');
     return prompt ? textCacheKey(run, 'what_if', prompt) : null;
   },
 
-  onError(run, _job, err) {
+  onError(run, job, err) {
+    if (readProposal(job)) return proposalOnError(run, err);
     run.scenario('error', JSON.stringify({ summary: `The simulation could not finish: ${truncate(err.message, 200)}`, verdict: 'tight' }));
   },
 
   async run(run, job) {
+    const proposal = readProposal(job);
+    if (proposal) return runProposalCheck(run, proposal);
     const prompt = String(job.input.prompt ?? '').trim();
     if (!prompt) throw new Error('empty what-if prompt');
     run.scenario('running', '');

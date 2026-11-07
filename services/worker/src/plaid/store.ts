@@ -15,7 +15,7 @@ export interface PlaidItem {
   cursor: string;
 }
 
-export type ConnectionStatus = 'linking' | 'syncing' | 'ok' | 'error';
+export type ConnectionStatus = 'linking' | 'selecting' | 'syncing' | 'ok' | 'error';
 export interface ConnectionUpdate {
   itemId: string;
   householdId: string;
@@ -24,6 +24,17 @@ export interface ConnectionUpdate {
   accountsCount: number;
   txnsCount: number;
   error?: string;
+}
+
+/** One bank account offered to the family during onboarding (bank_account_option). */
+export interface AccountOption {
+  accountId: string;
+  name: string;
+  officialName: string;
+  mask: string;
+  type: string;
+  subtype: string;
+  balance: number;
 }
 
 export interface PlaidStore {
@@ -42,6 +53,10 @@ export interface PlaidStore {
   requestSync(householdId: string): Promise<void>;
   /** Plaid-sourced transactions currently stored on these accounts, or null when unknown. */
   countTxns(householdId: string, accountIds: string[]): Promise<number | null>;
+  /** The worker-only reducer agent_set_account_options: the accounts the family can choose from (onboarding). */
+  setAccountOptions(householdId: string, itemId: string, options: AccountOption[]): Promise<void>;
+  /** Plaid account ids the family selected for this item, or null when no selection exists (import everything). */
+  selectedAccountIds(householdId: string, itemId: string): Promise<Set<string> | null>;
 }
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
@@ -118,6 +133,27 @@ export class SpacetimePlaidStore implements PlaidStore {
     return this.conn.reducers.requestBankSync({ householdId });
   }
 
+  setAccountOptions(householdId: string, itemId: string, options: AccountOption[]): Promise<void> {
+    const rows = options.map((o) => ({ account_id: o.accountId, name: o.name, official_name: o.officialName, mask: o.mask, type: o.type, subtype: o.subtype, balance: o.balance }));
+    return this.conn.reducers.agentSetAccountOptions({ householdId, itemId, rowsJson: JSON.stringify(rows) });
+  }
+
+  async selectedAccountIds(householdId: string, itemId: string): Promise<Set<string> | null> {
+    // a fresh snapshot each time: select_bank_accounts just changed these rows and the job started right after it
+    const sub = await subscribeAndWait(this.conn, [`SELECT * FROM bank_account_option WHERE household_id = ${sqlStr(householdId)}`], 15_000);
+    try {
+      const mine = [...this.conn.db.bankAccountOption.iter()].filter((o) => o.householdId === householdId && o.itemId === itemId);
+      if (!mine.length) return null;
+      return new Set(mine.filter((o) => o.selected).map((o) => o.accountId));
+    } finally {
+      try {
+        sub.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   async countTxns(householdId: string, accountIds: string[]): Promise<number | null> {
     try {
       let p = this.subs.get(householdId);
@@ -153,6 +189,9 @@ export class MemoryPlaidStore implements PlaidStore {
   calls: string[] = [];
   failOn: string | null = null;
   households = new Set<string>(['hh_test']);
+  options = new Map<string, AccountOption[]>();
+  /** itemId -> selected Plaid account ids (absent = no selection exists). */
+  selection = new Map<string, Set<string>>();
 
   private hit(name: string): void {
     this.calls.push(name);
@@ -196,6 +235,13 @@ export class MemoryPlaidStore implements PlaidStore {
   async requestSync(householdId: string): Promise<void> {
     this.hit('requestSync');
     this.syncRequests.push(householdId);
+  }
+  async setAccountOptions(_householdId: string, itemId: string, options: AccountOption[]): Promise<void> {
+    this.hit('setAccountOptions');
+    this.options.set(itemId, options);
+  }
+  async selectedAccountIds(_householdId: string, itemId: string): Promise<Set<string> | null> {
+    return this.selection.get(itemId) ?? null;
   }
   async countTxns(householdId: string, accountIds: string[]): Promise<number | null> {
     const ids = new Set(accountIds);

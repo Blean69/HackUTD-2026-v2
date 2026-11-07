@@ -2,7 +2,8 @@
 # Deploy Keystone to the EC2 box over SSH: rsync the repo + env file, then `docker compose up -d --build`
 # (Caddy + web + worker + self-hosted SpacetimeDB). Run from anywhere on your laptop. See infra/DEPLOY.md.
 #
-#   infra/deploy.sh [-H <ip-or-dns>] [-i <key.pem>] [--seed]
+#   infra/deploy.sh [-H <ip-or-dns>] [-i <key.pem>] [--publish] [--seed]
+#   infra/deploy.sh --set-worker-hash          # only (re)set the worker-secret hash in the published module
 #   infra/deploy.sh --rollback
 #   infra/deploy.sh --maincloud      # DB on Maincloud: do not run the spacetime container
 #
@@ -13,6 +14,10 @@
 #       --dir PATH       install dir on the box (default /opt/keystone)  [env KEYSTONE_DIR]
 #   -e, --env FILE       production env file to upload as <dir>/.env on the box (default: <repo>/.env.prod)
 #       --maincloud      the database lives on Maincloud: start only caddy + web + worker (no spacetime container)
+#       --publish        after the stack is up: `spacetime build` here, publish the bundle from inside the spacetime container
+#                        (self-hosted DB only), then set the worker-secret hash (see --set-worker-hash)
+#       --set-worker-hash  call the module's admin_set_worker_secret_hash with sha256(WORKER_SECRET from the env file),
+#                        inside the spacetime container. Needs no source edit; the secret itself is never printed or sent
 #       --seed           after the stack is up, run the worker seed once (needs the module published first)
 #       --rollback       do not deploy: switch web+worker back to the images from the previous deploy
 #       --skip-checks    skip the local .env sanity checks
@@ -26,6 +31,8 @@ SSH_USER="${KEYSTONE_USER:-ubuntu}"
 ENV_FILE="$ROOT/.env.prod"
 MAINCLOUD=0
 SEED=0
+PUBLISH=0
+SET_HASH=0
 ROLLBACK=0
 CHECKS=1
 REMOTE_DIR="${KEYSTONE_DIR:-/opt/keystone}"           # created and owned by ubuntu by the box's user-data
@@ -44,6 +51,8 @@ while [ $# -gt 0 ]; do
     --dir) REMOTE_DIR="${2:?missing value for $1}"; shift 2 ;;
     --maincloud) MAINCLOUD=1; shift ;;
     --seed) SEED=1; shift ;;
+    --publish) PUBLISH=1; shift ;;
+    --set-worker-hash) SET_HASH=1; shift ;;
     --rollback) ROLLBACK=1; shift ;;
     --skip-checks) CHECKS=0; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -119,16 +128,77 @@ if [ "$CHECKS" = 1 ]; then
     case "$WURI" in wss://*) ;; *) bad "Maincloud: NEXT_PUBLIC_SPACETIME_URI must be wss://maincloud.spacetimedb.com (is '${WURI}')" ;; esac
     [ "$WURI" != "wss://$PUB" ] || bad "Maincloud: NEXT_PUBLIC_SPACETIME_URI points at your own host"
   fi
-  # The worker secret must hash to the constant in the module SOURCE you are about to publish / have published.
-  MOD="$ROOT/spacetime/src/reducers/worker.ts"
-  if [ -f "$MOD" ] && [ -n "$SECRET" ]; then
-    WANT="$(grep -E "^const WORKER_SECRET_SHA256 = '" "$MOD" | sed -E "s/.*'([0-9a-f]+)'.*/\1/" | head -n 1)"
-    HAVE="$(printf '%s' "$SECRET" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -d' ' -f1)"
-    [ -n "$WANT" ] && [ "$WANT" = "$HAVE" ] || bad "sha256(WORKER_SECRET) != WORKER_SECRET_SHA256 in spacetime/src/reducers/worker.ts: the worker could never register (DEPLOY.md step 3)"
-  fi
   if [ "$errs" -gt 0 ]; then die "$errs check(s) failed (override with --skip-checks if you know better)"; fi
   echo "  ok"
 fi
+
+# ---- module publish + worker-secret hash (self-hosted DB: run inside the spacetime container) --------------------------
+# The module's default worker-secret hash is the PUBLIC dev one. Production overrides it at runtime with the module's
+# admin_set_worker_secret_hash reducer (callable only by the identity that published the database), so no source file is
+# ever edited. The hash is derived here from WORKER_SECRET in the env file; the secret never leaves this shell, and
+# only the hex digest is sent over ssh.
+SECRET_SHA256=""
+compute_worker_hash() {
+  local secret; secret="$(envval WORKER_SECRET)"
+  [ -n "$secret" ] || die "WORKER_SECRET is empty in $(basename "$ENV_FILE")"
+  [ "$secret" != "keystone-dev-secret" ] || die "WORKER_SECRET in $(basename "$ENV_FILE") is still the public dev secret"
+  SECRET_SHA256="$(printf '%s' "$secret" | { sha256sum 2>/dev/null || shasum -a 256; } | cut -d' ' -f1)"
+  secret=""
+  case "$SECRET_SHA256" in *[!0-9a-f]*|"") die "could not compute the SHA-256 of WORKER_SECRET" ;; esac
+  [ "${#SECRET_SHA256}" -eq 64 ] || die "could not compute the SHA-256 of WORKER_SECRET"
+}
+
+db_name() { local n; n="$(envval SPACETIME_DB)"; printf '%s' "${n:-keystone}"; }
+
+publish_module() {
+  command -v spacetime >/dev/null 2>&1 || die "--publish needs the spacetime CLI on this machine (it runs \`spacetime build\`); see DEPLOY.md step 3c"
+  log "Building the module (spacetime build -p spacetime)"
+  ( cd "$ROOT" && spacetime build -p spacetime ) 2>&1 | tail -n 3
+  [ -f "$ROOT/spacetime/dist/bundle.js" ] || die "spacetime/dist/bundle.js was not produced by the build"
+  log "Publishing $(db_name) from inside the spacetime container (non-breaking: add -c always yourself only for a wipe)"
+  rsync -a -e "$RSYNC_SSH" "$ROOT/spacetime/dist/bundle.js" "$TARGET:/tmp/keystone-bundle.js"
+  rssh 'bash -s' -- "$REMOTE_DIR" "$(db_name)" <<'REMOTE'
+set -euo pipefail
+cd "$1"
+D=docker; docker info >/dev/null 2>&1 || D="sudo docker"
+DC="infra/dc"; [ "$D" = docker ] || DC="sudo infra/dc"
+for i in $(seq 1 20); do
+  $DC exec -T spacetime spacetime server ping local </dev/null >/dev/null 2>&1 && break
+  echo "waiting for the spacetime container ($i/20)"; sleep 3
+done
+$DC cp /tmp/keystone-bundle.js spacetime:/tmp/bundle.js </dev/null
+rm -f /tmp/keystone-bundle.js
+$DC exec -T spacetime spacetime publish -s local -j /tmp/bundle.js "$2" -y </dev/null
+REMOTE
+}
+
+set_worker_hash() {
+  [ "$MAINCLOUD" = 0 ] || die "with --maincloud, set the hash yourself: spacetime call -s maincloud <db> admin_set_worker_secret_hash '\"<sha256 of WORKER_SECRET>\"' (DEPLOY.md, Maincloud box)"
+  compute_worker_hash
+  log "Setting the worker-secret hash in the module (sha256 ${SECRET_SHA256:0:8}...; the secret is not sent)"
+  if ! rssh 'bash -s' -- "$REMOTE_DIR" "$(db_name)" "$SECRET_SHA256" <<'REMOTE'
+set -uo pipefail
+cd "$1"
+D=docker; docker info >/dev/null 2>&1 || D="sudo docker"
+DC="infra/dc"; [ "$D" = docker ] || DC="sudo infra/dc"
+out="$($DC exec -T spacetime spacetime call -s local "$2" admin_set_worker_secret_hash "\"$3\"" </dev/null 2>&1)"; rc=$?
+if [ $rc -ne 0 ]; then
+  printf '%s\n' "$out" | grep -v "$3" >&2
+  case "$out" in
+    *"not allowed"*)
+      echo "The spacetime container's CLI identity is not this database's publisher. If the database was published BEFORE the" >&2
+      echo "admin reducer existed (init, which records the publisher, did not run), bootstrap once, then re-run --set-worker-hash:" >&2
+      echo "  infra/dc exec -T spacetime spacetime call -s local $2 register_worker '\"keystone-dev-secret\"' '\"deploy\"'" >&2
+      echo "(works only while no hash override exists yet; DEPLOY.md, 'Database published before the admin reducer')" >&2 ;;
+  esac
+  exit $rc
+fi
+echo "worker-secret hash set."
+REMOTE
+  then
+    die "could not set the worker-secret hash"
+  fi
+}
 
 # ---- wait for the box (first boot: cloud-init is still installing Docker) --------------------------------------------
 log "Connecting to $TARGET"
@@ -142,6 +212,12 @@ command -v docker >/dev/null 2>&1 && [ -f "$1" ] || { echo "first-boot setup not
 [ -d "$2" ] && [ -w "$2" ] || { echo "$2 does not exist or is not writable by $USER" >&2; exit 1; }
 free -h | sed -n '1,3p'
 REMOTE
+
+# ---- hash only: no rsync, no build ------------------------------------------------------------------------------------
+if [ "$SET_HASH" = 1 ] && [ "$PUBLISH" = 0 ] && [ "$SEED" = 0 ]; then
+  set_worker_hash
+  exit 0
+fi
 
 # ---- ship the code + env ---------------------------------------------------------------------------------------------
 log "Syncing repo to $TARGET:$REMOTE_DIR"
@@ -174,6 +250,13 @@ $D image prune -f >/dev/null || true
 $D builder prune -f --filter 'until=48h' >/dev/null || true   # keep the 30 GB disk from filling up over many deploys
 REMOTE
 
+# ---- optional module publish + worker-secret hash ----------------------------------------------------------------------
+if [ "$PUBLISH" = 1 ] && [ "$MAINCLOUD" = 1 ]; then
+  die "--publish publishes inside the spacetime container; with --maincloud use \`spacetime publish -s maincloud\` (DEPLOY.md) and then set the hash by hand"
+fi
+if [ "$PUBLISH" = 1 ]; then publish_module; fi
+if [ "$PUBLISH" = 1 ] || [ "$SET_HASH" = 1 ]; then set_worker_hash; fi
+
 # ---- optional seed ---------------------------------------------------------------------------------------------------
 if [ "$SEED" = 1 ]; then
   log "Waiting for the worker to connect to SpacetimeDB, then seeding"
@@ -191,7 +274,7 @@ done
 if [ "$state" != connected ]; then
   echo "worker never connected to SpacetimeDB. Last worker logs:" >&2
   $DC logs --tail=25 worker </dev/null >&2 || true
-  echo "Did you publish the module (DEPLOY.md step 3/4) with the hash of THIS WORKER_SECRET?" >&2
+  echo "Did you publish the module and set the hash for THIS WORKER_SECRET (infra/deploy.sh --publish, or DEPLOY.md step 3)?" >&2
   exit 1
 fi
 # </dev/null: this script arrives on stdin, and docker exec would otherwise swallow the rest of it

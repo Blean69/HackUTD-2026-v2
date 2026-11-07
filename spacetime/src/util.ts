@@ -8,7 +8,7 @@ import type spacetimedb from './schema';
 export type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
 export const ROLES = ['family', 'advisor', 'guest'] as const;
-export const WORKFLOWS = ['huddle', 'what_if', 'coach', 'scam_check', 'data_quality', 'plaid_sync'] as const;
+export const WORKFLOWS = ['huddle', 'what_if', 'coach', 'scam_check', 'data_quality', 'plaid_sync', 'onboarding_insights'] as const;
 
 /** Reject the call with a message the client can show (a SenderError is the "expected error" channel). */
 export function fail(message: string): never {
@@ -50,6 +50,14 @@ export function requireHousehold(ctx: Ctx, household_id: string) {
   const hh = ctx.db.household.id.find(household_id);
   if (!hh) fail(`unknown household "${household_id}"`);
   return hh;
+}
+
+/** Put the caller in a room (household_id "" = lobby), keeping one presence row per identity. */
+export function upsertPresence(ctx: Ctx, household_id: string, display_name: string, role: string): void {
+  const prev = ctx.db.presence.identity.find(ctx.sender);
+  const row = { identity: ctx.sender, household_id, display_name, role, last_seen: ctx.timestamp };
+  if (prev) ctx.db.presence.identity.update(row);
+  else ctx.db.presence.insert(row);
 }
 
 /** Display name of the caller from their presence row, else a fallback. */

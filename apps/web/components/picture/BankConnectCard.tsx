@@ -20,6 +20,7 @@ function PlaidOpener({ token, onPublicToken, onExit }: { token: string; onPublic
 
 const STATUS: Record<BankConnection["status"], { tone: Tone; label: string }> = {
   linking: { tone: "info", label: "Linking" },
+  selecting: { tone: "info", label: "Choose accounts" },
   syncing: { tone: "brand", label: "Syncing" },
   ok: { tone: "good", label: "Connected" },
   error: { tone: "risk", label: "Error" },

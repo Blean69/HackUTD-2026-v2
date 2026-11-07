@@ -270,4 +270,51 @@ describe('plaid_sync workflow', () => {
     await expect(u.exec()).rejects.toThrow(/not configured/);
     expect(u.store.connections.get('item_fake_1')).toMatchObject({ status: 'error' });
   });
+
+  // ---- onboarding: only the accounts the family selected ----------------------------------------------------------------
+
+  it('imports only the selected accounts and their transactions, and says what was left out', async () => {
+    const t = setup();
+    addItem(t.store);
+    t.store.selection.set('item_fake_1', new Set(['chk00000', 'sav00000']));
+    t.client.syncScript = [
+      page({
+        added: [
+          ptxn('t1', 'chk00000', 12.5, '2026-10-01', 'Kroger', ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES']),
+          ptxn('t2', 'sav00000', -50, '2026-10-02', 'Transfer in', ['TRANSFER_IN', 'TRANSFER_IN_SAVINGS']),
+          ptxn('t3', 'cc000000', 30, '2026-10-03', 'Chipotle', ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_RESTAURANT']),
+          ptxn('t4', 'mm000000', 5, '2026-10-04', 'Fee', ['BANK_FEES', 'BANK_FEES_ATM_FEES']),
+        ],
+        next_cursor: 'c1',
+      }),
+    ];
+    const out = await t.exec();
+    expect([...t.store.accounts.keys()].sort()).toEqual(['acct_plaid_chk00000', 'acct_plaid_sav00000']);
+    expect([...t.store.txns.keys()].sort()).toEqual(['txn_plaid_t1', 'txn_plaid_t2']);
+    expect(out).toMatchObject({ items: 1, accounts: 2, txns: 2 });
+    const titles = t.sink.traces.map((e) => e.title);
+    expect(titles.some((x) => /Importing 2 of 10 accounts/.test(x))).toBe(true);
+    expect(titles.some((x) => /left out 2 on accounts the family did not select/.test(x))).toBe(true);
+    expect(t.store.connections.get('item_fake_1')).toMatchObject({ status: 'ok', accountsCount: 2 });
+    // the mapping step only saw the two kept accounts
+    expect(t.sink.traces.find((e) => /^Mapped 2 accounts/.test(e.title))).toBeTruthy();
+  });
+
+  it('without a selection every account is imported, as before', async () => {
+    const t = setup();
+    addItem(t.store);
+    t.client.syncScript = [page({ added: [ptxn('t1', 'chk00000', 12.5, '2026-10-01', 'Kroger')], next_cursor: 'c1' })];
+    await t.exec();
+    expect(t.store.accounts.size).toBe(10);
+    expect(t.sink.traces.some((e) => /Importing \d+ of/.test(e.title))).toBe(false);
+  });
+
+  it('fails clearly when none of the selected accounts exist at the bank any more', async () => {
+    const t = setup();
+    addItem(t.store);
+    t.store.selection.set('item_fake_1', new Set(['gone0000']));
+    await expect(t.exec()).rejects.toThrow(/none of the 1 selected account exist/);
+    expect(t.store.connections.get('item_fake_1')).toMatchObject({ status: 'error' });
+    expect(t.store.accounts.size).toBe(0);
+  });
 });

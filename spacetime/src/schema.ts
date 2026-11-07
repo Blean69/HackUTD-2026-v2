@@ -6,8 +6,8 @@
 //    healthIndicator).
 //  - Every household-scoped table has a btree index on household_id (subscribe with
 //    `SELECT * FROM <table> WHERE household_id = '...'`).
-//  - Everything the app needs to render is `public`. The private tables are `worker`, `dirty_household` and
-//    `recompute_tick`. Row-level security is P1.
+//  - Everything the app needs to render is `public`. The private tables are `worker`, `module_config`,
+//    `plaid_item`, `dirty_household` and `recompute_tick`. Row-level security is P1.
 import { schema, table, t } from 'spacetimedb/server';
 
 // --- seed / domain data -------------------------------------------------------------------------------------------
@@ -154,7 +154,7 @@ const alert = table(
     id: t.string().primaryKey(),
     household_id: t.string().index('btree'),
     severity: t.string(), // info | warn | critical
-    kind: t.string(), // data_quality | fraud | scam | obligation | advisor
+    kind: t.string(), // data_quality | fraud | scam | obligation | advisor | insight
     title: t.string(),
     detail: t.string(),
     related_ids_json: t.string(),
@@ -176,7 +176,7 @@ const goal = table(
     priority: t.i32(), // 1 = most important
     feasibility: t.string(), // "" | on_track | stretch | off_track
     evidence_quote: t.string(),
-    source: t.string(), // huddle | manual | coach
+    source: t.string(), // huddle | manual | coach | onboarding
     created_at: t.timestamp(),
     updated_at: t.timestamp(),
   },
@@ -255,6 +255,39 @@ const advisor_note = table(
   },
 );
 
+// --- family voting (docs/contracts.md section 6) ------------------------------------------------------------------
+
+const proposal = table(
+  { name: 'proposal', public: true },
+  {
+    id: t.string().primaryKey(), // prop_...
+    household_id: t.string().index('btree'),
+    title: t.string(),
+    amount: t.f64(), // USD
+    details_json: t.string(), // free-form, e.g. {"down_pct":20,"term_months":60,"rate_pct":6.2}
+    created_by_name: t.string(),
+    created_at: t.timestamp(),
+    closes_at: t.timestamp(),
+    status: t.string(), // open | closed
+    verdict: t.string(), // "" (not checked yet) | fine | tight | risky   (written by the worker)
+    analysis_json: t.string(), // ScenarioResult-style {summary, metrics, suggestion, ...} (written by the worker)
+    run_id: t.string(), // agent run that produced the verdict ("" until then)
+  },
+);
+
+const vote = table(
+  { name: 'vote', public: true },
+  {
+    id: t.string().primaryKey(), // `${proposal_id}:${voter_key}`
+    proposal_id: t.string().index('btree'),
+    household_id: t.string().index('btree'),
+    voter_key: t.string(), // caller identity hex, or a member id for seeded votes
+    voter_name: t.string(),
+    choice: t.string(), // yes | no | abstain
+    updated_at: t.timestamp(),
+  },
+);
+
 // --- Plaid Sandbox (docs/contracts.md section 5) ------------------------------------------------------------------
 
 /** What the UI shows about a linked bank. Safe for clients: no tokens. */
@@ -264,11 +297,46 @@ const bank_connection = table(
     item_id: t.string().primaryKey(),
     household_id: t.string().index('btree'),
     institution_name: t.string(),
-    status: t.string(), // linking | syncing | ok | error
+    status: t.string(), // linking | selecting | syncing | ok | error
     accounts_count: t.u32(),
     txns_count: t.u32(),
     last_synced_at: t.option(t.timestamp()),
     error: t.string(), // "" when healthy
+  },
+);
+
+// --- onboarding (docs/contracts.md section 7) ---------------------------------------------------------------------
+
+const household_profile = table(
+  { name: 'household_profile', public: true },
+  {
+    household_id: t.string().primaryKey(),
+    onboarding_status: t.string(), // welcome | connect | selecting | questions | done
+    answers_json: t.string(), // the raw answers last saved by save_onboarding_answers
+    risk_comfort: t.u32(), // 1 (cautious) .. 5 (comfortable with risk)
+    priorities_json: t.string(), // JSON array of priority keys, most important first
+    voting_enabled: t.bool(),
+    voice_consent: t.bool(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+/** One row per bank account Plaid offered during onboarding; `selected` decides what plaid_sync imports. Safe for clients: no tokens. */
+const bank_account_option = table(
+  { name: 'bank_account_option', public: true },
+  {
+    id: t.string().primaryKey(), // `${item_id}:${account_id}`
+    household_id: t.string().index('btree'),
+    item_id: t.string().index('btree'),
+    account_id: t.string(), // the Plaid account id
+    name: t.string(),
+    official_name: t.string(),
+    mask: t.string(),
+    type: t.string(), // Plaid type: depository | credit | loan | investment | ...
+    subtype: t.string(),
+    balance: t.f64(), // current balance; for credit and loan accounts the amount owed
+    selected: t.bool(),
   },
 );
 
@@ -278,7 +346,7 @@ const agent_job = table(
   { name: 'agent_job', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
-    workflow: t.string(), // huddle | what_if | coach | scam_check | data_quality
+    workflow: t.string(), // huddle | what_if | coach | scam_check | data_quality | plaid_sync | onboarding_insights
     household_id: t.string().index('btree'),
     subject_id: t.string(),
     input_json: t.string(),
@@ -338,6 +406,21 @@ const worker = table(
 );
 
 /**
+ * One private row (id 1): who published the module, and an optional override of the worker-secret hash.
+ * `publisher` is recorded by `init` (ctx.sender of the publishing call). `worker_secret_hash` is "" until
+ * `admin_set_worker_secret_hash` sets it; while "" `register_worker` falls back to the dev hash compiled into the module.
+ */
+const module_config = table(
+  { name: 'module_config' },
+  {
+    id: t.u8().primaryKey(),
+    publisher: t.option(t.identity()),
+    worker_secret_hash: t.string(),
+    updated_at: t.timestamp(),
+  },
+);
+
+/**
  * Plaid access tokens. PRIVATE: clients cannot subscribe to this table. Registered workers read it through the
  * `worker_plaid_items` view (see reducers/plaid.ts), which returns no rows to anyone else.
  */
@@ -390,12 +473,17 @@ const spacetimedb = schema({
   scenario,
   coach_message,
   advisor_note,
+  proposal,
+  vote,
   agent_job,
   agent_run,
   trace_event,
   bank_connection,
+  household_profile,
+  bank_account_option,
   plaid_item,
   worker,
+  module_config,
   dirty_household,
   recompute_tick,
 });

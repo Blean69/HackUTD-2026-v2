@@ -1,5 +1,6 @@
 // Module tests: reducers run against SpacetimeDB's real in-memory datastore (no server needed).
 //   npm test
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { ConnectionId, ScheduleAt, TimeDuration, Timestamp } from 'spacetimedb';
 import { createModuleTestHarness, TestAuth } from 'spacetimedb/server/test-utils';
@@ -89,6 +90,9 @@ describe('worker auth', () => {
       (ctx: never) => m.purge_transcript(ctx, { huddle_id: 'x' }),
       (ctx: never) => m.set_huddle_status(ctx, { huddle_id: 'x', status: 'done' }),
       (ctx: never) => m.agent_coach_reply(ctx, { household_id: 'hh_demo', text: 'hi', run_id: '' }),
+      (ctx: never) => m.agent_update_proposal(ctx, { proposal_id: 'x', verdict: 'fine', analysis_json: '{}', run_id: '' }),
+      (ctx: never) => m.seed_proposals(ctx, { rows_json: '[]' }),
+      (ctx: never) => m.seed_votes(ctx, { rows_json: '[]' }),
     ];
     for (const call of rejected) {
       expect(() => test.withReducerTx(alice, call as never)).toThrow('worker only');
@@ -465,5 +469,543 @@ describe('Plaid Sandbox support', () => {
     expect([...test.db.plaid_item.household_id.filter(sbx.id)]).toHaveLength(0);
     expect(test.db.plaid_item.count()).toBe(1n);
     expect(test.db.bank_connection.count()).toBe(1n);
+  });
+});
+
+// ---- worker secret override (production needs no source edit) -------------------------------------------------------
+const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
+const publisher = who('publisher');
+
+describe('worker secret hash override', () => {
+  const PROD = sha256('a-long-random-production-secret');
+  const registerWith = (test: ReturnType<typeof fresh>, auth: ReturnType<typeof who>, secret: string) =>
+    test.withReducerTx(auth, (ctx) => m.register_worker(ctx, { secret, label: 'w' }));
+  const setHash = (test: ReturnType<typeof fresh>, auth: ReturnType<typeof who>, hex: string) =>
+    test.withReducerTx(auth, (ctx) => m.admin_set_worker_secret_hash(ctx, { sha256_hex: hex }));
+  const idOf = (test: ReturnType<typeof fresh>, auth: ReturnType<typeof who>) => test.withReducerTx(auth, (ctx) => ctx.sender.toHexString());
+  const published = () => {
+    const test = fresh();
+    test.withReducerTx(publisher, (ctx) => m.init(ctx, {})); // the host runs init as the publishing identity
+    return test;
+  };
+
+  it('init records ctx.sender as the publisher, with no override yet', () => {
+    const test = published();
+    expect(test.db.module_config.count()).toBe(1n);
+    const row = test.db.module_config.id.find(1)!;
+    expect(row.publisher!.toHexString()).toBe(idOf(test, publisher));
+    expect(row.publisher!.toHexString()).not.toBe(idOf(test, alice));
+    expect(row.worker_secret_hash).toBe('');
+    // running init again (e.g. after a publish that wipes data) never creates a second row and keeps an override
+    setHash(test, publisher, PROD);
+    test.withReducerTx(publisher, (ctx) => m.init(ctx, {}));
+    expect(test.db.module_config.count()).toBe(1n);
+    expect(test.db.module_config.id.find(1)!.worker_secret_hash).toBe(PROD);
+  });
+
+  it('the dev hash is the default; the publisher can replace it, and then the dev secret stops working', () => {
+    const test = published();
+    registerWith(test, alice, 'keystone-dev-secret'); // default still accepts the dev secret
+    expect(test.db.worker.count()).toBe(1n);
+    setHash(test, publisher, PROD);
+    expect(() => registerWith(test, bob, 'keystone-dev-secret')).toThrow('invalid worker secret');
+    expect(() => registerWith(test, bob, 'wrong')).toThrow('invalid worker secret');
+    registerWith(test, bob, 'a-long-random-production-secret');
+    expect(test.db.worker.count()).toBe(2n);
+    // the registered worker works as before
+    expect(() => test.withReducerTx(bob, (ctx) => m.claim_job(ctx, { job_id: 99n }))).toThrow('unknown job');
+  });
+
+  it('only the publisher may call it: strangers and even registered workers are rejected', () => {
+    const test = published();
+    registerWith(test, alice, 'keystone-dev-secret');
+    for (const who_ of [alice, bob]) expect(() => setHash(test, who_, PROD)).toThrow('not allowed');
+    expect(test.db.module_config.id.find(1)!.worker_secret_hash).toBe('');
+    setHash(test, publisher, PROD);
+    // once set, a registered worker still cannot rotate it
+    expect(() => setHash(test, alice, sha256('mine'))).toThrow('not allowed');
+    expect(test.db.module_config.id.find(1)!.worker_secret_hash).toBe(PROD);
+  });
+
+  it('validates and normalizes the digest; "" returns to the dev default', () => {
+    const test = published();
+    for (const bad of ['abc', 'g'.repeat(64), PROD.slice(1), `${PROD}0`, 'keystone-dev-secret']) {
+      expect(() => setHash(test, publisher, bad)).toThrow('64 hex');
+    }
+    setHash(test, publisher, `  ${PROD.toUpperCase()}\n`);
+    expect(test.db.module_config.id.find(1)!.worker_secret_hash).toBe(PROD);
+    setHash(test, publisher, '');
+    expect(test.db.module_config.id.find(1)!.worker_secret_hash).toBe('');
+    registerWith(test, alice, 'keystone-dev-secret');
+  });
+
+  it('LEGACY (database published before init recorded a publisher): only an already-registered worker, only while no override exists', () => {
+    const test = fresh(); // init never ran
+    expect(test.db.module_config.count()).toBe(0n);
+    expect(() => setHash(test, bob, PROD)).toThrow('not allowed'); // a stranger
+    registerWith(test, alice, 'keystone-dev-secret'); // alice becomes a worker (dev secret accepted: no override yet)
+    registerWith(test, worker, 'keystone-dev-secret');
+    setHash(test, alice, PROD); // first override: allowed, and alice is recorded as the admin
+    expect(test.db.module_config.id.find(1)!.publisher!.toHexString()).toBe(idOf(test, alice)); // the first adopter is recorded
+    expect(() => registerWith(test, bob, 'keystone-dev-secret')).toThrow('invalid worker secret');
+    expect(() => setHash(test, worker, sha256('hijack'))).toThrow('not allowed'); // another worker cannot take over
+    expect(() => setHash(test, bob, sha256('hijack'))).toThrow('not allowed');
+    setHash(test, alice, sha256('rotated')); // the recorded admin can rotate
+    registerWith(test, bob, 'rotated');
+  });
+});
+
+// ---- family voting (docs/contracts.md section 6) --------------------------------------------------------------------
+describe('family voting', () => {
+  const DAY = 86_400_000;
+  const create = (test: ReturnType<typeof fresh>, over: Partial<{ title: string; amount: number; details_json: string; closes_in_days: number; author_name: string; household_id: string }> = {}) => {
+    test.withReducerTx(alice, (ctx) =>
+      m.create_proposal(ctx, { household_id: 'hh_demo', title: 'Buy a reliable used car', amount: 14000, details_json: '{"down_pct":10,"term_months":60,"rate_pct":12.5}', closes_in_days: 7, author_name: 'Ana', ...over }),
+    );
+    const all = [...test.db.proposal.iter()];
+    return all[all.length - 1]!;
+  };
+  const vote = (test: ReturnType<typeof fresh>, auth: ReturnType<typeof who>, id: string, choice: string, name = '') =>
+    test.withReducerTx(auth, (ctx) => m.cast_vote(ctx, { proposal_id: id, choice, voter_name: name }));
+
+  it('create_proposal inserts an open proposal and queues exactly one what_if job carrying it', () => {
+    const test = seeded();
+    const p = create(test);
+    expect(p.id).toMatch(/^prop_[0-9a-z]+$/);
+    expect(p).toMatchObject({ household_id: 'hh_demo', title: 'Buy a reliable used car', amount: 14000, status: 'open', verdict: '', analysis_json: '', run_id: '', created_by_name: 'Ana' });
+    expect(JSON.parse(p.details_json)).toEqual({ down_pct: 10, term_months: 60, rate_pct: 12.5 });
+    expect(Number(p.closes_at.microsSinceUnixEpoch - p.created_at.microsSinceUnixEpoch) / 1000).toBe(7 * DAY);
+    const jobs = [...test.db.agent_job.iter()].filter((j) => j.workflow === 'what_if');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ household_id: 'hh_demo', subject_id: p.id, status: 'queued' });
+    const input = JSON.parse(jobs[0]!.input_json);
+    expect(input).toMatchObject({ proposal_id: p.id, title: 'Buy a reliable used car', amount: 14000, details: { down_pct: 10 }, created_by: 'Ana' });
+  });
+
+  it('create_proposal validates its input and fills in the author from presence when blank', () => {
+    const test = seeded();
+    const bad = (over: Parameters<typeof create>[1]) => () => create(test, over);
+    expect(bad({ household_id: 'hh_nope' })).toThrow('unknown household');
+    expect(bad({ title: '   ' })).toThrow('title must not be empty');
+    expect(bad({ title: 'x'.repeat(141) })).toThrow('too long');
+    expect(bad({ amount: -1 })).toThrow('amount');
+    expect(bad({ amount: Number.NaN })).toThrow('amount');
+    expect(bad({ closes_in_days: 0 })).toThrow('closes_in_days');
+    expect(bad({ closes_in_days: 91 })).toThrow('closes_in_days');
+    expect(bad({ details_json: '[1,2]' })).toThrow('JSON object');
+    expect(bad({ details_json: '{nope' })).toThrow('JSON object');
+    expect(test.db.proposal.count()).toBe(0n);
+    expect([...test.db.agent_job.iter()]).toHaveLength(0);
+    test.withReducerTx(alice, (ctx) => m.join_room(ctx, { household_id: 'hh_demo', display_name: 'Ana Demo', role: 'family' }));
+    const p = create(test, { author_name: '', details_json: '', amount: 0, closes_in_days: 0.5 });
+    expect(p.created_by_name).toBe('Ana Demo');
+    expect(p.details_json).toBe('{}');
+    expect(Number(p.closes_at.microsSinceUnixEpoch - p.created_at.microsSinceUnixEpoch) / 1000).toBe(DAY / 2);
+  });
+
+  it('cast_vote: one vote per identity, changeable until closed, keyed by the caller identity', () => {
+    const test = seeded();
+    const p = create(test);
+    vote(test, alice, p.id, 'yes', 'Ana');
+    vote(test, bob, p.id, 'no', 'Ben');
+    expect(test.db.vote.count()).toBe(2n);
+    vote(test, alice, p.id, 'no', 'Ana'); // changes the vote, does not add one
+    expect(test.db.vote.count()).toBe(2n);
+    const mine = [...test.db.vote.proposal_id.filter(p.id)].find((v) => v.voter_name === 'Ana')!;
+    expect(mine.choice).toBe('no');
+    expect(mine.household_id).toBe('hh_demo');
+    expect(mine.id).toBe(`${p.id}:${mine.voter_key}`);
+    expect(mine.voter_key).toMatch(/^[0-9a-f]{64}$/);
+    vote(test, alice, p.id, 'abstain'); // blank name falls back to the caller's name
+    expect([...test.db.vote.proposal_id.filter(p.id)].filter((v) => v.choice === 'abstain')).toHaveLength(1);
+    expect(() => vote(test, alice, p.id, 'maybe')).toThrow('choice must be one of');
+    expect(() => vote(test, alice, 'prop_nope', 'yes')).toThrow('unknown proposal');
+    expect(() => vote(test, alice, p.id, 'yes', 'x'.repeat(41))).toThrow('too long');
+  });
+
+  it('closing: close_proposal is idempotent, and nobody can vote or change a vote afterwards', () => {
+    const test = seeded();
+    const p = create(test);
+    vote(test, alice, p.id, 'yes', 'Ana');
+    test.withReducerTx(bob, (ctx) => m.close_proposal(ctx, { proposal_id: p.id }));
+    test.withReducerTx(bob, (ctx) => m.close_proposal(ctx, { proposal_id: p.id }));
+    expect(test.db.proposal.id.find(p.id)!.status).toBe('closed');
+    expect(() => vote(test, bob, p.id, 'no', 'Ben')).toThrow('closed');
+    expect(() => vote(test, alice, p.id, 'no', 'Ana')).toThrow('closed');
+    expect([...test.db.vote.iter()].map((v) => v.choice)).toEqual(['yes']);
+    expect(() => test.withReducerTx(bob, (ctx) => m.close_proposal(ctx, { proposal_id: 'prop_nope' }))).toThrow('unknown proposal');
+  });
+
+  it('a proposal past its deadline rejects votes immediately and is closed by the 60 s tick', () => {
+    const test = seeded();
+    const p = create(test, { closes_in_days: 1 });
+    vote(test, alice, p.id, 'yes', 'Ana');
+    test.clock.advance(TimeDuration.fromMillis(DAY + 1000));
+    expect(test.db.proposal.id.find(p.id)!.status).toBe('open'); // nothing flipped it yet...
+    expect(() => vote(test, bob, p.id, 'no', 'Ben')).toThrow('closed'); // ...but voting is already shut
+    test.withReducerTx(TestAuth.internal(), (ctx) => m.tick_recompute(ctx, { arg: { scheduled_id: 1n, scheduled_at: ScheduleAt.interval(60_000_000n) } }));
+    expect(test.db.proposal.id.find(p.id)!.status).toBe('closed');
+    // a still-open proposal is left alone
+    const q = create(test, { title: 'Family trip', closes_in_days: 30 });
+    test.withReducerTx(TestAuth.internal(), (ctx) => m.tick_recompute(ctx, { arg: { scheduled_id: 1n, scheduled_at: ScheduleAt.interval(60_000_000n) } }));
+    expect(test.db.proposal.id.find(q.id)!.status).toBe('open');
+  });
+
+  it('agent_update_proposal: worker only, validated, and still allowed after voting closed', () => {
+    const test = seeded();
+    const p = create(test);
+    const analysis = JSON.stringify({ summary: 'Tight but doable.', metrics: [], suggestion: 'Raise the down payment.' });
+    expect(() => test.withReducerTx(alice, (ctx) => m.agent_update_proposal(ctx, { proposal_id: p.id, verdict: 'fine', analysis_json: analysis, run_id: 'run_1' }))).toThrow('worker only');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: p.id, verdict: 'great', analysis_json: analysis, run_id: 'run_1' }))).toThrow('verdict must be one of');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: p.id, verdict: 'fine', analysis_json: '{oops', run_id: 'run_1' }))).toThrow('valid JSON');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: 'prop_nope', verdict: 'fine', analysis_json: analysis, run_id: 'run_1' }))).toThrow('unknown proposal');
+    test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: p.id, verdict: 'tight', analysis_json: analysis, run_id: 'run_1' }));
+    expect(test.db.proposal.id.find(p.id)).toMatchObject({ verdict: 'tight', analysis_json: analysis, run_id: 'run_1', status: 'open', title: 'Buy a reliable used car' });
+    test.withReducerTx(alice, (ctx) => m.close_proposal(ctx, { proposal_id: p.id }));
+    test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: p.id, verdict: 'risky', analysis_json: analysis, run_id: 'run_2' }));
+    expect(test.db.proposal.id.find(p.id)).toMatchObject({ verdict: 'risky', run_id: 'run_2', status: 'closed' });
+  });
+
+  it('the full loop: create -> job -> worker claims -> agent_update_proposal -> votes', () => {
+    const test = seeded();
+    const p = create(test);
+    const job = [...test.db.agent_job.iter()].find((j) => j.subject_id === p.id)!;
+    test.withReducerTx(worker, (ctx) => m.claim_job(ctx, { job_id: job.id }));
+    test.withReducerTx(worker, (ctx) => m.start_run(ctx, { run_id: 'run_p', job_id: job.id }));
+    test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: p.id, verdict: 'risky', analysis_json: '{"summary":"x"}', run_id: 'run_p' }));
+    test.withReducerTx(worker, (ctx) => m.finish_run(ctx, { run_id: 'run_p', status: 'done', providers_json: '[]', result_json: '{}' }));
+    vote(test, alice, p.id, 'no', 'Ana');
+    expect(test.db.proposal.id.find(p.id)!.verdict).toBe('risky');
+    expect(test.db.agent_job.id.find(job.id)!.status).toBe('done');
+  });
+
+  const seedRows = [
+    { id: 'prop_seed_1', household_id: 'hh_demo', title: 'Take the loan', amount: 250000, details: { kind: 'loan', term_months: 120 }, created_by_name: 'Ana', created_at: '2026-11-06T18:00:00Z', closes_at: '2026-11-20T18:00:00Z', status: 'open' },
+    { id: 'prop_seed_2', household_id: 'hh_demo', title: 'Already checked', amount: 100, details_json: '{}', created_by_name: 'Ben', created_at: '2026-11-06T18:00:00Z', closes_in_days: 3, status: 'open', verdict: 'fine', analysis: { summary: 'ok' } },
+  ];
+  const seedVotes = [
+    { proposal_id: 'prop_seed_1', voter_key: 'mem_a', voter_name: 'Ana', choice: 'yes', updated_at: '2026-11-06T19:00:00Z' },
+    { proposal_id: 'prop_seed_1', voter_key: 'mem_b', voter_name: 'Ben', choice: 'abstain' },
+  ];
+
+  it('seed_proposals / seed_votes load rows, derive ids, skip existing, and queue a check only for rows without a verdict', () => {
+    const test = seeded();
+    const j = JSON.stringify;
+    test.withReducerTx(worker, (ctx) => m.seed_proposals(ctx, { rows_json: j(seedRows) }));
+    test.withReducerTx(worker, (ctx) => m.seed_votes(ctx, { rows_json: j(seedVotes) }));
+    expect(test.db.proposal.count()).toBe(2n);
+    const p1 = test.db.proposal.id.find('prop_seed_1')!;
+    expect(p1.closes_at.toDate().toISOString()).toBe('2026-11-20T18:00:00.000Z');
+    expect(JSON.parse(p1.details_json)).toEqual({ kind: 'loan', term_months: 120 });
+    const p2 = test.db.proposal.id.find('prop_seed_2')!;
+    expect(p2.verdict).toBe('fine');
+    expect(JSON.parse(p2.analysis_json)).toEqual({ summary: 'ok' });
+    expect(p2.closes_at.toDate().toISOString()).toBe('2026-11-09T18:00:00.000Z'); // created_at + closes_in_days
+    expect(test.db.vote.id.find('prop_seed_1:mem_a')).toMatchObject({ household_id: 'hh_demo', voter_name: 'Ana', choice: 'yes', voter_key: 'mem_a' });
+    expect(test.db.vote.id.find('prop_seed_1:mem_b')!.updated_at.microsSinceUnixEpoch).toBe(NOW.microsSinceUnixEpoch);
+    // one check queued, for the proposal that has no verdict
+    const jobs = [...test.db.agent_job.iter()].filter((x) => x.workflow === 'what_if');
+    expect(jobs.map((x) => x.subject_id)).toEqual(['prop_seed_1']);
+    // idempotent: re-seeding changes and queues nothing
+    test.withReducerTx(worker, (ctx) => m.seed_proposals(ctx, { rows_json: j(seedRows) }));
+    test.withReducerTx(worker, (ctx) => m.seed_votes(ctx, { rows_json: j(seedVotes) }));
+    expect(test.db.proposal.count()).toBe(2n);
+    expect(test.db.vote.count()).toBe(2n);
+    expect([...test.db.agent_job.iter()].filter((x) => x.workflow === 'what_if')).toHaveLength(1);
+  });
+
+  it('seed reducers reject bad rows loudly', () => {
+    const test = seeded();
+    const j = JSON.stringify;
+    const call = (fn: 'seed_proposals' | 'seed_votes', rows: unknown[]) => () => test.withReducerTx(worker, (ctx) => m[fn](ctx, { rows_json: j(rows) }));
+    expect(call('seed_proposals', [{ ...seedRows[0], household_id: 'hh_nope' }])).toThrow('unknown household');
+    expect(call('seed_proposals', [{ ...seedRows[0], status: 'maybe' }])).toThrow('status');
+    expect(call('seed_proposals', [{ ...seedRows[0], created_at: 'yesterday-ish' }])).toThrow('ISO date');
+    expect(call('seed_proposals', [{ ...seedRows[0], details: [1] }])).toThrow('JSON object');
+    expect(call('seed_votes', [seedVotes[0]])).toThrow('seed_proposals first');
+    test.withReducerTx(worker, (ctx) => m.seed_proposals(ctx, { rows_json: j(seedRows) }));
+    expect(call('seed_votes', [{ ...seedVotes[0], voter_key: 'mem_c', choice: 'sure' }])).toThrow('choice');
+  });
+
+  it('create_sandbox copies proposals and seeded member votes with remapped ids; delete_sandbox removes them', () => {
+    const test = seeded();
+    const j = JSON.stringify;
+    test.withReducerTx(worker, (ctx) => m.seed_proposals(ctx, { rows_json: j(seedRows) }));
+    test.withReducerTx(worker, (ctx) => m.seed_votes(ctx, { rows_json: j(seedVotes) }));
+    test.withReducerTx(worker, (ctx) => m.agent_update_proposal(ctx, { proposal_id: 'prop_seed_1', verdict: 'tight', analysis_json: '{"summary":"s"}', run_id: 'run_template' }));
+    const p1 = create(test, { title: 'Live proposal from a judge' }); // a real proposal with a real identity vote on the template
+    vote(test, bob, p1.id, 'yes', 'Bob');
+    test.clock.advance(TimeDuration.fromMillis(2 * DAY)); // the sandbox is created two days later
+    test.withReducerTx(alice, (ctx) => m.create_sandbox(ctx, { template_household_id: 'hh_demo', display_name: 'Judge Judy' }));
+    const sbx = [...test.db.household.iter()].find((h) => h.id.startsWith('hh_sbx_'))!;
+    const suffix = sbx.id.slice('hh_sbx_'.length);
+    const props = [...test.db.proposal.household_id.filter(sbx.id)];
+    expect(props).toHaveLength(3);
+    for (const p of props) expect(p.id.endsWith(`__${suffix}`)).toBe(true);
+    // the template is untouched
+    expect([...test.db.proposal.household_id.filter('hh_demo')]).toHaveLength(3);
+    expect(test.db.proposal.id.find('prop_seed_1')!.run_id).toBe('run_template');
+
+    const copy = test.db.proposal.id.find(`prop_seed_1__${suffix}`)!;
+    expect(copy).toMatchObject({ title: 'Take the loan', amount: 250000, verdict: 'tight', run_id: '', status: 'open' });
+    expect(JSON.parse(copy.analysis_json)).toEqual({ summary: 's' });
+    // fresh voting window of the same length (14 days), starting now
+    expect(copy.created_at.microsSinceUnixEpoch).toBe(test.clock.now().microsSinceUnixEpoch);
+    expect(Number(copy.closes_at.microsSinceUnixEpoch - copy.created_at.microsSinceUnixEpoch) / 1000).toBe(14 * DAY);
+    // seeded member votes: remapped proposal id and member id; identity votes stay in the template
+    const copied = [...test.db.vote.household_id.filter(sbx.id)];
+    expect(copied.map((v) => v.id).sort()).toEqual([`prop_seed_1__${suffix}:mem_a__${suffix}`, `prop_seed_1__${suffix}:mem_b__${suffix}`]);
+    const memberIds = new Set([...test.db.member.household_id.filter(sbx.id)].map((x) => x.id));
+    for (const v of copied) {
+      expect(memberIds.has(v.voter_key)).toBe(true);
+      expect(v.proposal_id).toBe(`prop_seed_1__${suffix}`);
+    }
+    expect(test.db.vote.id.find(`${p1.id}:${[...test.db.vote.proposal_id.filter(p1.id)][0]!.voter_key}`)).toBeTruthy();
+    expect([...test.db.vote.household_id.filter(sbx.id)].some((v) => v.proposal_id.startsWith(p1.id))).toBe(false);
+    // the sandbox owner can vote on the copy at once
+    vote(test, alice, copy.id, 'yes', 'Judy');
+    // a copy that still has no verdict gets its check queued (the live proposal was never analysed)
+    const queued = [...test.db.agent_job.iter()].filter((x) => x.household_id === sbx.id && x.workflow === 'what_if');
+    expect(queued.map((x) => x.subject_id).sort()).toEqual([`${p1.id}__${suffix}`]);
+    expect(JSON.parse(queued[0]!.input_json).proposal_id).toBe(`${p1.id}__${suffix}`);
+
+    test.withReducerTx(alice, (ctx) => m.delete_sandbox(ctx, { household_id: sbx.id }));
+    expect([...test.db.proposal.household_id.filter(sbx.id)]).toHaveLength(0);
+    expect([...test.db.vote.household_id.filter(sbx.id)]).toHaveLength(0);
+    expect([...test.db.proposal.household_id.filter('hh_demo')]).toHaveLength(3);
+  });
+});
+
+// ---- onboarding (docs/contracts.md section 7) -----------------------------------------------------------------------
+describe('onboarding', () => {
+  const j = JSON.stringify;
+  const start = (test: ReturnType<typeof fresh>, auth = alice, hhName = 'The Whitfields', who_ = 'Dana') => {
+    test.withReducerTx(auth, (ctx) => m.start_onboarding(ctx, { household_name: hhName, display_name: who_ }));
+    const all = [...test.db.household.iter()].filter((h) => h.id.startsWith('hh_onb_'));
+    return all[all.length - 1]!;
+  };
+  const options = [
+    { account_id: 'acc_chk', name: 'Plaid Checking', official_name: 'Plaid Gold Standard 0% Interest Checking', mask: '0000', type: 'depository', subtype: 'checking', balance: 4200.5 },
+    { account_id: 'acc_sav', name: 'Plaid Saving', official_name: '', mask: '1111', type: 'depository', subtype: 'savings', balance: 9000 },
+    { account_id: 'acc_card', name: 'Plaid Credit Card', official_name: '', mask: '3333', type: 'credit', subtype: 'credit card', balance: 410 },
+  ];
+  /** A household with a linked bank whose accounts were offered by the worker. */
+  function linked() {
+    const test = seeded();
+    const hh = start(test);
+    test.withReducerTx(worker, (ctx) => m.agent_save_plaid_item(ctx, { item_id: 'item_1', household_id: hh.id, access_token: 'access-sandbox-xyz', institution_id: 'ins_109508', institution_name: 'First Platypus Bank', cursor: '' }));
+    test.withReducerTx(worker, (ctx) => m.agent_set_account_options(ctx, { household_id: hh.id, item_id: 'item_1', rows_json: j(options) }));
+    return { test, hh };
+  }
+  const profile = (test: ReturnType<typeof fresh>, hh: string) => test.db.household_profile.household_id.find(hh)!;
+  const conn = (test: ReturnType<typeof fresh>) => test.db.bank_connection.item_id.find('item_1')!;
+
+  it('start_onboarding creates an owned household, the caller as a member, a profile in "connect", and moves presence', () => {
+    const test = seeded();
+    test.withReducerTx(alice, (ctx) => m.onConnect(ctx, {}));
+    const hh = start(test);
+    expect(hh.id).toMatch(/^hh_onb_[0-9a-z]{6}$/);
+    expect(hh).toMatchObject({ name: 'The Whitfields', template_id: '', home_value: 0, vehicle_value: 0 });
+    expect(hh.owner!.toHexString()).toBe(test.withReducerTx(alice, (ctx) => ctx.sender.toHexString()));
+    const members = [...test.db.member.household_id.filter(hh.id)];
+    expect(members).toHaveLength(1);
+    expect(members[0]).toMatchObject({ name: 'Dana', role: 'parent' });
+    expect(profile(test, hh.id)).toMatchObject({ onboarding_status: 'connect', risk_comfort: 3, voting_enabled: true, voice_consent: false, priorities_json: '[]' });
+    const p = [...test.db.presence.iter()][0]!;
+    expect(p).toMatchObject({ household_id: hh.id, display_name: 'Dana', role: 'family' });
+    // a second one gets another id; blanks are rejected
+    expect(start(test, bob, 'Another family', 'Ben').id).not.toBe(hh.id);
+    expect(() => start(test, alice, '  ', 'Dana')).toThrow('household_name must not be empty');
+    expect(() => start(test, alice, 'X', '')).toThrow('display_name must not be empty');
+  });
+
+  it('agent_set_account_options is worker-only, stores the offered accounts (selected by default) and moves the statuses to "selecting"', () => {
+    const { test, hh } = linked();
+    expect(() => test.withReducerTx(alice, (ctx) => m.agent_set_account_options(ctx, { household_id: hh.id, item_id: 'item_1', rows_json: '[]' }))).toThrow('worker only');
+    const rows = [...test.db.bank_account_option.household_id.filter(hh.id)];
+    expect(rows.map((r) => r.id).sort()).toEqual(['item_1:acc_card', 'item_1:acc_chk', 'item_1:acc_sav']);
+    expect(rows.every((r) => r.selected)).toBe(true);
+    expect(test.db.bank_account_option.id.find('item_1:acc_chk')).toMatchObject({ name: 'Plaid Checking', mask: '0000', type: 'depository', subtype: 'checking', balance: 4200.5, item_id: 'item_1', account_id: 'acc_chk' });
+    expect(conn(test)).toMatchObject({ status: 'selecting', accounts_count: 3 });
+    expect(profile(test, hh.id).onboarding_status).toBe('selecting');
+    // the access token never reaches a public table
+    expect(JSON.stringify(rows)).not.toContain('access-sandbox');
+    // bad rows
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_set_account_options(ctx, { household_id: hh.id, item_id: 'item_1', rows_json: '{}' }))).toThrow('JSON array');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_set_account_options(ctx, { household_id: hh.id, item_id: 'item_1', rows_json: j([{ name: 'x' }]) }))).toThrow('account_id');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_set_account_options(ctx, { household_id: 'hh_nope', item_id: 'item_1', rows_json: '[]' }))).toThrow('unknown household');
+  });
+
+  it('select_bank_accounts marks the choice, queues exactly one plaid_sync, sets syncing and moves the profile to "questions"', () => {
+    const { test, hh } = linked();
+    const call = (ids: unknown, h = hh.id, item = 'item_1') => test.withReducerTx(alice, (ctx) => m.select_bank_accounts(ctx, { household_id: h, item_id: item, account_ids_json: j(ids) }));
+    expect(() => call([], hh.id)).toThrow('at least one');
+    expect(() => call(['acc_nope'])).toThrow('unknown account');
+    expect(() => call([42])).toThrow('array of account id strings');
+    expect(() => call(['acc_chk'], hh.id, 'item_x')).toThrow('no accounts were offered');
+    expect(() => test.withReducerTx(alice, (ctx) => m.select_bank_accounts(ctx, { household_id: hh.id, item_id: 'item_1', account_ids_json: 'nope' }))).toThrow('JSON array');
+    call(['acc_chk', 'acc_card']);
+    expect([...test.db.bank_account_option.household_id.filter(hh.id)].map((r) => [r.account_id, r.selected]).sort()).toEqual([['acc_card', true], ['acc_chk', true], ['acc_sav', false]]);
+    expect(conn(test).status).toBe('syncing');
+    expect(profile(test, hh.id).onboarding_status).toBe('questions');
+    const jobs = [...test.db.agent_job.iter()].filter((x) => x.workflow === 'plaid_sync' && x.household_id === hh.id);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.status).toBe('queued');
+    call(['acc_chk']); // changing the choice while the job still waits does not queue a second one
+    expect([...test.db.agent_job.iter()].filter((x) => x.workflow === 'plaid_sync' && x.household_id === hh.id)).toHaveLength(1);
+    expect(test.db.bank_account_option.id.find('item_1:acc_card')!.selected).toBe(false);
+  });
+
+  it('adding an account that was not selected before restarts the transaction cursor; keeping the same set does not', () => {
+    const { test, hh } = linked();
+    const call = (ids: string[]) => test.withReducerTx(alice, (ctx) => m.select_bank_accounts(ctx, { household_id: hh.id, item_id: 'item_1', account_ids_json: j(ids) }));
+    call(['acc_chk']);
+    test.withReducerTx(worker, (ctx) => m.agent_save_plaid_item(ctx, { item_id: 'item_1', household_id: hh.id, access_token: '', institution_id: '', institution_name: '', cursor: 'cur_5' }));
+    call(['acc_chk']);
+    expect(test.db.plaid_item.item_id.find('item_1')!.cursor).toBe('cur_5');
+    call(['acc_chk', 'acc_sav']);
+    expect(test.db.plaid_item.item_id.find('item_1')!.cursor).toBe('');
+    expect(test.db.plaid_item.item_id.find('item_1')!.access_token).toBe('access-sandbox-xyz'); // token untouched
+  });
+
+  it('a refresh of the offered accounts keeps earlier choices, adds new accounts as selected and drops vanished ones', () => {
+    const { test, hh } = linked();
+    test.withReducerTx(alice, (ctx) => m.select_bank_accounts(ctx, { household_id: hh.id, item_id: 'item_1', account_ids_json: j(['acc_chk']) }));
+    test.withReducerTx(worker, (ctx) => m.agent_set_account_options(ctx, { household_id: hh.id, item_id: 'item_1', rows_json: j([options[0], options[1], { account_id: 'acc_new', name: 'New', type: 'depository', subtype: 'cd', balance: 1 }]) }));
+    const rows = new Map([...test.db.bank_account_option.household_id.filter(hh.id)].map((r) => [r.account_id, r.selected]));
+    expect([...rows.entries()].sort()).toEqual([['acc_chk', true], ['acc_new', true], ['acc_sav', false]]);
+    expect(profile(test, hh.id).onboarding_status).toBe('questions'); // never moves backwards
+  });
+
+  it('save_onboarding_answers upserts members, housing, goals and the profile, and is safe to repeat', () => {
+    const { test, hh } = linked();
+    const answers = {
+      members: [
+        { name: 'Dana', role: 'parent', age: 39, income_annual: 82000 },
+        { name: 'Sam', role: 'parent', age: 41, income_annual: 64000 },
+        { name: 'Kit', role: 'child', age: 9, income_annual: 0 },
+        { name: 'Grandpa Joe', role: 'aunt', age: 71, income_annual: 18000 },
+      ],
+      own_home: true,
+      home_value: 355000,
+      vehicle_value: 31000,
+      priorities: ['Emergency fund', 'college', 'travel'],
+      goal_text: 'Replace the roof by spring',
+      risk_comfort: 2,
+      voting_enabled: false,
+      voice_consent: true,
+    };
+    const save = (a: unknown, h = hh.id, auth = alice) => test.withReducerTx(auth, (ctx) => m.save_onboarding_answers(ctx, { household_id: h, answers_json: typeof a === 'string' ? a : j(a) }));
+    save(answers);
+    const members = [...test.db.member.household_id.filter(hh.id)];
+    expect(members.map((x) => x.name).sort()).toEqual(['Dana', 'Grandpa Joe', 'Kit', 'Sam']);
+    expect(members.find((x) => x.name === 'Dana')).toMatchObject({ age: 39, income_annual: 82000, id: `mem_onb_${hh.id.slice('hh_onb_'.length)}_1` }); // the caller's own row was updated, not duplicated
+    expect(members.find((x) => x.name === 'Grandpa Joe')!.role).toBe('other'); // unknown role
+    expect(new Set(members.map((x) => x.id)).size).toBe(4);
+    expect(test.db.household.id.find(hh.id)).toMatchObject({ home_value: 355000, vehicle_value: 31000 });
+    const goals = [...test.db.goal.household_id.filter(hh.id)].sort((a, b) => a.priority - b.priority);
+    expect(goals.map((g) => [g.id, g.title, g.priority, g.source, g.target_amount])).toEqual([
+      [`goal_${hh.id}_emergency_fund`, 'Build an emergency fund', 1, 'onboarding', 0],
+      [`goal_${hh.id}_college`, 'Save for college', 2, 'onboarding', 0],
+      [`goal_${hh.id}_travel`, 'Save for travel', 3, 'onboarding', 0],
+      [`goal_${hh.id}_custom`, 'Replace the roof by spring', 4, 'onboarding', 0],
+    ]);
+    expect(profile(test, hh.id)).toMatchObject({ onboarding_status: 'questions', risk_comfort: 2, voting_enabled: false, voice_consent: true });
+    expect(JSON.parse(profile(test, hh.id).priorities_json)).toEqual(['emergency_fund', 'college', 'travel']);
+    expect(JSON.parse(profile(test, hh.id).answers_json).goal_text).toBe('Replace the roof by spring');
+
+    // repeat: same rows; an agent-filled goal keeps its verdict; a dropped priority disappears; renting zeroes the home value
+    test.withReducerTx(worker, (ctx) => m.agent_upsert_goal(ctx, { id: `goal_${hh.id}_college`, household_id: hh.id, title: 'Save for college', target_amount: 60000, target_date: '2031-08-01', priority: 2, feasibility: 'stretch', evidence_quote: '', source: 'onboarding' }));
+    save({ ...answers, priorities: ['college', 'emergency_fund'], own_home: false, goal_text: '' });
+    expect([...test.db.member.household_id.filter(hh.id)]).toHaveLength(4);
+    const again = [...test.db.goal.household_id.filter(hh.id)].sort((a, b) => a.priority - b.priority);
+    expect(again.map((g) => g.id)).toEqual([`goal_${hh.id}_college`, `goal_${hh.id}_emergency_fund`]);
+    expect(again[0]).toMatchObject({ priority: 1, feasibility: 'stretch', target_amount: 60000 });
+    expect(test.db.household.id.find(hh.id)!.home_value).toBe(0);
+    // another household's rows are untouched
+    expect([...test.db.goal.household_id.filter('hh_demo')]).toHaveLength(0);
+  });
+
+  it('save_onboarding_answers rejects bad answers and non-onboarding households', () => {
+    const { test, hh } = linked();
+    const save = (a: unknown, h = hh.id) => () => test.withReducerTx(alice, (ctx) => m.save_onboarding_answers(ctx, { household_id: h, answers_json: typeof a === 'string' ? a : j(a) }));
+    expect(save('[1]')).toThrow('JSON object');
+    expect(save('{nope')).toThrow('JSON object');
+    expect(save({ priorities: ['yachts'] })).toThrow('unknown priority');
+    expect(save({ risk_comfort: 9 })).toThrow('risk_comfort');
+    expect(save({ members: 'Dana' })).toThrow('members must be an array');
+    expect(save({ members: [{ name: '' }] })).toThrow('name must not be empty');
+    expect(save({ members: [{ name: 'A', age: 400 }] })).toThrow('age');
+    expect(save({ members: [{ name: 'A', income_annual: -5 }] })).toThrow('income_annual');
+    expect(save({ vehicle_value: 'lots' })).toThrow('vehicle_value');
+    expect(save({ members: Array.from({ length: 13 }, (_, i) => ({ name: `P${i}` })) })).toThrow('at most 12');
+    expect(save({ goal_text: 'x'.repeat(141) })).toThrow('too long');
+    expect(save({}, 'hh_demo')).toThrow('not an onboarding household');
+    expect(save({}, 'hh_nope')).toThrow('unknown household');
+    expect([...test.db.member.household_id.filter(hh.id)]).toHaveLength(1); // nothing half-applied
+  });
+
+  it('finish_onboarding waits for the bank, recomputes, marks done and queues one onboarding_insights job with the answers', () => {
+    const { test, hh } = linked();
+    const finish = (h = hh.id) => test.withReducerTx(alice, (ctx) => m.finish_onboarding(ctx, { household_id: h }));
+    expect(() => finish()).toThrow('choose which accounts');
+    test.withReducerTx(alice, (ctx) => m.select_bank_accounts(ctx, { household_id: hh.id, item_id: 'item_1', account_ids_json: j(['acc_chk', 'acc_sav']) }));
+    expect(() => finish()).toThrow('still running');
+    test.withReducerTx(alice, (ctx) => m.save_onboarding_answers(ctx, { household_id: hh.id, answers_json: j({ priorities: ['home'], risk_comfort: 4, voting_enabled: true }) }));
+    test.withReducerTx(worker, (ctx) => m.agent_set_bank_connection(ctx, { item_id: 'item_1', household_id: hh.id, institution_name: '', status: 'ok', accounts_count: 2, txns_count: 0, error: '' }));
+    expect(test.db.health_indicator.household_id.filter(hh.id)[Symbol.iterator]().next().done).toBe(true);
+    finish();
+    expect(profile(test, hh.id).onboarding_status).toBe('done');
+    expect([...test.db.health_indicator.household_id.filter(hh.id)].length).toBeGreaterThan(5); // recompute ran
+    const jobs = [...test.db.agent_job.iter()].filter((x) => x.workflow === 'onboarding_insights');
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ household_id: hh.id, subject_id: hh.id, status: 'queued' });
+    const input = JSON.parse(jobs[0]!.input_json);
+    expect(input).toMatchObject({ household_id: hh.id, priorities: ['home'], risk_comfort: 4, voting_enabled: true, finished_by: 'Dana' });
+    expect(input.answers.priorities).toEqual(['home']);
+    finish(); // idempotent
+    expect([...test.db.agent_job.iter()].filter((x) => x.workflow === 'onboarding_insights')).toHaveLength(1);
+    expect(() => finish('hh_demo')).toThrow('not an onboarding household');
+  });
+
+  it('a household can finish onboarding without ever linking a bank', () => {
+    const test = seeded();
+    const hh = start(test);
+    test.withReducerTx(alice, (ctx) => m.finish_onboarding(ctx, { household_id: hh.id }));
+    expect(profile(test, hh.id).onboarding_status).toBe('done');
+    expect([...test.db.agent_job.iter()].filter((x) => x.workflow === 'onboarding_insights')).toHaveLength(1);
+  });
+
+  it('the worker may write insight alerts and onboarding goals; "selecting" is a valid connection status', () => {
+    const { test, hh } = linked();
+    test.withReducerTx(worker, (ctx) => m.agent_create_alert(ctx, { id: 'agent:ins:1', household_id: hh.id, severity: 'info', kind: 'insight', title: 'You keep 4 months of spending in cash', detail: 'Good cushion.', related_ids_json: '[]' }));
+    expect(test.db.alert.id.find('agent:ins:1')!.kind).toBe('insight');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_create_alert(ctx, { id: 'agent:ins:2', household_id: hh.id, severity: 'info', kind: 'gossip', title: 't', detail: '', related_ids_json: '[]' }))).toThrow('kind must be one of');
+    test.withReducerTx(worker, (ctx) => m.agent_upsert_goal(ctx, { id: '', household_id: hh.id, title: 'g', target_amount: 1, target_date: '', priority: 1, feasibility: '', evidence_quote: '', source: 'onboarding' }));
+    test.withReducerTx(worker, (ctx) => m.agent_set_bank_connection(ctx, { item_id: 'item_1', household_id: hh.id, institution_name: '', status: 'selecting', accounts_count: 3, txns_count: 0, error: '' }));
+    expect(conn(test).status).toBe('selecting');
+  });
+
+  it('the owner can delete an onboarding household with everything attached; strangers and real households are refused', () => {
+    const { test, hh } = linked();
+    test.withReducerTx(alice, (ctx) => m.save_onboarding_answers(ctx, { household_id: hh.id, answers_json: j({ priorities: ['home'], members: [{ name: 'Sam', role: 'parent', age: 40 }] }) }));
+    expect(() => test.withReducerTx(bob, (ctx) => m.delete_sandbox(ctx, { household_id: hh.id }))).toThrow('only the sandbox owner');
+    expect(() => test.withReducerTx(alice, (ctx) => m.delete_sandbox(ctx, { household_id: 'hh_demo' }))).toThrow('only sandboxes and onboarding households');
+    test.withReducerTx(alice, (ctx) => m.delete_sandbox(ctx, { household_id: hh.id }));
+    expect(test.db.household.id.find(hh.id)).toBeFalsy();
+    expect(test.db.household_profile.household_id.find(hh.id)).toBeFalsy();
+    expect([...test.db.bank_account_option.household_id.filter(hh.id)]).toHaveLength(0);
+    expect([...test.db.member.household_id.filter(hh.id)]).toHaveLength(0);
+    expect([...test.db.goal.household_id.filter(hh.id)]).toHaveLength(0);
+    expect(test.db.bank_connection.count()).toBe(0n);
+    expect(test.db.plaid_item.count()).toBe(0n);
+    expect(test.db.household.id.find('hh_demo')).toBeTruthy();
+  });
+
+  it('recompute works on a household with no data yet', () => {
+    const test = seeded();
+    const hh = start(test);
+    test.withReducerTx(alice, (ctx) => m.recompute_household(ctx, { household_id: hh.id }));
+    expect([...test.db.forecast_point.household_id.filter(hh.id)]).toHaveLength(90);
   });
 });

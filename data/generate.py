@@ -4,8 +4,9 @@
     python3 generate.py [--seed 2026] [--out seed] [--report]
 
 Deterministic: same seed -> byte-identical files. Pure standard library, Python 3.12+.
-Writes households, members, accounts, transactions, credit_profiles, obligations, conversations (.json)
-into data/seed/ (see ../docs/contracts.md section 1 and data/README.md).
+Writes households, members, accounts, transactions, credit_profiles, obligations, conversations, proposals and
+votes (.json) into data/seed/ (see ../docs/contracts.md sections 1 and 6, and data/README.md), plus the Plaid
+Sandbox custom user (the demo bank for onboarding, contracts.md section 7) into ../plaid/sandbox_user.json.
 """
 from __future__ import annotations
 
@@ -22,8 +23,11 @@ sys.path.insert(0, HERE)
 from convos import build_conversations  # noqa: E402
 from households import build_all, to_records  # noqa: E402
 from ledger import TODAY, WIN_END  # noqa: E402
+from plaid_user import build_sandbox_user, dump_config as dump_plaid_user  # noqa: E402
+from proposals import build_proposals, validate_proposals  # noqa: E402
 
-FILES = ["households", "members", "accounts", "transactions", "credit_profiles", "obligations", "conversations"]
+FILES = ["households", "members", "accounts", "transactions", "credit_profiles", "obligations", "conversations",
+         "proposals", "votes"]
 ALL_TYPES = {"checking", "savings", "cd", "ira", "auto_loan", "personal_loan", "credit_card", "mortgage"}
 LABELS = {"duplicate", "garbled", "impossible_value", "card_testing", "account_takeover", "scam_payment", "outlier"}
 
@@ -127,9 +131,11 @@ def main() -> int:
              "patel_balance": next(a["balance"] for a in rec["accounts"] if a["id"] == "acct_patel_chk")}
     convs = build_conversations(facts)
     validate(rec, convs)
+    proposals, votes = build_proposals(args.seed)
+    validate_proposals(proposals, votes, rec)
 
     os.makedirs(args.out, exist_ok=True)
-    data = dict(rec, conversations=convs)
+    data = dict(rec, conversations=convs, proposals=proposals, votes=votes)
     paths = {}
     for name in FILES:
         p = os.path.join(args.out, f"{name}.json")
@@ -141,6 +147,12 @@ def main() -> int:
         total += size
         print(f"{name + '.json':<22}{len(data[name]):>6} rows {size / 1024:>9.1f} KB")
     print(f"{'total':<22}{'':>6}      {total / 1024:>9.1f} KB   (as of {TODAY}, seed {args.seed})")
+    plaid_dir = os.path.join(os.path.dirname(os.path.abspath(args.out)), "plaid")  # data/plaid next to data/seed
+    os.makedirs(plaid_dir, exist_ok=True)
+    plaid_path = os.path.join(plaid_dir, "sandbox_user.json")
+    with open(plaid_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(dump_plaid_user(build_sandbox_user(args.seed)))
+    print(f"{'plaid/sandbox_user.json':<22}{'':>6}      {os.path.getsize(plaid_path) / 1024:>9.1f} KB   (Plaid Sandbox custom user)")
     if args.report:
         report(rec, paths)
     return 0

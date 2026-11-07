@@ -2,6 +2,8 @@
 //   plan -> /accounts/get -> /liabilities/get (optional) -> /transactions/sync (cursor paging, polls a fresh item until history is ready)
 //   -> map account types (fast Nemotron only for ambiguous ones) -> map transactions -> batched upserts -> removals
 //   -> save cursor -> recompute_household -> bank_connection ok (or error) -> final summary.
+// Onboarding (docs/contracts.md section 7): when the family selected accounts for an item (bank_account_option), only those
+// accounts, and only their transactions, are imported.
 // Plaid is only a source: every row ends up in a SpacetimeDB table, and the access token never appears in a trace event.
 import { z } from 'zod';
 import { emitPlan } from '../agent/loop.js';
@@ -182,8 +184,16 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
     (r) => ({ title: `${plural(r.accounts.length, 'account')} with live balances`, data: { count: r.accounts.length, accounts: r.accounts.map((a) => ({ id: a.account_id, name: a.name, type: a.type, subtype: a.subtype, balance: a.balances.current })) } }),
   );
   if (!acc.ok) throw acc.error;
-  const plaidAccounts = acc.value!.accounts;
-  if (!plaidAccounts.length) throw new Error(`${inst} returned no accounts`);
+  const offered = acc.value!.accounts;
+  if (!offered.length) throw new Error(`${inst} returned no accounts`);
+  // onboarding: import only what the family selected (null = nobody was asked, import everything)
+  const selection = await store.selectedAccountIds(hh, item.itemId).catch(() => null);
+  const plaidAccounts = selection ? offered.filter((a) => selection.has(a.account_id)) : offered;
+  const notSelected = new Set(offered.filter((a) => !plaidAccounts.includes(a)).map((a) => a.account_id));
+  if (selection) {
+    if (!plaidAccounts.length) throw new Error(`none of the ${plural(selection.size, 'selected account')} exist at ${inst} any more`);
+    run.emit('bank_connector', 'message', `Importing ${plaidAccounts.length} of ${offered.length} accounts: the ones the family selected`, { selected: plaidAccounts.map((a) => ({ id: a.account_id, name: a.name })), left_out: offered.length - plaidAccounts.length });
+  }
 
   // 2. liabilities: optional (rates, limits, payments), tolerate "not ready" / "not supported"
   const liab = await traced<{ liabilities: PlaidLiabilities }>(
@@ -272,12 +282,14 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
   const known = new Set(plaidAccounts.map((a) => a.account_id));
   const txnRows: TxnRow[] = [];
   let orphaned = 0;
+  let leftOut = 0;
   for (const t of upserts.values()) {
-    if (!known.has(t.account_id)) orphaned++;
-    else txnRows.push(mapTxn(t, hh));
+    if (known.has(t.account_id)) txnRows.push(mapTxn(t, hh));
+    else if (notSelected.has(t.account_id)) leftOut++;
+    else orphaned++;
   }
   txnRows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1));
-  run.emit('account_mapper', 'message', `Mapped ${plural(txnRows.length, 'transaction')} (Plaid positive = money out, Keystone negative = money out)${orphaned ? `; skipped ${orphaned} on accounts Plaid no longer lists` : ''}`, { sample: txnRows.slice(0, 3).map((t) => ({ date: t.date, merchant: t.merchant, amount: t.amount, category: t.category })) });
+  run.emit('account_mapper', 'message', `Mapped ${plural(txnRows.length, 'transaction')} (Plaid positive = money out, Keystone negative = money out)${orphaned ? `; skipped ${orphaned} on accounts Plaid no longer lists` : ''}${leftOut ? `; left out ${leftOut} on accounts the family did not select` : ''}`, { sample: txnRows.slice(0, 3).map((t) => ({ date: t.date, merchant: t.merchant, amount: t.amount, category: t.category })) });
 
   // 5. write to SpacetimeDB
   run.handoff('account_mapper', 'reconciler', `Writing ${inst} to SpacetimeDB`);

@@ -7,12 +7,12 @@ import { MemoryPlaidStore } from './store.js';
 import { PlaidApiError } from './types.js';
 import { loadPlaidConfig } from './config.js';
 
-function setup(over: Partial<PlaidRuntime> = {}) {
+function setup(over: Partial<PlaidRuntime> = {}, customUser: string | null = null) {
   const store = new MemoryPlaidStore();
   const client = new FakePlaid();
   const rt: PlaidRuntime = { config: CONFIG, client, store, sleep: async () => undefined, pollAttempts: 1, pollMs: 0, ...over };
   const router = new Router();
-  registerPlaidRoutes(router, () => rt);
+  registerPlaidRoutes(router, () => rt, () => customUser);
   const post = async (path: string, body: unknown, method = 'POST') => {
     const h = router.find(method, path);
     if (!h) throw new Error(`no route ${method} ${path}`);
@@ -144,5 +144,72 @@ describe('POST /plaid/* routes', () => {
     expect((await t.post('/plaid/exchange', { household_id: 'hh_test', public_token: 'p' })).body).toMatchObject({ error: 'spacetime_unavailable' });
     // link_token needs no database
     expect((await t.post('/plaid/link_token', { household_id: 'hh_test' })).status).toBe(200);
+  });
+
+  // ---- onboarding (docs/contracts.md section 7) ---------------------------------------------------------------------
+
+  it('sandbox_connect with select: lists the accounts as options, sets "selecting" and does NOT queue a sync', async () => {
+    const t = setup();
+    const r = await t.post('/plaid/sandbox_connect', { household_id: 'hh_test', select: true });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ ok: true, status: 'selecting', item_id: 'item_fake_1', accounts: 10, reused: false });
+    expect(JSON.stringify(r.body)).not.toContain('SECRET-TOKEN');
+    expect(t.store.syncRequests).toEqual([]);
+    expect(t.store.connections.get('item_fake_1')).toMatchObject({ status: 'selecting', accountsCount: 10 });
+    const options = t.store.options.get('item_fake_1')!;
+    expect(options).toHaveLength(10);
+    expect(options[0]).toMatchObject({ accountId: 'chk00000', name: 'Plaid checking', type: 'depository', subtype: 'checking', balance: 110, mask: '0000' });
+    expect(options.find((o) => o.accountId === 'cc000000')).toMatchObject({ type: 'credit', balance: 410 });
+    expect(t.store.calls).toEqual(['saveItem', 'setConnection', 'setAccountOptions', 'setConnection']);
+  });
+
+  it('exchange with select behaves the same for a Plaid Link public token', async () => {
+    const t = setup();
+    const r = await t.post('/plaid/exchange', { household_id: 'hh_test', public_token: 'public-sandbox-from-link', select: true });
+    expect(r.body).toMatchObject({ ok: true, status: 'selecting', accounts: 10 });
+    expect(t.store.syncRequests).toEqual([]);
+    expect(t.store.options.get('item_fake_1')).toHaveLength(10);
+    // without select nothing changes: the old flow still queues the sync
+    const plain = setup();
+    expect((await plain.post('/plaid/exchange', { household_id: 'hh_test', public_token: 'p' })).body).toMatchObject({ status: 'linking' });
+    expect(plain.store.syncRequests).toEqual(['hh_test']);
+    expect(plain.store.options.size).toBe(0);
+  });
+
+  it('sandbox_connect select twice reuses the item and refreshes the options instead of syncing', async () => {
+    const t = setup();
+    await t.post('/plaid/sandbox_connect', { household_id: 'hh_test', select: true });
+    t.client.accounts = t.client.accounts.slice(0, 3);
+    const again = await t.post('/plaid/sandbox_connect', { household_id: 'hh_test', select: true });
+    expect(again.body).toMatchObject({ status: 'selecting', reused: true, accounts: 3 });
+    expect(t.client.count('sandboxPublicTokenCreate')).toBe(1);
+    expect(t.store.options.get('item_fake_1')).toHaveLength(3);
+    expect(t.store.syncRequests).toEqual([]);
+  });
+
+  it('the demo bank is the custom user (password = its JSON) when data/plaid/sandbox_user.json is available', async () => {
+    const custom = JSON.stringify({ override_accounts: [{ type: 'depository', subtype: 'checking', starting_balance: 100 }] });
+    const t = setup({}, custom);
+    const r = await t.post('/plaid/sandbox_connect', { household_id: 'hh_test', select: true });
+    expect(r.body).toMatchObject({ username: 'user_custom', status: 'selecting' });
+    expect(r.body).not.toHaveProperty('rejected');
+    expect(t.client.calls.find((c) => c.method === 'sandboxPublicTokenCreate')!.args[0]).toEqual({ institution_id: 'ins_109508', initial_products: ['transactions', 'liabilities', 'investments'], username: 'user_custom', password: custom });
+    expect(JSON.stringify(r.body)).not.toContain('starting_balance'); // the config is not echoed back
+  });
+
+  it('falls back to user_transactions_dynamic when Plaid rejects the custom user, and says why', async () => {
+    const custom = '{"override_accounts":[]}';
+    const t = setup({}, custom);
+    t.client.publicTokenErrors.set('user_custom', new PlaidApiError('invalid override_password', 'INVALID_FIELD', 'INVALID_REQUEST', 400));
+    const r = await t.post('/plaid/sandbox_connect', { household_id: 'hh_test', select: true });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ username: 'user_transactions_dynamic', status: 'selecting', rejected: [{ username: 'user_custom', code: 'INVALID_FIELD' }] });
+    // the fallback user is sent without the custom password
+    const last = t.client.calls.filter((c) => c.method === 'sandboxPublicTokenCreate').at(-1)!.args[0] as { username: string; password?: string };
+    expect(last.username).toBe('user_transactions_dynamic');
+    expect(last.password).toBeUndefined();
+    // an explicit username skips the custom user entirely
+    const e = setup({}, custom);
+    expect((await e.post('/plaid/sandbox_connect', { household_id: 'hh_test', username: 'user_good' })).body).toMatchObject({ username: 'user_good' });
   });
 });

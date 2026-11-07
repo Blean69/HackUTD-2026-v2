@@ -1,24 +1,16 @@
 // Worker-only reducers. Every one except register_worker rejects callers that are not in the `worker` table.
 import { t } from 'spacetimedb/server';
 import spacetimedb from '../schema';
+import { effectiveWorkerHash, sameHex } from '../config';
 import { sha256Hex } from '../sha256';
 import { cleanText, fail, newId, requireHousehold, type Ctx } from '../util';
 
-/**
- * SHA-256 (hex) of the worker secret that `register_worker` accepts.
- *
- * This is the hash of the DEV secret `keystone-dev-secret`, so local development works out of the box.
- * CHANGE IT BEFORE DEPLOYING TO MAINCLOUD (the repo is public and so is this hash):
- *   printf %s 'a-long-random-secret' | sha256sum
- * then paste the hex digest here, republish, and give the worker the same secret as WORKER_SECRET.
- */
-const WORKER_SECRET_SHA256 = '42c50c717ac955d1a374d919e57aa767830e7a175f16f609657ea8fce2a422eb';
-
 const ALERT_SEVERITIES = ['info', 'warn', 'critical'];
-const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor'];
+const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor', 'insight'];
 const FEASIBILITIES = ['', 'on_track', 'stretch', 'off_track'];
-const GOAL_SOURCES = ['huddle', 'manual', 'coach'];
+const GOAL_SOURCES = ['huddle', 'manual', 'coach', 'onboarding'];
 const SCENARIO_STATUSES = ['queued', 'running', 'done', 'error'];
+const PROPOSAL_VERDICTS = ['', 'fine', 'tight', 'risky'];
 const HUDDLE_STATUSES = ['live', 'analyzing', 'done'];
 const MAX_TRACE_DATA = 4096;
 
@@ -30,10 +22,15 @@ function oneOf(value: string, allowed: string[], field: string): string {
   return value;
 }
 
+/**
+ * Add the caller to `worker` if sha256(secret) matches the worker-secret hash: the private `module_config` override set by
+ * `admin_set_worker_secret_hash` when there is one, otherwise the DEV hash (`keystone-dev-secret`, src/config.ts).
+ * Production never edits source: infra/deploy.sh sets the override right after publishing.
+ */
 export const register_worker = spacetimedb.reducer(
   { secret: t.string(), label: t.string() },
   (ctx, { secret, label }) => {
-    if (sha256Hex(secret) !== WORKER_SECRET_SHA256) fail('invalid worker secret');
+    if (!sameHex(sha256Hex(secret), effectiveWorkerHash(ctx))) fail('invalid worker secret');
     const row = { identity: ctx.sender, label: cleanText(label, 'label', 60, true) || 'worker', registered_at: ctx.timestamp };
     if (ctx.db.worker.identity.find(ctx.sender)) ctx.db.worker.identity.update(row);
     else ctx.db.worker.insert(row);
@@ -212,6 +209,25 @@ export const agent_update_scenario = spacetimedb.reducer(
     const s = ctx.db.scenario.id.find(id);
     if (!s) fail(`unknown scenario "${id}"`);
     ctx.db.scenario.id.update({ ...s, status, result_json });
+  },
+);
+
+/** Attach the affordability check to a proposal (verdict + ScenarioResult-style analysis). Allowed after the vote closed. */
+export const agent_update_proposal = spacetimedb.reducer(
+  { proposal_id: t.string(), verdict: t.string(), analysis_json: t.string(), run_id: t.string() },
+  (ctx, { proposal_id, verdict, analysis_json, run_id }) => {
+    requireWorker(ctx);
+    oneOf(verdict, PROPOSAL_VERDICTS, 'verdict');
+    const p = ctx.db.proposal.id.find(proposal_id);
+    if (!p) fail(`unknown proposal "${proposal_id}"`);
+    if (analysis_json !== '') {
+      try {
+        JSON.parse(analysis_json);
+      } catch {
+        fail('analysis_json must be valid JSON');
+      }
+    }
+    ctx.db.proposal.id.update({ ...p, verdict, analysis_json, run_id: cleanText(run_id, 'run_id', 80, true) });
   },
 );
 

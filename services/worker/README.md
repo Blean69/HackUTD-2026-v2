@@ -20,9 +20,10 @@ spacetime publish -s local -p spacetime keystone -y         # from the repo root
 spacetime generate --lang typescript -p spacetime --out-dir services/worker/src/module_bindings -y
 cd services/worker
 npm install
-npm run seed      # data/seed/*.json -> seed_* reducers (batched) -> recompute_household. Idempotent.
+npm run seed      # data/seed/*.json (incl. proposals + votes) -> seed_* reducers (batched) -> recompute_household. Idempotent;
+                  # each NEW proposal queues its affordability check, so the worker fills in the verdicts when it runs.
 npm run dev       # tsx watch: claims jobs, serves :8787
-npm test          # 79 unit/integration tests, no network, no database, no keys
+npm test          # 174 unit/integration tests, no network, no database, no keys
 npm run typecheck
 ```
 
@@ -64,7 +65,9 @@ of the model that is driving the run.
 |---|---|---|---|
 | `huddle` | huddle id | planner, goal_extractor, scam_guard, reconciler | transcript -> structured goals/concerns/dates (fast model) -> `detect_scam_signals` -> accounts/obligations/health/forecast -> `goal_feasibility` per goal (College Scorecard for college, FRED for home/business/debt) -> `agent_upsert_goal` with `evidence_quote` -> scam alert -> `set_huddle_status done` -> `purge_transcript` |
 | `what_if` | scenario id | planner, simulator | prompt -> structured Scenario -> `simulate_scenario` (12-24 months) -> `get_forecast` -> narrative -> `agent_update_scenario` (shape = `ScenarioResult` in `apps/web/lib/types.ts`) |
+| `what_if` (proposal) | proposal id | planner, simulator, scam_guard | **Family voting** (`create_proposal` / `seed_proposals` queue it; input has `proposal_id`): title/amount/details -> scenario (deterministic: loan, financed purchase from `down_pct`/`term_months`/`rate_pct`, or cash) -> `simulate_scenario` -> `get_forecast` -> `detect_scam_signals` only when the proposal moves money to family or mentions gift cards / wires / crypto -> narrative -> `agent_update_proposal` (verdict fine/tight/risky + `ScenarioResult`-style analysis; a medium/high scam risk forces `risky`, leads with a scam warning and raises a `scam` alert). Code: `src/workflows/proposal_check.ts` |
 | `coach` | message id | coach | plan -> real tool loop (up to `AGENT_MAX_STEPS`) -> `agent_coach_reply` (with `run_id`) |
+| `onboarding_insights` | household id | planner, analyst, insight_writer, goal_planner, proposal_scout | **Onboarding** (`finish_onboarding` queues it; docs/contracts.md section 7): reads accounts, health indicators, spending by category and the forecast -> rule-found candidate insights -> Nemotron picks and words 3 to 5 (only real numbers) -> `agent_create_alert` kind `insight` (stable key per topic) -> `goal_feasibility` for each goal from the answers (default amount and date per priority, stated in the trace) -> `agent_upsert_goal` (source `onboarding`, same ids the module created) -> one suggested first proposal via `create_proposal` (author "Keystone", skipped when the family switched voting off). Code: `src/workflows/onboarding_insights.ts` |
 | `data_quality` | household id | data_auditor | `detect_transaction_anomalies` -> plain-English explanation -> alerts (one summary for the rules `recompute_household` already alerts on, separate alerts for scam/outlier findings) |
 | `scam_check` | household id | scam_guard | optional pasted text + gift-card/wire/card-testing payment scan -> alerts |
 
@@ -128,7 +131,7 @@ CORS is open. Routes live in a small `Router`: register more with `router.add('P
 src/index.ts        wiring: HTTP, SpacetimeDB connection, job intake
 src/jobs.ts         dedupe + claim (races handled) + bounded concurrency
 src/agent/          RunContext (trace + effects), agent loop, runner, cache_first replay, sink interface
-src/workflows/      huddle, what_if, coach, audit (data_quality, scam_check), registry
+src/workflows/      huddle, what_if (+ proposal_check), coach, audit (data_quality, scam_check), registry
 src/tools/          registry + tools + finance helpers + external APIs
 src/llm/            providers, failover client, limiter, structured output, local rule-based provider
 src/db/             SpacetimeDB adapters: connection, sink (reducer calls), household loader, run history
@@ -137,6 +140,14 @@ src/seed.ts         npm run seed
 ```
 
 ## Plaid Sandbox
+
+Onboarding (docs/contracts.md section 7): `POST /plaid/exchange` and `POST /plaid/sandbox_connect` accept `"select": true`. They then call `/accounts/get`,
+write `bank_account_option` rows (`agent_set_account_options`), set the connection to `selecting` and answer `{status: "selecting", accounts: N}` without queuing
+a sync; the family's `select_bank_accounts` reducer queues `plaid_sync`, which imports **only the selected accounts** and their transactions.
+Without a `username`, `sandbox_connect` uses the **custom sandbox user** from `data/plaid/sandbox_user.json` (`override_username: "user_custom"`,
+`override_password` = that JSON; path override `PLAID_SANDBOX_USER_FILE`, otherwise `<DATA_DIR>/../plaid/sandbox_user.json`), and falls back to
+`user_transactions_dynamic`, then `user_good`, when Plaid rejects it or the file is missing (the response lists `rejected: [{username, code}]`).
+In Docker, `infra/docker-compose.yml` must mount `../data/plaid:/data/plaid:ro` for the custom user to be found; without it the worker uses the fallback.
 
 Routes (also reachable in prod at `https://<host>/worker/plaid/...`):
 `POST /plaid/link_token {household_id}`, `POST /plaid/exchange {household_id, public_token}`,
@@ -147,5 +158,5 @@ a second call re-syncs the existing item unless `new_item: true`), `GET /plaid/s
 The `plaid_sync` workflow pages `/transactions/sync` with a cursor (saved only after rows are stored), polls fresh items until
 history is ready, tolerates a failed `/liabilities/get`, maps Plaid types to our 8 account types (fast Nemotron only for
 ambiguous ones), flips Plaid's sign convention, upserts in batches, then `recompute_household`. Env: `PLAID_CLIENT_ID`,
-`PLAID_SECRET`, `PLAID_ENV` (sandbox), `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES`, `PLAID_POLL_ATTEMPTS`, `PLAID_POLL_MS`.
+`PLAID_SECRET`, `PLAID_ENV` (sandbox), `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES`, `PLAID_POLL_ATTEMPTS`, `PLAID_POLL_MS`, `PLAID_SANDBOX_USER_FILE`.
 Code: `src/plaid/`, `src/workflows/plaid_sync.ts`. Live-tested: 7 accounts / 331 transactions synced.

@@ -1,11 +1,13 @@
 // npm run seed: load data/seed/*.json into SpacetimeDB through the seed_* reducers, then recompute each household.
 // Idempotent: the reducers skip ids that already exist; recompute is deterministic.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, loadEnv } from './config.js';
 import { connectWorker } from './db/connection.js';
 
 const MAX_BATCH_BYTES = 400_000; // well under 1 MB per reducer call
+/** Seed files added after the first release: a data dir without them still seeds everything else. */
+const OPTIONAL_FILES = new Set(['proposals.json', 'votes.json']);
 
 export function batches(rows: unknown[], maxBytes = MAX_BATCH_BYTES, maxRows = 800): unknown[][] {
   const out: unknown[][] = [];
@@ -44,9 +46,17 @@ async function main(): Promise<void> {
     ['transactions', 'transactions.json', (a) => r.seedTxns(a)],
     ['obligations', 'obligations.json', (a) => r.seedObligations(a)],
     ['conversations', 'conversations.json', (a) => r.seedConversations(a)],
+    // family voting (docs/contracts.md section 6): proposals first, votes reference them. A new proposal queues its
+    // affordability check (a what_if job) exactly once, so re-running the seed queues nothing.
+    ['proposals', 'proposals.json', (a) => r.seedProposals(a)],
+    ['votes', 'votes.json', (a) => r.seedVotes(a)],
   ];
   let households: string[] = [];
   for (const [label, file, call] of steps) {
+    if (OPTIONAL_FILES.has(file) && !existsSync(join(cfg.dataDir, file))) {
+      console.log(`[seed] ${label}: ${file} not found in ${cfg.dataDir}, skipped (regenerate with data/generate.py)`);
+      continue;
+    }
     const rows = readRows(cfg.dataDir, file);
     if (label === 'households') households = rows.map((h) => String((h as { id: string }).id));
     const parts = batches(rows);

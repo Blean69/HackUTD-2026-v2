@@ -1,9 +1,12 @@
-// POST /plaid/link_token, /plaid/exchange, /plaid/sandbox_connect (docs/contracts.md section 5) on the shared router.
+// POST /plaid/link_token, /plaid/exchange, /plaid/sandbox_connect (docs/contracts.md sections 5 and 7) on the shared router.
+// exchange and sandbox_connect accept `select: true` (onboarding): they list the bank's accounts as bank_account_option rows and
+// stop at bank_connection "selecting"; select_bank_accounts then queues the sync of just the chosen accounts.
 // Registered when this module is imported (src/plaid/index.ts). Without PLAID_CLIENT_ID / PLAID_SECRET every route
 // answers 503 {"error":"plaid_unconfigured"}. Access tokens are never returned.
 import type { Handler, HttpRequest, HttpResponse, Router } from '../http.js';
 import { router as sharedRouter } from '../router.js';
 import { linkItem, sandboxConnect } from './connect.js';
+import { loadSandboxUserJson } from './custom_user.js';
 import { getPlaidRuntime, type ConfiguredRuntime, type PlaidRuntime } from './runtime.js';
 import { PlaidApiError } from './types.js';
 
@@ -55,7 +58,7 @@ function guarded(needStore: boolean, handler: (req: HttpRequest, rt: ConfiguredR
   };
 }
 
-export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => PlaidRuntime = getPlaidRuntime): void {
+export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => PlaidRuntime = getPlaidRuntime, getCustomUser: () => string | null = () => loadSandboxUserJson()): void {
   router.add(
     'POST',
     '/plaid/link_token',
@@ -77,8 +80,9 @@ export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => 
       async (_req, rt, body, householdId) => {
         const publicToken = str(body.public_token);
         if (!publicToken) return json(400, { error: 'public_token_required' });
-        const linked = await linkItem(rt.client, rt.store!, { householdId, publicToken });
-        return json(200, { ok: true, status: 'linking', ...linked });
+        const select = body.select === true;
+        const linked = await linkItem(rt.client, rt.store!, { householdId, publicToken, select });
+        return json(200, { ok: true, status: select ? 'selecting' : 'linking', ...linked });
       },
       getRt,
     ),
@@ -93,8 +97,10 @@ export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => 
         if (rt.config.env !== 'sandbox') return json(400, { error: 'sandbox_only', detail: `PLAID_ENV is "${rt.config.env}"; sandbox_connect only works against the Plaid Sandbox` });
         const username = str(body.username);
         const institutionId = str(body.institution_id);
-        const r = await sandboxConnect({ client: rt.client, store: rt.store!, config: rt.config }, { householdId, ...(username ? { username } : {}), ...(institutionId ? { institutionId } : {}), forceNew: body.new_item === true });
-        return json(200, { ok: true, status: r.reused ? 'syncing' : 'linking', ...r });
+        const select = body.select === true;
+        const customUser = username ? null : getCustomUser();
+        const r = await sandboxConnect({ client: rt.client, store: rt.store!, config: rt.config }, { householdId, ...(username ? { username } : {}), ...(institutionId ? { institutionId } : {}), forceNew: body.new_item === true, select, customUser });
+        return json(200, { ok: true, status: select ? 'selecting' : r.reused ? 'syncing' : 'linking', ...r });
       },
       getRt,
     ),

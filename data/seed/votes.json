@@ -1,0 +1,14 @@
+[
+{"id":"prop_rivera_second_location:mem_rivera_marisol","proposal_id":"prop_rivera_second_location","household_id":"hh_rivera","voter_key":"mem_rivera_marisol","voter_name":"Marisol","choice":"yes","updated_at":"2026-11-06T19:02:00Z"},
+{"id":"prop_rivera_second_location:mem_rivera_daniel","proposal_id":"prop_rivera_second_location","household_id":"hh_rivera","voter_key":"mem_rivera_daniel","voter_name":"Daniel","choice":"abstain","updated_at":"2026-11-06T20:14:00Z"},
+{"id":"prop_rivera_second_location:mem_rivera_elena","proposal_id":"prop_rivera_second_location","household_id":"hh_rivera","voter_key":"mem_rivera_elena","voter_name":"Elena","choice":"yes","updated_at":"2026-11-06T20:32:00Z"},
+{"id":"prop_okafor_starter_home:mem_okafor_amara","proposal_id":"prop_okafor_starter_home","household_id":"hh_okafor","voter_key":"mem_okafor_amara","voter_name":"Amara","choice":"yes","updated_at":"2026-11-06T17:34:00Z"},
+{"id":"prop_okafor_starter_home:mem_okafor_chidi","proposal_id":"prop_okafor_starter_home","household_id":"hh_okafor","voter_key":"mem_okafor_chidi","voter_name":"Chidi","choice":"no","updated_at":"2026-11-06T18:25:00Z"},
+{"id":"prop_nguyen_cd_for_kevin:mem_nguyen_tom","proposal_id":"prop_nguyen_cd_for_kevin","household_id":"hh_nguyen","voter_key":"mem_nguyen_tom","voter_name":"Tom","choice":"yes","updated_at":"2026-11-06T18:56:00Z"},
+{"id":"prop_nguyen_cd_for_kevin:mem_nguyen_linh","proposal_id":"prop_nguyen_cd_for_kevin","household_id":"hh_nguyen","voter_key":"mem_nguyen_linh","voter_name":"Linh","choice":"abstain","updated_at":"2026-11-06T19:42:00Z"},
+{"id":"prop_patel_used_car:mem_patel_priya","proposal_id":"prop_patel_used_car","household_id":"hh_patel","voter_key":"mem_patel_priya","voter_name":"Priya","choice":"yes","updated_at":"2026-11-06T16:51:00Z"},
+{"id":"prop_patel_used_car:mem_patel_aarav","proposal_id":"prop_patel_used_car","household_id":"hh_patel","voter_key":"mem_patel_aarav","voter_name":"Aarav","choice":"yes","updated_at":"2026-11-06T17:34:00Z"},
+{"id":"prop_brooks_hawaii_trip:mem_brooks_terrence","proposal_id":"prop_brooks_hawaii_trip","household_id":"hh_brooks","voter_key":"mem_brooks_terrence","voter_name":"Terrence","choice":"yes","updated_at":"2026-11-06T18:33:00Z"},
+{"id":"prop_brooks_hawaii_trip:mem_brooks_danielle","proposal_id":"prop_brooks_hawaii_trip","household_id":"hh_brooks","voter_key":"mem_brooks_danielle","voter_name":"Danielle","choice":"yes","updated_at":"2026-11-06T19:05:00Z"},
+{"id":"prop_brooks_hawaii_trip:mem_brooks_jordan","proposal_id":"prop_brooks_hawaii_trip","household_id":"hh_brooks","voter_key":"mem_brooks_jordan","voter_name":"Jordan","choice":"yes","updated_at":"2026-11-06T19:40:00Z"}
+]

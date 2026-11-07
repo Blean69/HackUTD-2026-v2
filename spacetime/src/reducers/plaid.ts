@@ -5,7 +5,7 @@ import spacetimedb, { plaid_item } from '../schema';
 import { cleanText, enqueueJob, fail, markDirty, parseJsonArray, requireHousehold, callerName, type Ctx } from '../util';
 
 const ACCOUNT_TYPES = ['checking', 'savings', 'cd', 'ira', 'auto_loan', 'personal_loan', 'credit_card', 'mortgage'];
-const CONNECTION_STATUSES = ['linking', 'syncing', 'ok', 'error'];
+const CONNECTION_STATUSES = ['linking', 'selecting', 'syncing', 'ok', 'error'];
 
 function requireWorker(ctx: Ctx): void {
   if (!ctx.db.worker.identity.find(ctx.sender)) fail('worker only');

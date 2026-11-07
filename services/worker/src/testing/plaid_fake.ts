@@ -62,7 +62,7 @@ export class FakePlaid implements PlaidClient {
     this.rec('linkTokenCreate', req);
     return { link_token: 'link-sandbox-abc123', expiration: '2026-11-08T00:00:00Z' };
   }
-  async sandboxPublicTokenCreate(req: { institution_id: string; initial_products: string[]; username: string }) {
+  async sandboxPublicTokenCreate(req: { institution_id: string; initial_products: string[]; username: string; password?: string }) {
     this.rec('sandboxPublicTokenCreate', req);
     const err = this.publicTokenErrors.get(req.username);
     if (err) throw err;

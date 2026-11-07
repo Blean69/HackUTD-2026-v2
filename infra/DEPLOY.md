@@ -24,14 +24,15 @@ worker ──ws://spacetime:3000 (inside the compose network)──▶ spacetime
 
 ```bash
 cd HackUTD-2026                               # repo root on your laptop
-export WORKER_SECRET="$(openssl rand -hex 32)"        # step 3: new strong secret
-HASH="$(printf '%s' "$WORKER_SECRET" | sha256sum | cut -d' ' -f1)"      # macOS: shasum -a 256
-sed -i.bak "s/^const WORKER_SECRET_SHA256 = '.*';/const WORKER_SECRET_SHA256 = '$HASH';/" spacetime/src/reducers/worker.ts && rm spacetime/src/reducers/worker.ts.bak
-cp infra/env.prod.example .env.prod && sed -i.bak "s/^WORKER_SECRET=.*/WORKER_SECRET=$WORKER_SECRET/" .env.prod && rm .env.prod.bak
+cp infra/env.prod.example .env.prod
+WORKER_SECRET="$(openssl rand -hex 32)"       # step 3a: a new strong secret; it goes in .env.prod only, never in source
+sed -i.bak "s/^WORKER_SECRET=.*/WORKER_SECRET=$WORKER_SECRET/" .env.prod && rm .env.prod.bak; unset WORKER_SECRET
 $EDITOR .env.prod                             # paste NVIDIA_API_KEY, TENVOR_*, PLAID_* ... from your local .env
-infra/deploy.sh                               # rsync + docker compose up -d --build (first build: 5-10 min)
+infra/deploy.sh --publish --seed              # rsync + docker compose up -d --build (first build: 5-10 min), publish the module,
+                                              # set the worker-secret hash from .env.prod, seed
 ```
-then publish the module (step 3, Option A or B) and seed: `infra/deploy.sh --seed`. Details follow.
+No source file is edited for production: the module ships with the public dev hash as its default and `--publish` overrides it
+at runtime (step 3a). Details follow.
 
 ---
 
@@ -95,11 +96,39 @@ The NEXT_PUBLIC values are compiled into the web image; they are not read at run
 
 ## 3. Database (self-hosted SpacetimeDB on the box)
 
-**3a. New worker secret (the repo is public, the default one is not a secret).** Done by the commands under "First deploy". In words: pick
-a strong `WORKER_SECRET`, put the sha256 of it into `WORKER_SECRET_SHA256` in `spacetime/src/reducers/worker.ts`, put the
-secret itself into `.env.prod`. `deploy.sh` refuses to run if the two do not match. Do **not** commit the changed hash:
-`spacetime/src/module.test.ts` registers with the dev secret, so `npm test` in `spacetime/` would fail. Keep the edit in your working tree
-whenever you publish (a republish with the old hash would lock out new worker identities).
+**3a. Worker secret (the repo is public, so the default one is not a secret).** Nothing in the source tree changes for production.
+
+* The module's `register_worker` accepts `WORKER_SECRET` if its SHA-256 equals (1) the value in a **private** one-row table, when an
+  operator has set one, otherwise (2) the hash of the public dev secret `keystone-dev-secret`, which is what `npm test` and local
+  development use.
+* The row is set with the reducer `admin_set_worker_secret_hash(sha256_hex)`. Only the identity that **published** the database
+  may call it: the module's `init` records the publisher (verified on SpacetimeDB 2.14.1: it is the identity of the CLI that ran
+  `spacetime publish`; here that is the CLI inside the spacetime container). `register_worker` then rejects the dev secret.
+* `infra/deploy.sh --publish` (or just `--set-worker-hash`) does it: it hashes `WORKER_SECRET` from `.env.prod` on your laptop and
+  runs `spacetime call ... admin_set_worker_secret_hash` inside the spacetime container, the same way the module is published.
+  Only the hex digest travels; the secret is never printed or sent. Re-running is harmless (same digest = no change).
+* By hand (the digest is computed locally; the secret itself is not sent):
+  ```bash
+  HASH="$(printf '%s' "$WORKER_SECRET" | sha256sum | cut -d' ' -f1)"          # macOS: shasum -a 256
+  ssh -i ~/.ssh/keystone-hackutd.pem ubuntu@52.72.164.85 \
+    "/opt/keystone/infra/dc exec -T spacetime spacetime call -s local keystone admin_set_worker_secret_hash '\"$HASH\"'"
+  ```
+  Pass `'""'` instead of the digest to clear the override (back to the dev default).
+* **Rotating** the secret: change `WORKER_SECRET` in `.env.prod`, `infra/deploy.sh --set-worker-hash`, then `infra/deploy.sh`
+  (restarts the worker with the new value; the old secret stops working for new registrations immediately).
+* **Window to know about:** between a fresh publish and the hash call, the module still accepts the public dev secret
+  (`--publish` closes that window within seconds). A worker that registered in that window stays registered. If you ever
+  suspect that, wipe with `-c always` (step 3c) and publish again with `--publish --seed`. A `-c always` publish also clears the
+  override and the recorded publisher, which is why `--publish` always sets the hash again afterwards.
+* **Database published before this change** (it exists, but `init` never recorded a publisher, because `init` does not re-run on a
+  republish): after `--publish` the hash call answers `not allowed`. Bootstrap once with the public dev secret, which is accepted
+  only while no override exists, then set the hash. The first caller that sets it is recorded as the publisher from then on:
+  ```bash
+  ssh -i ~/.ssh/keystone-hackutd.pem ubuntu@52.72.164.85 \
+    "/opt/keystone/infra/dc exec -T spacetime spacetime call -s local keystone register_worker '\"keystone-dev-secret\"' '\"deploy\"'"
+  infra/deploy.sh --set-worker-hash
+  ```
+  (This path exists only because the publisher cannot be known for old databases; a stranger cannot use it once the override is set.)
 
 **3b. Start the stack** (this also starts the `spacetime` container with its persistent volume; the worker keeps retrying until the DB exists):
 
@@ -107,7 +136,9 @@ whenever you publish (a republish with the old hash would lock out new worker id
 infra/deploy.sh
 ```
 
-**3c. Publish the module.** Only requests from `ADMIN_IPS` (default `129.110.241.55/32`) get through Caddy for publish; everyone else
+**3c. Publish the module.** Easiest: `infra/deploy.sh --publish` (builds with your local `spacetime` CLI, publishes from inside the
+spacetime container, then sets the worker-secret hash, step 3a). The two options below are the same thing by hand; after either
+one run `infra/deploy.sh --set-worker-hash`. Only requests from `ADMIN_IPS` (default `129.110.241.55/32`) get through Caddy for publish; everyone else
 receives `403 SpacetimeDB management API is restricted to the team`. To add a laptop: add its IP to `ADMIN_IPS` in `.env.prod` (space separated) and run `infra/deploy.sh`.
 
 *Option A: from your laptop over HTTPS* (the flow the SpacetimeDB docs describe):
@@ -131,13 +162,16 @@ spacetime build -p spacetime                                         # -> spacet
 scp -i $KEY spacetime/dist/bundle.js ubuntu@$HOST:/tmp/bundle.js
 ssh -i $KEY ubuntu@$HOST 'docker cp /tmp/bundle.js keystone-spacetime-1:/tmp/bundle.js && docker exec keystone-spacetime-1 spacetime publish -s local -j /tmp/bundle.js keystone -y'
 ```
-Re-run the same three lines after every module change. For a breaking schema change add `-c always` (wipes the data, then seed again) to either option.
+Re-run the same three lines after every module change (or `infra/deploy.sh --publish`). For a breaking schema change add `-c always`
+(wipes the data, then seed again; the worker-secret hash is wiped too, so run `--set-worker-hash` or use `--publish`) to either option.
+Option A publishes as your laptop's identity, not the container's: the hash call must then come from that same identity
+(`spacetime call -s aws keystone admin_set_worker_secret_hash '"<sha256>"'`), not from `deploy.sh --set-worker-hash`.
 
 **3d. Seed (once; idempotent).** Inside the worker container, which has `data/seed` mounted read-only at `/data/seed`:
 
 ```bash
 ssh -i ~/.ssh/keystone-hackutd.pem ubuntu@52.72.164.85 '/opt/keystone/infra/dc exec -T worker npm run seed'
-# or let deploy.sh wait for "worker connected to SpacetimeDB" first:  infra/deploy.sh --seed
+# or let deploy.sh wait for "worker connected to SpacetimeDB" first:  infra/deploy.sh --seed   (add --publish to do 3c + 3d in one go)
 ```
 
 <details><summary>Alternative: SpacetimeDB Maincloud instead of the container</summary>
@@ -147,7 +181,8 @@ lines for the commented Maincloud block (`wss://maincloud.spacetimedb.com`), the
 
 ```bash
 spacetime login
-spacetime publish -s maincloud -p spacetime keystone-hackutd26          # step 3a (new secret hash) comes first
+spacetime publish -s maincloud -p spacetime keystone-hackutd26
+spacetime call -s maincloud keystone-hackutd26 admin_set_worker_secret_hash "\"$(printf '%s' "$WORKER_SECRET" | sha256sum | cut -d' ' -f1)\""   # step 3a, same identity as the publish
 infra/deploy.sh --maincloud --seed                                       # starts only caddy + web + worker
 ```
 Browsers then connect straight to Maincloud; Caddy serves nothing under `/v1`.
@@ -175,7 +210,7 @@ ssh -i $KEY ubuntu@$HOST 'docker stats --no-stream; free -h; df -h /'
 ```
 
 **Update** (code or `.env.prod` changed): run `infra/deploy.sh` again. It rsyncs, uploads the env file, rebuilds what changed and recreates only
-those containers; the database volume is untouched. Module changes additionally need step 3c again. Changing a `NEXT_PUBLIC_*` value rebuilds web.
+those containers; the database volume is untouched. Module changes additionally need step 3c again (`infra/deploy.sh --publish`). Changing a `NEXT_PUBLIC_*` value rebuilds web.
 
 **Roll back** the app to the previous deploy (web + worker images, one step back): `infra/deploy.sh --rollback`.
 To go further back: `git checkout <good-commit>` locally and `infra/deploy.sh`. The database is not rolled back by either; to revert the
@@ -183,8 +218,7 @@ module, publish the old commit's module (step 3c) and, if the schema changed, ad
 
 **Reset the demo data** without touching the box: publish with `-c always`, then seed.
 
-**Troubleshooting.** `spacetime: "error: ..."` in `/worker/health` means the module is not published under `SPACETIME_DB`, or `WORKER_SECRET` does not hash to
-the constant in the published module (`infra/dc logs worker`). Badge says "Demo data": the web image was built with the wrong `NEXT_PUBLIC_SPACETIME_*`, fix `.env.prod` and redeploy.
+**Troubleshooting.** `spacetime: "error: ..."` in `/worker/health` means the module is not published under `SPACETIME_DB`, or the worker-secret hash in the module was not set to the hash of `WORKER_SECRET` (`infra/dc logs worker` says `invalid worker secret`; fix: `infra/deploy.sh --set-worker-hash`). Badge says "Demo data": the web image was built with the wrong `NEXT_PUBLIC_SPACETIME_*`, fix `.env.prod` and redeploy.
 Browser warns about the certificate: the cert is not issued yet, `infra/dc logs caddy` (DNS wrong, port 80 blocked, or rate limited). `403` when publishing: your IP is not in `ADMIN_IPS`.
 Disk filling: `docker system df`, `docker image prune -af`. Back to a clean slate: `infra/dc down` (keeps volumes) or `infra/dc down -v` (also deletes the database and the certificates).
 

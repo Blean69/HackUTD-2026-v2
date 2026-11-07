@@ -62,7 +62,10 @@ export interface LinkTokenRequest {
 export interface SandboxPublicTokenRequest {
   institution_id: string;
   initial_products: string[];
+  /** override_username: a Plaid sandbox user (user_good, user_transactions_dynamic, ...) or "user_custom". */
   username: string;
+  /** override_password: "pass_good" by default; for "user_custom" the custom-user configuration as a JSON string. */
+  password?: string;
 }
 
 /** What the worker needs from Plaid. Every method resolves with the response body or rejects with a PlaidApiError. */

@@ -203,6 +203,7 @@ const KIND: Record<AlertKind, { label: string; Icon: typeof IconAlert }> = {
   data_quality: { label: "Data quality", Icon: IconAlert },
   obligation: { label: "Upcoming", Icon: IconBell },
   advisor: { label: "Advisor", Icon: IconBell },
+  insight: { label: "Insight", Icon: IconBell },
 };
 
 function AlertRow({ alert, me }: { alert: Alert; me: string }) {

@@ -3,6 +3,7 @@
 import { coachWorkflow } from './coach.js';
 import { dataQualityWorkflow, scamCheckWorkflow } from './audit.js';
 import { huddleWorkflow } from './huddle.js';
+import { onboardingInsightsWorkflow } from './onboarding_insights.js';
 import { plaidSyncWorkflow } from './plaid_sync.js';
 import type { WorkflowDef } from './types.js';
 import { whatIfWorkflow } from './what_if.js';
@@ -19,6 +20,6 @@ export function workflowNames(): string[] {
   return [...registry.keys()];
 }
 
-for (const w of [huddleWorkflow, whatIfWorkflow, coachWorkflow, dataQualityWorkflow, scamCheckWorkflow, plaidSyncWorkflow]) registerWorkflow(w);
+for (const w of [huddleWorkflow, whatIfWorkflow, coachWorkflow, dataQualityWorkflow, scamCheckWorkflow, plaidSyncWorkflow, onboardingInsightsWorkflow]) registerWorkflow(w);
 
 export type { JobInfo, WorkflowDef, WorkflowEnv } from './types.js';

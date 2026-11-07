@@ -1,4 +1,4 @@
-import type { AlertInput, GoalInput, TraceInput, WorkerSink } from '../agent/sink.js';
+import type { AlertInput, GoalInput, ProposalInput, TraceInput, WorkerSink } from '../agent/sink.js';
 import type { DbConnection } from '../module_bindings/index.js';
 
 /** The real WorkerSink: every method is one worker-only reducer call. */
@@ -56,6 +56,12 @@ export class SpacetimeSink implements WorkerSink {
   }
   coachReply(householdId: string, text: string, runId: string): Promise<void> {
     return this.conn.reducers.agentCoachReply({ householdId, text, runId });
+  }
+  createProposal(p: ProposalInput): Promise<void> {
+    return this.conn.reducers.createProposal({ householdId: p.household_id, title: p.title, amount: p.amount, detailsJson: JSON.stringify(p.details), closesInDays: p.closes_in_days, authorName: p.author_name });
+  }
+  updateProposal(proposalId: string, verdict: string, analysisJson: string, runId: string): Promise<void> {
+    return this.conn.reducers.agentUpdateProposal({ proposalId, verdict, analysisJson, runId });
   }
   setHuddleStatus(huddleId: string, status: string): Promise<void> {
     return this.conn.reducers.setHuddleStatus({ huddleId, status });

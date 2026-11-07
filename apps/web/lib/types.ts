@@ -153,7 +153,7 @@ export interface ForecastPoint {
 }
 
 export type AlertSeverity = "info" | "warn" | "critical";
-export type AlertKind = "data_quality" | "fraud" | "scam" | "obligation" | "advisor";
+export type AlertKind = "data_quality" | "fraud" | "scam" | "obligation" | "advisor" | "insight";
 
 export interface Alert {
   id: string;
@@ -180,7 +180,7 @@ export interface Goal {
   priority: GoalPriority;
   feasibility: Feasibility;
   evidence_quote?: string;
-  source: "huddle" | "manual" | "coach";
+  source: "huddle" | "manual" | "coach" | "onboarding";
   created_at: string;
   updated_at: string;
 }
@@ -267,7 +267,7 @@ export interface BankConnection {
   item_id: string;
   household_id: string;
   institution_name: string;
-  status: "linking" | "syncing" | "ok" | "error";
+  status: "linking" | "selecting" | "syncing" | "ok" | "error";
   accounts_count: number;
   txns_count: number;
   last_synced_at?: string;
@@ -276,7 +276,7 @@ export interface BankConnection {
 
 // ---------------------------------------------------------------- agent runs + trace (NVIDIA story)
 
-export type Workflow = "huddle" | "what_if" | "coach" | "scam_check" | "data_quality" | "plaid_sync";
+export type Workflow = "huddle" | "what_if" | "coach" | "scam_check" | "data_quality" | "plaid_sync" | "onboarding_insights";
 export type TraceType =
   | "run_started"
   | "plan"
@@ -369,7 +369,7 @@ export interface Vote {
   updated_at: string;
 }
 
-export const WORKFLOWS: Workflow[] = ["huddle", "what_if", "coach", "scam_check", "data_quality", "plaid_sync"];
+export const WORKFLOWS: Workflow[] = ["huddle", "what_if", "coach", "scam_check", "data_quality", "plaid_sync", "onboarding_insights"];
 
 export const WORKFLOW_LABEL: Record<Workflow, string> = {
   huddle: "Table Mode",
@@ -378,4 +378,5 @@ export const WORKFLOW_LABEL: Record<Workflow, string> = {
   scam_check: "Scam check",
   data_quality: "Data quality",
   plaid_sync: "Bank sync",
+  onboarding_insights: "Onboarding insights",
 };

@@ -164,6 +164,8 @@ function handle(req: ChatRequest): Partial_ {
     const scn: Scenario = parseScenarioPrompt(String(local.prompt ?? ''));
     return { content: '', toolCalls: [call(req, scn)] };
   }
+  // a structured step whose offline answer the caller computed itself (onboarding insights, ...): hand it back as the tool call
+  if (local.structured !== undefined) return { content: '', toolCalls: [call(req, local.structured)] };
   if (task.endsWith('.explain')) return { content: '', toolCalls: [call(req, { items: [] })] };
   if (task === 'narrative') {
     return { content: '', toolCalls: [call(req, { summary: String(local.summary ?? ''), suggestion: String(local.suggestion ?? '') })] };

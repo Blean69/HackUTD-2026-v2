@@ -1,9 +1,11 @@
 // Bulk seed reducers (worker-only). Each takes a JSON array string whose objects follow docs/contracts.md section 1
 // (snake_case, same shape as data/seed/*.json) and inserts the rows, skipping ids that already exist.
-// Seed in dependency order: households, members, accounts, credit, txns, obligations, conversations.
+// Seed in dependency order: households, members, accounts, credit, txns, obligations, conversations, proposals, votes.
 // Rows that change a household's numbers mark it dirty so `tick_recompute` refreshes its health math.
+import { Timestamp } from 'spacetimedb';
 import { t } from 'spacetimedb/server';
 import spacetimedb from '../schema';
+import { DAY_MICROS, VOTE_CHOICES, enqueueProposalCheck, normalizeDetails } from '../proposals';
 import { fail, markDirty, parseJsonArray, type Ctx } from '../util';
 
 type Row = Record<string, unknown>;
@@ -53,6 +55,15 @@ function jsonField(r: Row, key: string, fallback: string): string {
   if (typeof raw === 'string') return raw;
   const v = r[key];
   return v === undefined || v === null ? fallback : JSON.stringify(v);
+}
+
+/** ISO date string (or epoch ms) -> Timestamp; missing -> fallback. */
+function stamp(r: Row, key: string, where: string, fallback: Timestamp): Timestamp {
+  const v = r[key];
+  if (v === undefined || v === null || v === '') return fallback;
+  const ms = typeof v === 'number' ? v : Date.parse(String(v));
+  if (!Number.isFinite(ms)) return fail(`${where}: "${key}" must be an ISO date`);
+  return Timestamp.fromDate(new Date(ms));
 }
 
 function done(table: string, inserted: number, skipped: number): void {
@@ -248,4 +259,72 @@ export const seed_conversations = spacetimedb.reducer({ rows_json: t.string() },
     ins++;
   }
   done('conversations', ins, skip);
+});
+
+/**
+ * Proposals (docs/contracts.md section 6). `details` may be an object or a ready `details_json` string; `created_at` /
+ * `closes_at` are ISO strings (closes_at defaults to created_at + `closes_in_days`, default 7). A new row WITHOUT a verdict
+ * gets its affordability check queued (a `what_if` job), exactly as `create_proposal` does; existing ids are skipped,
+ * so re-seeding never queues a second check.
+ */
+export const seed_proposals = spacetimedb.reducer({ rows_json: t.string() }, (ctx, { rows_json }) => {
+  requireWorker(ctx);
+  let ins = 0, skip = 0;
+  for (const r of rowsOf(rows_json, 'proposal')) {
+    const id = str(r, 'id', 'proposal');
+    if (ctx.db.proposal.id.find(id)) { skip++; continue; }
+    const household_id = str(r, 'household_id', id);
+    if (!ctx.db.household.id.find(household_id)) fail(`proposal ${id}: unknown household "${household_id}" (seed_households first)`);
+    const status = str(r, 'status', id, 'open');
+    if (status !== 'open' && status !== 'closed') fail(`proposal ${id}: status must be open or closed`);
+    const verdict = str(r, 'verdict', id, '');
+    if (!['', 'fine', 'tight', 'risky'].includes(verdict)) fail(`proposal ${id}: verdict must be "", fine, tight or risky`);
+    const created = stamp(r, 'created_at', id, ctx.timestamp);
+    const days = num(r, 'closes_in_days', id, 7);
+    const closes = stamp(r, 'closes_at', id, new Timestamp(created.microsSinceUnixEpoch + BigInt(Math.round(days * Number(DAY_MICROS)))));
+    const row = ctx.db.proposal.insert({
+      id,
+      household_id,
+      title: str(r, 'title', id),
+      amount: num(r, 'amount', id),
+      details_json: normalizeDetails(jsonField(r, 'details', '{}')),
+      created_by_name: str(r, 'created_by_name', id, 'Family'),
+      created_at: created,
+      closes_at: closes,
+      status,
+      verdict,
+      analysis_json: jsonField(r, 'analysis', ''),
+      run_id: str(r, 'run_id', id, ''),
+    });
+    if (verdict === '' && status === 'open') enqueueProposalCheck(ctx, row);
+    ins++;
+  }
+  done('proposals', ins, skip);
+});
+
+/** Seeded votes: `voter_key` is a member id (real votes use the caller's identity hex). Id = `${proposal_id}:${voter_key}`. */
+export const seed_votes = spacetimedb.reducer({ rows_json: t.string() }, (ctx, { rows_json }) => {
+  requireWorker(ctx);
+  let ins = 0, skip = 0;
+  for (const r of rowsOf(rows_json, 'vote')) {
+    const proposal_id = str(r, 'proposal_id', 'vote');
+    const voter_key = str(r, 'voter_key', proposal_id);
+    const id = `${proposal_id}:${voter_key}`;
+    if (ctx.db.vote.id.find(id)) { skip++; continue; }
+    const p = ctx.db.proposal.id.find(proposal_id);
+    if (!p) fail(`vote ${id}: unknown proposal (seed_proposals first)`);
+    const choice = str(r, 'choice', id);
+    if (!(VOTE_CHOICES as readonly string[]).includes(choice)) fail(`vote ${id}: choice must be one of ${VOTE_CHOICES.join(', ')}`);
+    ctx.db.vote.insert({
+      id,
+      proposal_id,
+      household_id: p.household_id,
+      voter_key,
+      voter_name: str(r, 'voter_name', id, voter_key),
+      choice,
+      updated_at: stamp(r, 'updated_at', id, ctx.timestamp),
+    });
+    ins++;
+  }
+  done('votes', ins, skip);
 });

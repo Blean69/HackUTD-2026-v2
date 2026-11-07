@@ -1,6 +1,7 @@
 // Scheduled recompute (every 60 s) of households that changed, plus a daily refresh so forecasts roll forward.
 import spacetimedb, { recompute_tick } from '../schema';
 import { recomputeHousehold } from '../recompute';
+import { closeExpiredProposals } from '../proposals';
 import { isoDay } from '../util';
 
 const MAX_PER_TICK = 20;
@@ -8,12 +9,14 @@ const MAX_PER_TICK = 20;
 /**
  * Fired by the `recompute_tick` schedule row. Scheduled reducers are private in SpacetimeDB 2.x, so clients cannot
  * call this directly. It recomputes (a) households flagged dirty by seed/import reducers and (b) households whose
- * indicators were last computed on a previous day, at most MAX_PER_TICK per run.
+ * indicators were last computed on a previous day, at most MAX_PER_TICK per run. It also closes family-voting proposals
+ * whose deadline has passed (`cast_vote` rejects late votes either way; the status flip is what the UI shows).
  */
 export const tick_recompute = spacetimedb.reducer(
   { onSchedule: recompute_tick },
   { arg: recompute_tick.rowType },
   (ctx) => {
+    closeExpiredProposals(ctx); // family voting: proposals past their deadline become "closed"
     const today = isoDay(ctx.timestamp);
     const todo: string[] = [];
     const seen = new Set<string>();

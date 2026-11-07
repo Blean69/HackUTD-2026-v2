@@ -1,9 +1,12 @@
 // Lifecycle reducers: init, client connected, client disconnected.
 import spacetimedb from '../schema';
+import { recordPublisher } from '../config';
 import { ensureTick } from '../recompute';
 
 export const init = spacetimedb.init((ctx) => {
-  // Runs on first publish and after `publish --delete-data`. Starts the 60 s recompute tick.
+  // Runs on first publish and after `publish --delete-data` (not on a plain republish). The host calls it as the
+  // publishing identity, so ctx.sender is who may later call admin_set_worker_secret_hash. Also starts the 60 s tick.
+  recordPublisher(ctx);
   ensureTick(ctx);
 });
 

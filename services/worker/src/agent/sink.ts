@@ -26,17 +26,26 @@ export interface GoalInput {
   priority: number;
   feasibility: '' | 'on_track' | 'stretch' | 'off_track';
   evidence_quote: string;
-  source: 'huddle' | 'manual' | 'coach';
+  source: 'huddle' | 'manual' | 'coach' | 'onboarding';
 }
 
 export interface AlertInput {
   id: string;
   household_id: string;
   severity: 'info' | 'warn' | 'critical';
-  kind: 'data_quality' | 'fraud' | 'scam' | 'obligation' | 'advisor';
+  kind: 'data_quality' | 'fraud' | 'scam' | 'obligation' | 'advisor' | 'insight';
   title: string;
   detail: string;
   related_ids: string[];
+}
+
+export interface ProposalInput {
+  household_id: string;
+  title: string;
+  amount: number;
+  details: Record<string, unknown>;
+  closes_in_days: number;
+  author_name: string;
 }
 
 export interface WorkerSink {
@@ -48,6 +57,10 @@ export interface WorkerSink {
   createAlert(a: AlertInput): Promise<void>;
   updateScenario(id: string, status: 'queued' | 'running' | 'done' | 'error', resultJson: string): Promise<void>;
   coachReply(householdId: string, text: string, runId: string): Promise<void>;
+  /** The client reducer create_proposal, called as the worker: opens a Family-voting proposal (its affordability check is queued by the module). */
+  createProposal(p: ProposalInput): Promise<void>;
+  /** Family voting: attach the affordability verdict ('' | fine | tight | risky) and analysis to a proposal. */
+  updateProposal(proposalId: string, verdict: string, analysisJson: string, runId: string): Promise<void>;
   setHuddleStatus(huddleId: string, status: 'live' | 'analyzing' | 'done'): Promise<void>;
   purgeTranscript(huddleId: string): Promise<void>;
   finishRun(runId: string, status: 'done' | 'error', providersJson: string, resultJson: string): Promise<void>;
@@ -68,6 +81,8 @@ export class MemorySink implements WorkerSink {
   createAlert = (a: AlertInput) => this.rec('createAlert', a);
   updateScenario = (id: string, status: string, resultJson: string) => this.rec('updateScenario', id, status, resultJson);
   coachReply = (h: string, text: string, runId: string) => this.rec('coachReply', h, text, runId);
+  createProposal = (p: ProposalInput) => this.rec('createProposal', p);
+  updateProposal = (id: string, verdict: string, analysisJson: string, runId: string) => this.rec('updateProposal', id, verdict, analysisJson, runId);
   setHuddleStatus = (id: string, status: string) => this.rec('setHuddleStatus', id, status);
   purgeTranscript = (id: string) => this.rec('purgeTranscript', id);
   finishRun = (runId: string, status: string, p: string, r: string) => this.rec('finishRun', runId, status, p, r);

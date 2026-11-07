@@ -5,7 +5,7 @@ merchants' store numbers, phone numbers (555-01xx) and amounts are invented.
 
 ```bash
 cd data
-python3 generate.py                 # --seed 2026 by default, writes data/seed/*.json (about 0.7 MB)
+python3 generate.py                 # --seed 2026 by default, writes data/seed/*.json (about 0.73 MB)
 python3 generate.py --seed 7 --out /tmp/other   # any seed works; ids below are for seed 2026 only
 python3 generate.py --report        # also prints every planted anomaly (txn ids) and every balance
 ```
@@ -23,9 +23,11 @@ bottom of this file, so a bad edit fails loudly.
 | `credit_profiles.json` | 11 | adults only; `utilization_pct` is computed from the card accounts |
 | `obligations.json` | 71 | |
 | `conversations.json` | 6 | 24, 22, 22, 22, 16 and 26 turns |
+| `proposals.json` | 5 | one open Family-voting proposal per household (see "Family voting" below) |
+| `votes.json` | 12 | seeded votes from household members (`voter_key` = member id) |
 
-Every record is flat (scalars, plus `owner_member_ids: string[]` on accounts, and `turns`, `expected_goals`,
-`scam_signals` on conversations). Ids are strings, dates are ISO `YYYY-MM-DD`, money is a JSON number in USD.
+Every record is flat (scalars, plus `owner_member_ids: string[]` on accounts, `turns`, `expected_goals`,
+`scam_signals` on conversations, and the free-form `details` object on proposals). Ids are strings, dates are ISO `YYYY-MM-DD`, money is a JSON number in USD.
 
 ## Conventions you need to know (read before writing the loader or the math)
 
@@ -82,6 +84,27 @@ Demo hooks that hold in the data:
 * Okafor's conversation mentions "that weird transfer in September" (the $4,650 takeover) and the House Fund math ($22.3k, $27k without it).
 * Patel's conversation uses the real balance, overdraft count and total from the generated ledger.
 
+## Family voting (docs/contracts.md section 6)
+
+`proposals.py` (called by `generate.py`) writes one **open** proposal per household and a few seeded votes; deterministic, standard library only
+(the seeded RNG only varies posting times). Created 2026-11-06, open 7 to 14 days. Loaded by `seed_proposals` / `seed_votes`; each new
+proposal queues an affordability check (`what_if` job), and the worker's verdicts for the seed data (local provider, `npm run seed` then
+the worker) are the last column.
+
+| Proposal id | Household | Title | Amount | `details` the check reads | Votes (member: choice) | Worker verdict |
+|---|---|---|---:|---|---|---|
+| `prop_rivera_second_location` | rivera | Take the SBA loan for the second bakery location | $250,000 | `kind: loan`, `rate_pct 10.75`, `term_months 120`, `proceeds_to_cash false` | Marisol yes, Daniel abstain, Elena yes | risky: the ~$3.4k payment is above today's monthly cash flow |
+| `prop_okafor_starter_home` | okafor | Down payment on a starter home | $38,000 | `kind: down_payment`, `home_price 190000`, `down_pct 20` | Amara yes, Chidi no | risky: more than the $25.2k in checking and savings |
+| `prop_nguyen_cd_for_kevin` | nguyen | Move $25k from the CD to help our grandson | $25,000 | `kind: transfer`, `note`: Kevin "needs bail money today and asked us not to tell his parents" | Tom yes, Linh abstain | risky: **scam guard** (grandchild in trouble + bail + secrecy, linked to the four $500 gift-card purchases of Oct 21); the money alone would be fine |
+| `prop_patel_used_car` | patel | Buy a reliable used car | $14,000 | `kind: purchase`, `down_pct 10`, `term_months 60`, `rate_pct 18.5` | Priya yes, Aarav yes | risky: $377 in the bank, a negative monthly cash flow |
+| `prop_brooks_hawaii_trip` | brooks | Family trip to Hawaii | $6,000 | `kind: purchase` (cash), `dates`, `travelers`, `note` | Terrence yes, Danielle yes, Jordan yes | fine |
+
+Row shapes (the reducers also accept `details_json` as a string): `Proposal { id, household_id, title, amount, details: {...}, created_by_name,
+created_at, closes_at (ISO), status: "open" }`, `Vote { id: "<proposal_id>:<voter_key>", proposal_id, household_id, voter_key (member id),
+voter_name, choice: "yes"|"no"|"abstain", updated_at }`. `details` keys the worker understands: `kind` (`loan`, `down_payment`, `transfer`,
+`purchase`), `down_pct`, `term_months`, `rate_pct`, `proceeds_to_cash`; any string value is also read by the scam detector for proposals that move
+money to family.
+
 ## Planted anomalies (ids for seed 2026; `generate.py --report` prints them for any seed)
 
 2,918 transactions, 41 labelled (1.4%; 37 excluding the 4 benign outliers, under the 3% cap; asserted).
@@ -128,4 +151,7 @@ All 8 account types present; ids prefixed (`hh_ mem_ acct_ txn_ obl_ conv_ goal_
 same household; no negative deposit balances; (non-fatal checks that print a warning on stderr: no negative running balance on any non-Patel
 checking account, card balances within limit); at least one row of each of the 7 anomaly labels; non-outlier anomalies under 3%; no
 transaction dated after 2026-11-06 unless `impossible_value`; 12 to 30 turns per conversation; 2 conversations for
-Rivera and 1 for each other household; evidence quotes verbatim; `scam_signals` on the Nguyen conversation.
+Rivera and 1 for each other household; evidence quotes verbatim; `scam_signals` on the Nguyen conversation; exactly one proposal per household
+(`prop_` ids, the five titles and amounts above, `closes_at` after `created_at`, status open); every vote references a proposal of the same
+household, comes from a member of that household, uses a valid choice and appears once; the Nguyen proposal is scam-adjacent (grandson,
+"not to tell").

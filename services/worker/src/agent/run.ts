@@ -5,10 +5,10 @@ import type { ChatRequest, ChatResult } from '../llm/types.js';
 import type { ToolContext, ToolOutcome, ToolRegistry } from '../tools/registry.js';
 import type { HouseholdData } from '../types.js';
 import { fitJson, slug, truncate } from '../util.js';
-import type { AlertInput, GoalInput, TraceType, WorkerSink } from './sink.js';
+import type { AlertInput, GoalInput, ProposalInput, TraceType, WorkerSink } from './sink.js';
 
 /** Goals and alerts are identified by a household-independent `key`; the DB id is derived per household when applied. */
-export type GoalDraft = Omit<GoalInput, 'household_id' | 'id'> & { key: string };
+export type GoalDraft = Omit<GoalInput, 'household_id' | 'id'> & { key: string; /** Update this existing goal row instead of deriving `goal_<household>_<key>` (onboarding goals are created by the module). */ id?: string };
 export type AlertDraft = Omit<AlertInput, 'household_id' | 'id'> & { key: string };
 
 export type Effect =
@@ -16,6 +16,7 @@ export type Effect =
   | { kind: 'alert'; alert: AlertDraft }
   | { kind: 'scenario'; status: 'queued' | 'running' | 'done' | 'error'; result_json: string }
   | { kind: 'coach_reply'; text: string }
+  | { kind: 'proposal'; verdict: string; analysis_json: string }
   | { kind: 'huddle_done' };
 
 export interface TraceMeta {
@@ -148,6 +149,11 @@ export class RunContext {
     return out;
   }
 
+  /** Open a proposal for the family to vote on (create_proposal as the worker). Not replayed from the cache. */
+  proposeToFamily(p: Omit<ProposalInput, 'household_id'>): void {
+    this.track(this.deps.sink.createProposal({ ...p, household_id: this.info.householdId }));
+  }
+
   handoff(from: string, to: string, title: string, data: unknown = {}): void {
     this.emit(from, 'handoff', title, { from, to, ...(data as object) });
   }
@@ -166,8 +172,8 @@ export class RunContext {
   }
   goal(g: GoalDraft): void {
     this.effects.push({ kind: 'goal', goal: g });
-    const { key, ...rest } = g;
-    this.track(this.deps.sink.upsertGoal({ ...rest, id: this.goalId(key), household_id: this.info.householdId }));
+    const { key, id, ...rest } = g;
+    this.track(this.deps.sink.upsertGoal({ ...rest, id: id ?? this.goalId(key), household_id: this.info.householdId }));
   }
   alert(a: AlertDraft): void {
     this.effects.push({ kind: 'alert', alert: a });
@@ -177,6 +183,11 @@ export class RunContext {
   scenario(status: 'queued' | 'running' | 'done' | 'error', resultJson: string): void {
     this.effects.push({ kind: 'scenario', status, result_json: resultJson });
     this.track(this.deps.sink.updateScenario(this.info.subjectId, status, resultJson));
+  }
+  /** Family voting: write the verdict + analysis onto the proposal this run is about (subjectId), citing this run. */
+  proposal(verdict: string, analysisJson: string): void {
+    this.effects.push({ kind: 'proposal', verdict, analysis_json: analysisJson });
+    this.track(this.deps.sink.updateProposal(this.info.subjectId, verdict, analysisJson, this.info.runId));
   }
   coachReply(text: string): void {
     this.effects.push({ kind: 'coach_reply', text });
@@ -208,6 +219,9 @@ export function applyEffects(run: RunContext, effects: Effect[]): void {
         break;
       case 'coach_reply':
         run.coachReply(e.text);
+        break;
+      case 'proposal':
+        run.proposal(e.verdict, e.analysis_json);
         break;
       case 'huddle_done':
         run.huddleDone();

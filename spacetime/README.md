@@ -17,12 +17,14 @@ spacetime/
   vitest.config.ts                   module tests (real in-memory datastore, no server)
   src/
     index.ts                         entry: default export = schema, re-exports every reducer
-    schema.ts                        all tables (docs/contracts.md section 2 + 5)
+    schema.ts                        all tables (docs/contracts.md sections 2, 5 and 6)
     util.ts                          validation, id helpers, job enqueue (not part of the module surface)
+    config.ts                        worker-secret hash resolution (private module_config row, else the dev hash), publisher
+    proposals.ts                     family-voting helpers: details validation, deadline check, check enqueue, expiry sweep
     recompute.ts                     tables <-> finance.ts glue for recompute_household
     finance.ts                       PURE math: indicators, 90-day forecast, rule alerts. No imports.
     sha256.ts                        PURE SHA-256 (the V8 module runtime has no sync crypto)
-    reducers/{lifecycle,room,huddle,family,plaid,recompute,worker,seed}.ts
+    reducers/{lifecycle,room,huddle,family,proposal,plaid,onboarding,recompute,worker,admin,seed}.ts
     finance.test.ts                  `node --test`, no SpacetimeDB needed
     module.test.ts                   vitest + SpacetimeDB test harness: every reducer path
 ```
@@ -38,8 +40,10 @@ Only the schema and reducers are exported from `index.ts` (SpacetimeDB treats ev
 | `goal`, `presence`, `huddle`, `transcript_line`, `scenario`, `coach_message`, `advisor_note` | yes | family reducers, worker |
 | `agent_job`, `agent_run`, `trace_event` | yes | enqueuing reducers, worker |
 | `bank_connection` | yes | worker (Plaid) |
+| `household_profile`, `bank_account_option` (onboarding, docs/contracts.md section 7) | yes | `start_onboarding`, `save_onboarding_answers`, `select_bank_accounts`, `finish_onboarding`, worker `agent_set_account_options` |
+| `proposal`, `vote` (family voting, docs/contracts.md section 6) | yes | `create_proposal`, `cast_vote`, `close_proposal`, worker `agent_update_proposal`, `seed_proposals` / `seed_votes`, `create_sandbox` |
 | `account.source`, `txn.source` = `seed` or `plaid` | yes | seed / Plaid reducers |
-| `worker`, `plaid_item` (tokens), `dirty_household`, `recompute_tick` | **no** | `register_worker`, `agent_save_plaid_item`, seed reducers, `init` |
+| `worker`, `plaid_item` (tokens), `module_config` (publisher + worker-secret hash override), `dirty_household`, `recompute_tick` | **no** | `register_worker`, `agent_save_plaid_item`, `admin_set_worker_secret_hash`, seed reducers, `init` |
 
 Client bindings turn snake_case into camelCase (`household_id` -> `householdId`, table `health_indicator` ->
 `db.healthIndicator`, reducer `join_room` -> `reducers.joinRoom`).
@@ -52,16 +56,19 @@ empty result.
 
 Client-callable (any identity): `join_room`, `create_sandbox`, `delete_sandbox` (owner only, extra), `start_huddle`,
 `append_transcript`, `end_huddle`, `request_simulation`, `ask_coach`, `upsert_goal`, `delete_goal`, `ack_alert`,
-`post_advisor_note`, `recompute_household`, `request_bank_sync`.
+`post_advisor_note`, `recompute_household`, `request_bank_sync`, family voting (`create_proposal`, `cast_vote`, `close_proposal`) and
+onboarding (`start_onboarding`, `save_onboarding_answers`, `select_bank_accounts`, `finish_onboarding`).
 
-Lifecycle: `init` (starts the 60 s tick), `onConnect` (lobby presence), `onDisconnect` (delete presence).
-Scheduled (private, fired by SpacetimeDB): `tick_recompute`, every 60 s.
+Operator-only: `admin_set_worker_secret_hash(sha256_hex)` (publisher identity only; see "Worker secret" below).
+
+Lifecycle: `init` (records the publisher, starts the 60 s tick), `onConnect` (lobby presence), `onDisconnect` (delete presence).
+Scheduled (private, fired by SpacetimeDB): `tick_recompute`, every 60 s (recomputes dirty households and closes proposals past their deadline).
 
 Worker-only (rejected with `worker only` unless the sender is in `worker`):
 `claim_job`, `start_run`, `finish_run`, `emit_trace`, `agent_upsert_goal`, `agent_create_alert`,
-`agent_update_scenario`, `agent_coach_reply`, `set_huddle_status`, `purge_transcript`,
+`agent_update_scenario`, `agent_update_proposal`, `agent_set_account_options`, `agent_coach_reply`, `set_huddle_status`, `purge_transcript`,
 `seed_households`, `seed_members`, `seed_accounts`, `seed_credit`, `seed_txns`, `seed_obligations`,
-`seed_conversations`, and the Plaid set `agent_save_plaid_item`, `agent_set_bank_connection`,
+`seed_conversations`, `seed_proposals`, `seed_votes`, and the Plaid set `agent_save_plaid_item`, `agent_set_bank_connection`,
 `agent_upsert_accounts`, `agent_upsert_txns`, `agent_remove_txns`. `register_worker(secret, label)` is open to everyone
 but only succeeds with the right secret.
 
@@ -75,6 +82,31 @@ Behaviours worth knowing:
 - `end_huddle` is a no-op unless the huddle is live and enqueues exactly one `huddle` job.
 - `claim_job` is atomic: the second claimer gets `job N is already claimed`.
 - `emit_trace` takes `household_id` from the run, and swaps a `data_json` over 4 KB for `{"truncated":true,...}`.
+- **Family voting.** `create_proposal(household_id, title, amount, details_json, closes_in_days, author_name)` inserts an open proposal
+  (`closes_in_days` is a number in (0, 90], fractions allowed; `details_json` a JSON object or `""`) and enqueues one `what_if` job whose
+  `subject_id` is the proposal id and whose `input_json` carries `{proposal_id, title, amount, details, created_by, closes_at}`; the worker answers with
+  `agent_update_proposal` (verdict `""`/`fine`/`tight`/`risky` + `analysis_json`). `cast_vote(proposal_id, choice yes|no|abstain, voter_name)` keys
+  the vote by the caller's identity hex (`vote.id = proposal_id:identity`), so calling again changes it; it is rejected once the proposal is
+  closed or past `closes_at`. `close_proposal` is idempotent and open to anyone, like every client reducer. `tick_recompute` flips expired
+  open proposals to `closed` (a failing `cast_vote` cannot do it: errors roll back). `seed_proposals` takes `details` (object) or `details_json`,
+  ISO `created_at`/`closes_at` (or `closes_in_days`), queues the check for each NEW row without a verdict (re-seeding queues nothing);
+  `seed_votes` uses a member id as `voter_key`. `create_sandbox` copies proposals (verdict and analysis kept, `run_id` cleared; open ones get a fresh
+  window of the same length) plus the seeded member votes with remapped ids; votes by real identities stay in the template. `delete_sandbox` removes them.
+- **Onboarding** (docs/contracts.md section 7). `start_onboarding(household_name, display_name)` makes `hh_onb_<suffix>` (owner = caller, `template_id ""`), a member
+  for the caller and a `household_profile` in `connect`, and moves the caller's presence into it. The worker links a bank and calls
+  `agent_set_account_options(household_id, item_id, rows_json)` (one `bank_account_option` per Plaid account, selected by default;
+  the bank connection and the profile move to `selecting`). `select_bank_accounts(household_id, item_id, account_ids_json)` marks the
+  choice, sets the connection to `syncing`, queues one `plaid_sync` (which imports only the selected accounts) and moves the profile to
+  `questions`; adding an account that was not selected before resets the item's transaction cursor so its history is pulled. Statuses only
+  move forward. `save_onboarding_answers(household_id, answers_json)` takes `{members:[{id?,name,role,age,income_annual}], own_home,
+  home_value, vehicle_value, priorities:[emergency_fund|home|college|retirement|debt_payoff|travel|business|caring_for_parents],
+  goal_text, risk_comfort 1-5, voting_enabled, voice_consent}` (every key optional), upserts members (by id, else by name),
+  `home_value`/`vehicle_value` (0 when renting), goals `goal_<household>_<priority>` with source `onboarding` (a dropped priority is removed;
+  the worker fills amount, date and feasibility) and the profile; repeating it is safe. `finish_onboarding(household_id)` refuses while a
+  bank is `selecting` ("choose which accounts to import first") or `linking`/`syncing`, then runs `recompute_household`, sets `done`
+  and queues one `onboarding_insights` job whose `input_json` carries the answers; calling it again does nothing. `delete_sandbox` also
+  deletes an owner's `hh_onb_*` household (test cleanup). Alert `kind` gains `insight`, goal `source` gains `onboarding`, bank connection
+  `status` gains `selecting`.
 - `request_bank_sync` enqueues a `plaid_sync` job unless one is already queued for that household.
 - Seed reducers take a JSON array string in the shape of `data/seed/*.json`, skip ids that exist, and mark the household
   dirty so `tick_recompute` refreshes it within a minute. `anomaly` is stored as `txn.anomaly_truth` (`""` when absent).
@@ -150,17 +182,29 @@ Both folders are generated, never edited, and committed. Use `--import-extension
 
 The team has a HACKUTD2026 credit code for Maincloud; apply it to the account you publish from (check the hackathon instructions for where).
 
-1. **Change the worker secret first.** `WORKER_SECRET_SHA256` in `src/reducers/worker.ts` is the SHA-256 of the dev secret
-   `keystone-dev-secret`, and the repo is public. Pick a long random secret, put its hash in the file
-   (`printf %s 'your-secret' | sha256sum`), give the worker the same value as its secret (env, never git), then publish.
+1. **Pick a long random worker secret** and give the worker the same value as `WORKER_SECRET` (env, never git). No source edit is needed:
+   after publishing (step 3), set its hash with `spacetime call -s maincloud keystone admin_set_worker_secret_hash '"<sha256>"'`
+   (`printf %s 'your-secret' | sha256sum`), from the same identity that published. Until then the module accepts the public
+   dev secret `keystone-dev-secret`.
 2. `spacetime login` (opens the browser)
 3. `spacetime publish --server maincloud keystone -p spacetime` (add `-c always` only for a clean first deploy)
 4. Point the web app and worker at `wss://maincloud.spacetimedb.com` with database name `keystone` (the name must be free
    on Maincloud; otherwise publish under another name and change it in both clients).
 5. Seed once: `cd services/worker && npm run seed` against Maincloud.
 
-The secret could also move out of source into a module environment variable (`schema(..., { env })`, set at publish
-time); that is not done here because the contract asks for a constant.
+## Worker secret
+
+`register_worker(secret, label)` compares `sha256(secret)` with (1) `module_config.worker_secret_hash` when it is non-empty, else (2) the
+SHA-256 of the public dev secret `keystone-dev-secret` (`DEV_WORKER_SECRET_SHA256` in `src/config.ts`; local development and `npm test` use it).
+`module_config` is a private single-row table: `init` stores the **publisher** identity in it (verified against a real 2.14.1
+server: `ctx.sender` inside `init` is the identity that ran `spacetime publish`), and `admin_set_worker_secret_hash(sha256_hex)`,
+callable only by that publisher, sets or (with `""`) clears the override. `infra/deploy.sh --publish` calls it after publishing,
+inside the spacetime container (infra/DEPLOY.md, step 3a). `init` does not re-run on a plain republish, so a database that was
+published before this existed has no recorded publisher; for that one case the reducer accepts an identity that is already a
+registered worker, but only while no override exists, and then records that identity as the publisher. A `-c always` publish
+wipes the override: set it again. Workers that registered before an override was set stay registered.
+
+The secret could also move into a module environment variable (`schema(..., { env })`, set at publish time); not done here.
 
 ## Tests
 
