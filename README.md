@@ -16,7 +16,7 @@ Tracks: **PNC** (360° Financial Health Navigator) · **NVIDIA** (Nemotron beyon
 | **Advisor console** (`/advisor`) | Households by urgency; advisor notes appear live in the family's room |
 | **SpacetimeDB module** | The whole backend: state, job queue, presence, finance math as reducers, scheduled recompute |
 | **Agent worker** | Hand-rolled tool loop. Nemotron 3 Ultra plans, Nemotron 3.5 Lightning extracts, Qwen on tenvor.io is the fallback. FRED and College Scorecard tools. All five workflows pass on real Nemotron in under 45 s |
-| **Plaid Sandbox** | Connect a bank (Plaid Link or one-tap sandbox connect) → `plaid_sync` workflow → tables *(in progress)* |
+| **Plaid Sandbox** | Connect a bank (Plaid Link or one-tap sandbox connect) → `plaid_sync` workflow → tables. Verified live: 7 accounts, 331 transactions from First Platypus Bank |
 | **Deploy** | **Live at https://52-72-164-85.sslip.io** · EC2 t3.medium: Caddy (HTTPS) + web + worker + self-hosted SpacetimeDB via Docker Compose ([infra/DEPLOY.md](infra/DEPLOY.md)) |
 
 All data is synthetic (5 families, 2.9k transactions with labelled anomalies). No real customer information anywhere.
