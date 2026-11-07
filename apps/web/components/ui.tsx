@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import { cx, hueFor, initials } from "@/lib/format";
-import { IconArrowDown, IconArrowUp, IconInfo } from "./icons";
+import { IconArrowDown, IconArrowUp } from "./icons";
 
 /* ------------------------------------------------------------------------------------------------
    Cosign UI kit. White cards, thin borders, 8px radius, no shadows. Money is always tabular (`num`).
@@ -20,14 +20,9 @@ export function Card({ className, children, ...rest }: HTMLAttributes<HTMLDivEle
   );
 }
 
-/** Small info glyph with a native tooltip, as in the mockup next to card titles. */
-export function InfoTip({ text }: { text: string }) {
-  return (
-    <span title={text} className="inline-flex text-ink-3" role="img" aria-label={text}>
-      <IconInfo size={14} />
-    </span>
-  );
-}
+/** Info glyph next to card titles: tap/click/hover/focus popover (see InfoTip.tsx; native title tooltips fail on phones). */
+import { InfoTip } from "./InfoTip";
+export { InfoTip };
 
 /** A titled dashboard card. `title` renders as an h2 so each card is a labelled region. */
 export function Panel({
@@ -49,7 +44,7 @@ export function Panel({
         <div className="min-w-0">
           <h2 id={hid} className="flex items-center gap-1.5 text-[0.95rem] font-semibold leading-tight tracking-tight">
             {title}
-            {info ? <InfoTip text={info} /> : null}
+            {info ? <InfoTip text={info} label={typeof title === "string" ? title : undefined} /> : null}
           </h2>
           {sub ? <p className="mt-0.5 text-[0.76rem] leading-snug text-ink-3">{sub}</p> : null}
         </div>

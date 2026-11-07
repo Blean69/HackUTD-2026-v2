@@ -45,7 +45,7 @@ phones (Next.js) ─wss─► Caddy ─► SpacetimeDB "keystone"   ◄─ agent
 | [data/README.md](data/README.md) | The five families and every planted anomaly (demo cheat sheet) |
 | [spacetime/README.md](spacetime/README.md), [services/worker/README.md](services/worker/README.md) | Module and worker internals |
 
-Tasks, ideas, questions and decisions: [GitHub issues](https://github.com/Blean69/HackUTD-2026/issues) on the team [Project board](https://github.com/users/Blean69/projects/4).
+Tasks, ideas, questions and decisions: [GitHub issues](https://github.com/Blean69/HackUTD-2026-v2/issues) on the team [Project board](https://github.com/users/Blean69/projects/4).
 Concept map: https://claude.ai/artifact/15RkwA4UTwAaN8g3spMcnk
 
 ## Run it locally

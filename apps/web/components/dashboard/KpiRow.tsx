@@ -8,7 +8,7 @@ function Label({ children, info }: { children: string; info?: string }) {
   return (
     <p className="flex items-center gap-1.5 text-[0.82rem] font-semibold text-ink">
       {children}
-      {info ? <InfoTip text={info} /> : null}
+      {info ? <InfoTip text={info} label={children} /> : null}
     </p>
   );
 }
