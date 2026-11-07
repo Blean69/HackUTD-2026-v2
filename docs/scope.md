@@ -25,7 +25,7 @@
 - What-if simulator + coach with visible tool calls
 - Scam Shield (Nguyen story) + transaction anomaly classifier (data_quality workflow on sandbox creation)
 - NVIDIA ASR via `POST /asr` (browser speech stays the fallback)
-- Self-hosted Nemotron on tenvor.io as live failover with a visible badge switch
+- Qwen fallback on tenvor.io (badge shows it); cache replay for rate limits
 - External tools: FRED rates, College Scorecard
 - `/advisor` console with live advisor notes
 - `cache_first` replay mode, then pre-warm
@@ -41,7 +41,7 @@
 |---|---|---|
 | A | Room UI, Huddle UX, voice, what-if, coach UI | PNC |
 | B | SpacetimeDB module, reducers, multiplayer, advisor console, Maincloud deploy | Spacetime |
-| C | Agent worker, Nemotron providers, tenvor failover, `/agents`, AWS deploy | NVIDIA |
+| C | Agent worker, Nemotron providers, Qwen fallback, `/agents`, AWS deploy | NVIDIA |
 | D | Data, anomaly + scam detectors, Devpost writeup, pitch, backup video | all |
 
 ## Explicitly out of scope

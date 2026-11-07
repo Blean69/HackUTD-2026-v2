@@ -24,7 +24,7 @@ Meanwhile the scam guard catches the Nguyens' "grandson in jail" call and links 
 
 ```
 Next.js (phones)  ⇄  SpacetimeDB module "keystone" (tables, reducers, scheduled recompute, presence)  ⇄  Node agent worker
-                                                                                                      Nemotron (NVIDIA API → tenvor.io failover)
+                                                                                                      Nemotron (NVIDIA API; Qwen on tenvor.io as fallback)
                                                                                                       tools: ledger, forecast, simulator, anomaly + scam
                                                                                                       detectors, external APIs; NVIDIA ASR at POST /asr
 ```
@@ -59,7 +59,7 @@ spacetime/        SpacetimeDB module (TypeScript): tables, reducers, scheduled r
 apps/web/         Next.js (App Router, TS, Tailwind). Generated bindings in apps/web/lib/module_bindings/ (never edit)
 services/worker/  Node + TypeScript agent worker. Generated bindings in services/worker/src/module_bindings/ (never edit)
 data/             Synthetic data generator (Python) + generated seed JSON in data/seed/ (committed)
-infra/            Deploy notes: DB on SpacetimeDB Maincloud; web + worker on AWS (or tenvor)
+infra/            Deploy notes: DB on SpacetimeDB Maincloud; web + worker on AWS
 docs/             tracks, contracts, demo script, scope, NVIDIA stack notes
 ```
 
@@ -80,7 +80,7 @@ regenerate both binding folders. Commit the regenerated bindings.
 ## Configuration
 
 Secrets live in env only (`.env`, never committed). See `.env.example`. LLM providers are OpenAI-compatible endpoints
-tried in `LLM_PROVIDER_ORDER` (default `nvidia,tenvor_nemotron,tenvor_qwen`), with a keyless `local` fallback so the
+tried in `LLM_PROVIDER_ORDER` (default `nvidia,tenvor_qwen`), with a keyless `local` fallback so the
 whole app runs without keys.
 
 ## Conventions

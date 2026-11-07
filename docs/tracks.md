@@ -32,7 +32,7 @@ external APIs/services, (4) real-world applicability.
 | Multi-step workflows | huddle, what_if, coach, scam_check, data_quality. Each emits plan → tool calls → results → decision, live in the glass box |
 | Tool integration | Internal tools (ledger queries, forecast, simulator, anomaly classifier, scam detector) and external APIs (Plaid Sandbox banking, FRED interest rates, College Scorecard tuition data, NVIDIA ASR) |
 | Real-world | Elder scams and opaque household finances are real, expensive problems |
-| NVIDIA stack depth | Nemotron reasoning model for planning, a small Nemotron for extraction, NVIDIA ASR for voice, self-hosted Nemotron on our own NVIDIA GPU cloud (tenvor.io) as live failover |
+| NVIDIA stack depth | Nemotron reasoning model for planning, a small Nemotron for extraction, NVIDIA ASR for voice, visible Nemotron reasoning. Qwen on our own NVIDIA GPU cloud (tenvor.io) is only a safety net, and every trace badge says honestly which model answered |
 
 Voice by itself does not satisfy this track. The multi-step agent workflow that the voice triggers does.
 
