@@ -1,0 +1,99 @@
+# Contracts (binding)
+
+Change a contract here first, then in code. The SpacetimeDB module (`spacetime/`) is the source of truth for types;
+the web app and the worker use bindings generated from it (`spacetime generate`), never hand-written copies.
+
+```
+ phones/laptops (Next.js)  ──subscribe + call reducers──►  SpacetimeDB module "keystone"  ◄──subscribe + call reducers──  agent worker (Node)
+                                                           tables · reducers · scheduled                                  Nemotron agents · tools · ASR
+```
+
+## 1. Seed data files (`data/seed/`)
+
+Written by `data/generate.py`, loaded into SpacetimeDB by `services/worker/src/seed.ts` (calls the `seed_*` reducers in batches).
+Ids are strings with a type prefix (`hh_`, `mem_`, `acct_`, `txn_`, `obl_`, `conv_`, `goal_`). Dates are ISO strings. Money is a number (USD).
+
+```ts
+Household     { id, name, city, state, persona }
+Member        { id, household_id, name, age, role: "parent"|"child"|"grandparent"|"other", income_annual }
+Account       { id, household_id, owner_member_ids: string[], type: "checking"|"savings"|"cd"|"ira"|"auto_loan"|
+                "personal_loan"|"credit_card"|"mortgage", institution, nickname, balance, rate_pct?, credit_limit?,
+                monthly_payment?, maturity_date?, opened_date }
+Transaction   { id, account_id, date, amount /* negative = outflow */, merchant, category, description, is_recurring,
+                anomaly?: "duplicate"|"garbled"|"impossible_value"|"card_testing"|"account_takeover"|"scam_payment"|"outlier" }  // ground truth; never shown in UI
+CreditProfile { member_id, score, utilization_pct, hard_inquiries_12m, oldest_account_years, late_payments_24m }
+Obligation    { id, household_id, name, amount, due_day, account_id, kind: "bill"|"loan"|"subscription"|"tuition"|"insurance"|"tax" }
+Conversation  { id, household_id, title, turns: {speaker, text}[], expected_goals: Goal[], scam_signals?: string[] }
+```
+Households: `hh_rivera` (hero, bakery owners), `hh_okafor`, `hh_nguyen` (elder-scam target), `hh_patel` (messy data), `hh_brooks`.
+
+## 2. SpacetimeDB module `keystone` — tables
+
+All tables public for the hackathon (row-level security is P1). Arrays/objects that don't need querying are JSON strings (`*_json`).
+Row ids are strings unless marked `u64 auto`. `ts`/`*_at` are SpacetimeDB `Timestamp`. Every household-scoped table has an index on `household_id`.
+
+| Table | Columns | Written by |
+|---|---|---|
+| `household` | id pk, name, city, state, persona, template_id (""=seed template), owner (Identity?), created_at | seed, `create_sandbox` |
+| `member` | id pk, household_id, name, age, role, income_annual | seed, sandbox copy |
+| `account` | id pk, household_id, type, institution, nickname, balance, rate_pct, credit_limit, monthly_payment, maturity_date, opened_date, owner_member_ids_json | seed, sandbox copy |
+| `txn` | id pk, household_id, account_id, date, amount, merchant, category, description, is_recurring, anomaly_truth ("" if none) | seed, sandbox copy |
+| `credit_profile` | member_id pk, household_id, score, utilization_pct, hard_inquiries_12m, oldest_account_years, late_payments_24m | seed |
+| `obligation` | id pk, household_id, name, amount, due_day, account_id, kind | seed |
+| `conversation` | id pk, household_id, title, turns_json, expected_goals_json, scam_signals_json | seed (sample Huddles) |
+| `health_indicator` | id pk (`{household_id}:{key}`), household_id, key, label, value, unit, status, explanation, updated_at | reducer `recompute_household` (math runs in the DB) |
+| `forecast_point` | id pk (`{household_id}:{date}`), household_id, date, balance, obligations_due | reducer `recompute_household` |
+| `alert` | id pk, household_id, severity info/warn/critical, kind data_quality/fraud/scam/obligation/advisor, title, detail, related_ids_json, created_at, acknowledged_by ("" if open) | worker, `recompute_household` (rule hits) |
+| `goal` | id pk, household_id, title, target_amount, target_date, priority, feasibility (""/on_track/stretch/off_track), evidence_quote, source huddle/manual/coach, created_at, updated_at | worker, family (`upsert_goal`) |
+| `presence` | identity pk, household_id ("" = lobby), display_name, role family/advisor/guest, last_seen | lifecycle reducers + `join_room` |
+| `huddle` | id pk, household_id, started_by_name, status live/analyzing/done, started_at, ended_at, consent_names_json | `start_huddle`, `end_huddle`, worker |
+| `transcript_line` | id u64 auto pk, huddle_id, household_id, speaker, text, ts | `append_transcript` (any participant, ASR worker); **deleted** by `purge_transcript` after analysis |
+| `scenario` | id pk, household_id, prompt, status queued/running/done/error, result_json, requested_by_name, created_at | `request_simulation`, worker |
+| `coach_message` | id u64 auto pk, household_id, role user/assistant, author_name, text, run_id, created_at | `ask_coach`, worker |
+| `advisor_note` | id u64 auto pk, household_id, author_name, text, created_at | `post_advisor_note` |
+| `agent_job` | id u64 auto pk, workflow, household_id, subject_id, input_json, status queued/claimed/done/error, claimed_by (Identity?), run_id, created_at | reducers that enqueue work; worker claims |
+| `agent_run` | run_id pk, job_id, workflow, household_id, status running/done/error, started_at, finished_at, providers_json, result_json | worker |
+| `trace_event` | id u64 auto pk, run_id, household_id, seq, ts, workflow, agent, type, title, data_json, model, provider, latency_ms, tokens_in, tokens_out | worker (`emit_trace`) |
+| `worker` (private) | identity pk, label, registered_at | `register_worker` |
+
+### Trace event semantics (the NVIDIA story)
+`workflow` ∈ huddle | what_if | coach | scam_check | data_quality. `agent` e.g. planner, goal_extractor, reconciler,
+scam_guard, data_auditor, simulator, coach. `type` ∈ run_started | plan | thought | tool_call | tool_result | handoff | message | final | error.
+`title` is one human-readable line. `data_json` ≤ 4 KB. `provider` ∈ nvidia | tenvor_nemotron | tenvor_qwen | cache | local.
+
+## 3. Reducers
+
+Client-callable (any identity):
+| Reducer | Args | Effect |
+|---|---|---|
+| `join_room` | household_id, display_name, role | upsert caller's `presence` |
+| `create_sandbox` | template_household_id, display_name | deep-copies a seed household (members, accounts, txns, credit, obligations, conversations) to a new id `hh_sbx_<short>` owned by caller; runs `recompute_household`; enqueues a `data_quality` job |
+| `start_huddle` | household_id, consent_names_json | creates `huddle` (status live) |
+| `append_transcript` | huddle_id, speaker, text | inserts `transcript_line` (rejects if huddle not live) |
+| `end_huddle` | huddle_id | status → analyzing; enqueues `agent_job` workflow=huddle, subject_id=huddle_id |
+| `request_simulation` | household_id, prompt | inserts `scenario` + enqueues `what_if` job |
+| `ask_coach` | household_id, text | inserts user `coach_message` + enqueues `coach` job |
+| `upsert_goal` / `delete_goal` | goal fields / id | family edits |
+| `ack_alert` | alert_id, display_name | sets acknowledged_by |
+| `post_advisor_note` | household_id, author_name, text | inserts note + an `advisor` alert |
+| `recompute_household` | household_id | recomputes health indicators, 90-day forecast, rule-based data-quality alerts (pure math, deterministic) |
+
+Lifecycle: `client_connected` (no-op or lobby presence), `client_disconnected` (delete presence).
+Scheduled: `tick_recompute` every 60 s recomputes households with recent changes.
+
+Worker-only (reject unless `ctx.sender` is in `worker`):
+| Reducer | Effect |
+|---|---|
+| `register_worker(secret, label)` | adds caller to `worker` if secret matches the module constant `WORKER_SECRET_SHA256` (set before publish) |
+| `claim_job(job_id)` | queued → claimed (atomic; second claimer fails) |
+| `start_run(run_id, job_id)` / `finish_run(run_id, status, providers_json, result_json)` | run lifecycle; also marks job done/error |
+| `emit_trace(run_id, seq, workflow, agent, type, title, data_json, model, provider, latency_ms, tokens_in, tokens_out)` | inserts `trace_event` |
+| `agent_upsert_goal`, `agent_create_alert`, `agent_update_scenario`, `agent_coach_reply`, `set_huddle_status` | write results |
+| `purge_transcript(huddle_id)` | deletes that huddle's transcript lines (privacy: we keep goals + short evidence quotes only) |
+| `seed_households`, `seed_members`, `seed_accounts`, `seed_txns`, `seed_credit`, `seed_obligations`, `seed_conversations` (rows_json) | bulk insert from `data/seed/` |
+
+## 4. Worker HTTP (small; everything else goes through SpacetimeDB)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | provider status `{nvidia, tenvor_nemotron, tenvor_qwen, spacetime}` |
+| POST | `/asr?huddle_id=&speaker=` | audio chunk (webm/opus or wav) → NVIDIA ASR → calls `append_transcript` as the worker. 503 if ASR unavailable (browser speech fallback) |

@@ -1,0 +1,91 @@
+# AGENTS.md — shared context for every coding agent (Codex, Claude, humans)
+
+Read this first. It is the source of truth for what we are building and the rules we build by.
+`docs/contracts.md` is binding for any code that crosses the web / SpacetimeDB / worker boundary.
+
+## The product (codename: Keystone — rename freely)
+
+**A family's financial room: one live, shared space where the whole family and a team of Nemotron agents see the
+full financial picture together and plan out loud.**
+
+| Surface | Route | Who | Track it wins |
+|---|---|---|---|
+| Family room | `/room/[householdId]` (`/me` → demo room) | Family members on their own phones, together | **PNC**: 360° Financial Health Navigator |
+| Advisor console | `/advisor` | A PNC advisor (bank-internal view) | PNC (bonus), Spacetime (multiplayer) |
+| Agent glass box | `/agents` + a trace drawer on every page | Judges, engineers | **NVIDIA**: Nemotron beyond a chatbot |
+| The whole app | — | — | **Spacetime**: every byte of state, the job queue, presence, the in-DB health/forecast math and live sync run on SpacetimeDB |
+
+Hero story: the Riveras (bakery owners in Oak Cliff, Dallas) open a Huddle at the dinner table. Every phone in the room
+shows the live transcript. When they end it, Nemotron agents pull out their goals (second bakery location, college fund,
+Grandma's care), check each one against the real accounts, and post goal cards with feasibility to every screen.
+Meanwhile the scam guard catches the Nguyens' "grandson in jail" call and links it to a $2,000 gift-card purchase.
+
+## Architecture
+
+```
+Next.js (phones)  ⇄  SpacetimeDB module "keystone" (tables, reducers, scheduled recompute, presence)  ⇄  Node agent worker
+                                                                                                      Nemotron (NVIDIA API → tenvor.io failover)
+                                                                                                      tools: ledger, forecast, simulator, anomaly + scam
+                                                                                                      detectors, external APIs; NVIDIA ASR at POST /asr
+```
+- The browser never calls the worker for data. It calls reducers and subscribes to tables.
+- Work is queued as `agent_job` rows by reducers. The worker subscribes, claims, runs a multi-step Nemotron workflow,
+  and writes `trace_event`s plus results back through worker-only reducers. Every phone sees each step live.
+- Deterministic math (health indicators, 90-day forecast, rule-based data-quality alerts) runs inside SpacetimeDB reducers.
+
+## Hard rules
+
+1. **Spacetime powers the primary functionality.** No side database, no REST data API, no websockets of our own.
+   If state matters, it is a SpacetimeDB table.
+2. **Nemotron is the primary model for every agent.** Qwen on tenvor.io is fallback only. Every trace event records the
+   provider and model that answered. Never silently swap models in a judged demo.
+3. **Every agent run emits trace events.** If a step is not in the trace, judges cannot see it. Agents plan → call tools →
+   observe → decide. A single prompt→answer call is not an agent.
+4. **Synthetic data only.** No real PII. Generators are seeded and deterministic (`data/`).
+5. **The demo must survive an LLM outage.** `DEMO_MODE=cache_first` replays a previous identical run with realistic timing
+   (provider shows `cache`). New input always runs live.
+6. **Voice is opt-in and session-based.** Visible recording indicator, explicit start/stop, names of who consented. The
+   transcript is purged after analysis (`purge_transcript`). We keep goals and short evidence quotes. A "passive mode" is
+   always an opt-in Huddle session, never always-on listening. Bank judges will ask about this.
+7. **Mobile-first.** Judges arrive by QR code on their phones, often several at once in the same room.
+8. **The repo must be public on GitHub before judging** (Spacetime rule). No secrets in git. Ever.
+9. **Main is always deployable.** If you break it, fix it right away.
+
+## Repo layout
+
+```
+spacetime/        SpacetimeDB module (TypeScript): tables, reducers, scheduled recompute
+apps/web/         Next.js (App Router, TS, Tailwind). Generated bindings in apps/web/lib/module_bindings/ (never edit)
+services/worker/  Node + TypeScript agent worker. Generated bindings in services/worker/src/module_bindings/ (never edit)
+data/             Synthetic data generator (Python) + generated seed JSON in data/seed/ (committed)
+infra/            Deploy notes: DB on SpacetimeDB Maincloud; web + worker on AWS (or tenvor)
+docs/             tracks, contracts, demo script, scope, NVIDIA stack notes
+```
+
+## Running locally
+
+```bash
+spacetime start                                                     # local SpacetimeDB on :3000
+spacetime publish --project-path spacetime keystone                 # (re)publish the module
+spacetime generate --lang typescript --project-path spacetime --out-dir apps/web/lib/module_bindings
+spacetime generate --lang typescript --project-path spacetime --out-dir services/worker/src/module_bindings
+cd services/worker && npm install && npm run seed && npm run dev    # seeds data, then runs agents + :8787 ASR
+cd apps/web && npm install && npm run dev                           # http://localhost:3001
+cd data && python3 generate.py --seed 2026                          # only if you change the generator
+```
+After any change to a table or reducer: republish (`--delete-data` if the schema change is breaking, then re-seed) and
+regenerate both binding folders. Commit the regenerated bindings.
+
+## Configuration
+
+Secrets live in env only (`.env`, never committed). See `.env.example`. LLM providers are OpenAI-compatible endpoints
+tried in `LLM_PROVIDER_ORDER` (default `nvidia,tenvor_nemotron,tenvor_qwen`), with a keyless `local` fallback so the
+whole app runs without keys.
+
+## Conventions
+
+- TypeScript everywhere except `data/`. Strict mode.
+- Agent tools are plain functions with a JSON schema in one registry (`services/worker/src/tools/`). Each returns small JSON.
+- Money: numbers in USD; format with `Intl.NumberFormat` in the UI; tabular numerals.
+- Prefer boring and visible over clever and hidden. A judge has 3 minutes.
+- When you think of an idea instead of building it, log it on the team brainstorm board (link in README).
