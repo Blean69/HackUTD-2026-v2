@@ -93,6 +93,7 @@ describe('worker auth', () => {
       (ctx: never) => m.agent_update_proposal(ctx, { proposal_id: 'x', verdict: 'fine', analysis_json: '{}', run_id: '' }),
       (ctx: never) => m.seed_proposals(ctx, { rows_json: '[]' }),
       (ctx: never) => m.seed_votes(ctx, { rows_json: '[]' }),
+      (ctx: never) => m.agent_enqueue_job(ctx, { workflow: 'phone', household_id: 'hh_demo', subject_id: 'call_1', input_json: '{}' }),
     ];
     for (const call of rejected) {
       expect(() => test.withReducerTx(alice, call as never)).toThrow('worker only');
@@ -383,6 +384,68 @@ describe('huddle flow + job queue', () => {
     // recompute must not touch it
     test.withReducerTx(alice, (ctx) => m.recompute_household(ctx, { household_id: 'hh_demo' }));
     expect(test.db.alert.id.find('scam_1')).toBeTruthy();
+  });
+});
+
+describe('phone calls: agent_enqueue_job', () => {
+  const enqueue = (test: ReturnType<typeof seeded>, a: Partial<{ workflow: string; household_id: string; subject_id: string; input_json: string }> = {}) =>
+    test.withReducerTx(worker, (ctx) => m.agent_enqueue_job(ctx, { workflow: 'phone', household_id: 'hh_demo', subject_id: 'call_1', input_json: '{"transport":"webrtc"}', ...a }));
+
+  it('is worker only', () => {
+    const test = seeded();
+    expect(() => test.withReducerTx(alice, (ctx) => m.agent_enqueue_job(ctx, { workflow: 'phone', household_id: 'hh_demo', subject_id: 'call_1', input_json: '{}' }))).toThrow('worker only');
+    expect(test.db.agent_job.count()).toBe(0n);
+  });
+
+  it('queues a phone job; the worker claims it, starts the run, traces it and finishes it', () => {
+    const test = seeded();
+    enqueue(test);
+    const jobs = [...test.db.agent_job.iter()];
+    expect(jobs).toHaveLength(1);
+    const job = jobs[0]!;
+    expect(job).toMatchObject({ workflow: 'phone', household_id: 'hh_demo', subject_id: 'call_1', status: 'queued', run_id: '' });
+    expect(JSON.parse(job.input_json)).toEqual({ transport: 'webrtc' });
+
+    test.withReducerTx(worker, (ctx) => m.claim_job(ctx, { job_id: job.id }));
+    test.withReducerTx(worker, (ctx) => m.start_run(ctx, { run_id: 'run_phone_1', job_id: job.id }));
+    expect(test.db.agent_run.run_id.find('run_phone_1')).toMatchObject({ workflow: 'phone', household_id: 'hh_demo', status: 'running' });
+    test.withReducerTx(worker, (ctx) =>
+      m.emit_trace(ctx, { run_id: 'run_phone_1', seq: 0, workflow: 'phone', agent: 'voice_agent', type: 'run_started', title: 'Voice call connected (Demo family)', data_json: '{}', model: '', provider: 'nvidia', latency_ms: 0, tokens_in: 0, tokens_out: 0 }),
+    );
+    expect(test.db.trace_event.run_id.filter('run_phone_1').next().value!.household_id).toBe('hh_demo');
+    test.withReducerTx(worker, (ctx) => m.finish_run(ctx, { run_id: 'run_phone_1', status: 'done', providers_json: '[]', result_json: '{"turns":2}' }));
+    expect(test.db.agent_run.run_id.find('run_phone_1')!.status).toBe('done');
+    expect(test.db.agent_job.id.find(job.id)!.status).toBe('done');
+  });
+
+  it('validates the workflow, the household and the input', () => {
+    const test = seeded();
+    expect(() => enqueue(test, { workflow: 'telepathy' })).toThrow('workflow must be one of');
+    expect(() => enqueue(test, { household_id: 'hh_nope' })).toThrow('unknown household');
+    expect(() => enqueue(test, { input_json: '{nope' })).toThrow('valid JSON');
+    expect(() => enqueue(test, { input_json: '[1]' })).toThrow('JSON object');
+    expect(() => enqueue(test, { input_json: JSON.stringify({ x: 'y'.repeat(9000) }) })).toThrow('too long');
+    expect(test.db.agent_job.count()).toBe(0n);
+    enqueue(test, { input_json: '' }); // blank means {}
+    expect(JSON.parse([...test.db.agent_job.iter()][0]!.input_json)).toEqual({});
+  });
+
+  it('refuses a second queued job for the same call, but allows it once the first was claimed', () => {
+    const test = seeded();
+    enqueue(test);
+    expect(() => enqueue(test)).toThrow('already queued');
+    enqueue(test, { subject_id: 'call_2' });
+    expect(test.db.agent_job.count()).toBe(2n);
+    const first = [...test.db.agent_job.iter()].find((j) => j.subject_id === 'call_1')!;
+    test.withReducerTx(worker, (ctx) => m.claim_job(ctx, { job_id: first.id }));
+    enqueue(test);
+    expect(test.db.agent_job.count()).toBe(3n);
+  });
+
+  it('other workflows can still be queued by the worker (what_if)', () => {
+    const test = seeded();
+    enqueue(test, { workflow: 'what_if', subject_id: 'scn_1', input_json: '{"prompt":"buy a car"}' });
+    expect([...test.db.agent_job.iter()][0]!.workflow).toBe('what_if');
   });
 });
 

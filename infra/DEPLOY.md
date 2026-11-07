@@ -1,21 +1,24 @@
 # Deploying Keystone to AWS
 
-One EC2 box runs everything: **Caddy** (HTTPS) in front of **web** (Next.js), **worker** (agents + ASR) and a **self-hosted
-SpacetimeDB**. Judges scan a QR code and use the app on their phones over HTTPS (the browser mic needs HTTPS).
+One EC2 box runs everything: **Caddy** (HTTPS) in front of **web** (Next.js), **worker** (agents + ASR), the **voice** agent
+(Pipecat: the "Talk to Keystone" button and an optional SignalWire phone line) and a **self-hosted SpacetimeDB**. Judges scan a QR
+code and use the app on their phones over HTTPS (the browser mic needs HTTPS).
 
 ```
 phone ──https/wss──▶ Caddy :443 ──▶ web:3000                         (/)
-                               ├──▶ worker:8787  (prefix /worker stripped)
+                               ├──▶ worker:8787  (prefix /worker stripped; /worker/phone/* answers 404)
+                               ├──▶ host.docker.internal:7860 = voice    (prefix /voice stripped; host network)
                                └──▶ spacetime:3000                   (/v1/... client routes for everyone,
                                                                        publish/delete/logs only from ADMIN_IPS)
 worker ──ws://spacetime:3000 (inside the compose network)──▶ spacetime
+voice  ──http://127.0.0.1:8787/phone/* (x-voice-secret)──▶ worker      browser ◀──WebRTC media, UDP 32768-60999──▶ voice
 ```
 
 | Thing | Value |
 |---|---|
 | Region / instance | us-east-1c, `i-038d84da5ba859189`, t3.medium (2 vCPU, 4 GiB + 4 GiB swap), Ubuntu 24.04, 30 GB gp3 (`vol-0e16d5acd835e1ae7`) |
 | Elastic IP | `52.72.164.85` (`eipalloc-049d3027413dbed61`) |
-| Security group | `sg-0959faaac722648d1` (`keystone-hackutd`): 22 from `129.110.241.55/32` only, 80 and 443 open to the world |
+| Security group | `sg-0959faaac722648d1` (`keystone-hackutd`): 22 from `129.110.241.55/32` only, 80 and 443 open to the world, UDP 32768-60999 open for WebRTC media (section 9) |
 | SSH | `ssh -i ~/.ssh/keystone-hackutd.pem ubuntu@52.72.164.85` (key pair `keystone-hackutd`) |
 | App dir on the box | `/opt/keystone` (owned by `ubuntu`), env file `/opt/keystone/.env`, compose wrapper `/opt/keystone/infra/dc` |
 | Hostnames | `52-72-164-85.sslip.io` (works immediately) or `keystone.tenvor.io` (after the A record, step 2) |
@@ -194,6 +197,8 @@ Browsers then connect straight to Maincloud; Caddy serves nothing under `/v1`.
 curl -s https://52-72-164-85.sslip.io/worker/health | jq '{ok, spacetime, demo_mode, nvidia, jobs_run}'    # spacetime must say "connected"
 curl -sI https://52-72-164-85.sslip.io/ | head -1                                                           # HTTP/2 200
 curl -s -o /dev/null -w '%{http_code}\n' https://52-72-164-85.sslip.io/v1/database/keystone/logs            # 403 from a non-team network
+curl -s https://52-72-164-85.sslip.io/voice/health                                                           # {"ok":true,"service":"keystone-voice",...}
+curl -s -o /dev/null -w '%{http_code}\n' https://52-72-164-85.sslip.io/worker/phone/tools                    # 404: the phone routes are not public
 ```
 Then open the site **on a phone** (cellular, not the team Wi-Fi): the badge in the header must read **Live** (not "Demo data" or
 "Connecting"), open `/me` to land in the Rivera room, press the mic: the browser must offer the microphone (a padlock with a valid cert is what unlocks it).
@@ -263,3 +268,63 @@ aws ec2 describe-security-groups --region $R --filters Name=group-name,Values=ke
 ```
 Also: delete the `keystone` (or `sslip`) DNS record at your DNS provider; `spacetime server remove aws` on laptops that added it; if you used Maincloud, `spacetime delete -s maincloud keystone-hackutd26`.
 The self-hosted database lives in the `keystone_spacetime_home` Docker volume and disappears with the instance.
+
+## 9. Voice agent: the Talk button and the optional phone line
+
+Design: `docs/voice-agent.md` and `docs/voice-selfhost.md`. What runs where:
+
+| Piece | Where | Notes |
+|---|---|---|
+| `voice` container (Pipecat 1.15, Python 3.12) | **host network**, listens on `0.0.0.0:7860` | WebRTC media needs the host's UDP ports. TCP 7860 stays closed in the security group; Caddy reaches it via `host.docker.internal:7860` |
+| Caddy `/voice/*` | prefix stripped | `POST /voice/api/offer` (button), `POST /voice/twiml` and `WS /voice/ws` (phone), `GET /voice/health` |
+| Worker `/phone/*` | `127.0.0.1:8787` on the box | internal; needs the `x-voice-secret` header; Caddy returns 404 for `/worker/phone/*` |
+| Speech and LLM | NVIDIA hosted: Nemotron ASR streaming and Magpie TTS (NVCF gRPC), Nemotron 3.5 Lightning with thinking off (OpenAI-compatible API) | one NVIDIA key; see the rate-limit note below |
+
+**Module change** (new worker-only reducer `agent_enqueue_job`, workflow `phone`): non-breaking, so `infra/deploy.sh --publish` is enough. Never add `-c always` for it.
+
+**AWS: one security group rule (the team runs it; nothing else changes).** WebRTC media uses random UDP ports from Linux's ephemeral range:
+```bash
+aws ec2 authorize-security-group-ingress --region us-east-1 --group-id sg-0959faaac722648d1 --ip-permissions \
+  'IpProtocol=udp,FromPort=32768,ToPort=60999,IpRanges=[{CidrIp=0.0.0.0/0,Description=webrtc-media}]'
+```
+The SignalWire phone line needs **no** rule (its media socket arrives as `wss://` on 443).
+
+**Environment (`.env.prod`; every name is in `infra/env.prod.example`).** The voice and worker containers both read the same file.
+
+| Variable | Needed for | Notes |
+|---|---|---|
+| `VOICE_SHARED_SECRET` | button and phone | **Required.** Long random string (`openssl rand -hex 24`). Without it the worker answers 503 `voice_unconfigured` to every `/phone/*` call |
+| `NVIDIA_API_KEY` or `NVIDIA_VOICE_API_KEY` | button and phone | The voice key wins if set. Use a **different teammate's** key for voice: the free tier is about 40 requests/minute per account and the web agents share the other one |
+| `NVIDIA_ASR_FUNCTION_ID`, `NVIDIA_ASR_SERVER`, `NVIDIA_TTS_FUNCTION_ID` | button and phone | already in the example (Nemotron ASR streaming, Magpie TTS Multilingual) |
+| `NVIDIA_TTS_VOICE` | optional | default `Magpie-Multilingual.EN-US.Mia.Calm`; `Aria.Calm` is the alternative |
+| `PIPECAT_ICE_SERVERS` | button | JSON list, default `[{"urls":"stun:stun.l.google.com:19302"}]`. If venue Wi-Fi blocks UDP, put a Cloudflare TURN entry **first** (`{"urls":"turn:turn.cloudflare.com:3478?transport=udp","username":"...","credential":"..."}`); aiortc uses only the first STUN and the first TURN entry |
+| `NEXT_PUBLIC_VOICE_URL` | button | `https://<host>/voice`; compiled into the web image (compose passes it as a build arg, default `https://$PUBLIC_HOSTNAME/voice`), so changing it needs `infra/deploy.sh` to rebuild web |
+| `PHONE_PINS` | phone | `1234:hh_rivera,5678:hh_nguyen` (optionally `pin:household:member_id`). Synthetic PINs, printed on the demo card |
+| `PHONE_CALLER_SALT` | phone | random salt; caller numbers are only kept as a salted hash, never stored or logged |
+| `SIGNALWIRE_SIGNING_KEY` | phone | verifies the `X-SignalWire-Signature` on `/voice/twiml`. **Empty = skipped with a logged warning**; the media socket stays protected by a short-lived signed token either way |
+| `SIGNALWIRE_SPACE_URL`, `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_PHONE_NUMBER` | phone | informational for the team (the number is shown in `/voice/health`); the service never calls the SignalWire API |
+| `VOICE_ENABLED`, `VOICE_MAX_CALL_SECS` (300), `VOICE_MAX_SESSIONS` (3), `PHONE_MAX_SESSIONS` (4), `VOICE_IDLE_SECS` (20), `VOICE_TRANSPORTS` (`webrtc,twilio`) | optional | `VOICE_ENABLED=0` is the kill switch (button gets 503, the number says "closed" and hangs up) |
+| `VOICE_LLM_MODEL`, `VOICE_LLM_BASE_URL`, `VOICE_LLM_API_KEY`, `VOICE_LLM_TEMPERATURE` (0.7), `VOICE_LLM_MAX_TOKENS` (110) | optional | point at the Brev box by setting base URL + model + key |
+
+The SignalWire values may all stay empty: the Talk button needs none of them.
+
+**Deploy.** `infra/deploy.sh` (the first build of the voice image takes about 5-10 minutes on the box: Pipecat, onnxruntime, aiortc), then the checks in section 4 plus:
+```bash
+ssh -i $KEY ubuntu@$HOST '/opt/keystone/infra/dc ps voice; /opt/keystone/infra/dc logs --tail=30 voice'
+```
+Open the site on a phone **on cellular**, tap Talk to Keystone, allow the mic, and ask "How are we doing?". `chrome://webrtc-internals` should show a selected
+candidate pair with a `srflx` candidate for `52.72.164.85`. The call appears at `/agents` as a `phone` run.
+
+### SignalWire phone number (optional, about 45 minutes, about $2.50 of the $5 deposit)
+
+1. Sign up at signalwire.com and create a **Space** (the space URL looks like `yourspace.signalwire.com`). A trial account only takes calls from numbers you verified, so fund the account with a card (**$5 minimum**) to let judges call. Add a spend limit under Billing.
+2. **Phone Numbers -> Buy a Phone Number**: search area codes 214, 469 or 972 (Dallas) and buy one with **Voice** capability (about $0.50 a month).
+3. Open that number -> **Settings** (Edit Settings) -> **Handle Calls Using: cXML webhook** (also called a LaML webhook; the menu wording differs a little between dashboard versions), then:
+   * **When a call comes in:** `https://<PUBLIC_HOSTNAME>/voice/twiml`, method **POST**, handler type "cXML webhook" (not "Relay" or "Script"). Leave the status callback empty. Save.
+4. **API** page of the project: copy the Project ID, an API token and the **Signing Key** into `.env.prod` as `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_SIGNING_KEY`, plus `SIGNALWIRE_SPACE_URL` and `SIGNALWIRE_PHONE_NUMBER` (E.164, e.g. `+12145550123`). Set `PHONE_PINS` and `PHONE_CALLER_SALT` too, then run `infra/deploy.sh` (restarts voice and worker).
+5. Call the number from a cell phone. You hear the AI disclosure and are asked for the PIN: key it on the keypad (for example the Rivera PIN from the demo card). Then ask: "How are we doing?", "What's coming up this month?", "What if we buy a thirty-five thousand dollar car?" and watch the run appear at `/agents`.
+6. If it fails: SignalWire Dashboard -> **Logs** (voice) shows the webhook response. `403` from `/voice/twiml` means the signing key does not match (clear `SIGNALWIRE_SIGNING_KEY` to skip the check while debugging; the service logs a warning); no audio after the PIN prompt means the WebSocket did not reach `/voice/ws`: check `curl -i https://<host>/voice/health` and `infra/dc logs voice`.
+
+**Operate.** `infra/dc logs -f --tail=100 voice` (heard/said lines, tool timings, no secrets); kill switch: set `VOICE_ENABLED=0` and `infra/deploy.sh`;
+calls end after `VOICE_MAX_CALL_SECS`, after two silent prompts ("Are you still there?", then goodbye; `VOICE_IDLE_SECS` apart), or when the tab closes; the worker also finishes any call with no traffic for 10 minutes as `error: abandoned`.
+On a laptop one live call used about 190 MB and about 20% of one core (`docker stats`); the container limit is 1.2 GB. The image is about 1 GB (no torch).

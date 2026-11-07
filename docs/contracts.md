@@ -65,7 +65,7 @@ Row ids are strings unless marked `u64 auto`. `ts`/`*_at` are SpacetimeDB `Times
 | `worker` (private) | identity pk, label, registered_at | `register_worker` |
 
 ### Trace event semantics (the NVIDIA story)
-`workflow` ∈ huddle | what_if | coach | scam_check | data_quality. `agent` e.g. planner, goal_extractor, reconciler,
+`workflow` ∈ huddle | what_if | coach | scam_check | data_quality | plaid_sync | onboarding_insights | phone. `agent` e.g. planner, goal_extractor, reconciler, voice_agent,
 scam_guard, data_auditor, simulator, coach. `type` ∈ run_started | plan | thought | tool_call | tool_result | handoff | message | final | error.
 `title` is one human-readable line. `data_json` ≤ 4 KB. `provider` ∈ nvidia | brev | tenvor_nemotron | tenvor_qwen | cache | local.
 
@@ -94,6 +94,7 @@ Worker-only (reject unless `ctx.sender` is in `worker`):
 |---|---|
 | `register_worker(secret, label)` | adds caller to `worker` if secret matches the module constant `WORKER_SECRET_SHA256` (set before publish) |
 | `claim_job(job_id)` | queued → claimed (atomic; second claimer fails) |
+| `agent_enqueue_job(workflow, household_id, subject_id, input_json)` | queues a job on the worker's behalf (workflow must be one of the allowed ones, incl. `phone`; refuses a second queued job for the same workflow + subject). A live call is enqueued, claimed and run by the worker itself: no `WorkflowDef` exists for `phone`, so the `JobQueue` ignores those jobs |
 | `start_run(run_id, job_id)` / `finish_run(run_id, status, providers_json, result_json)` | run lifecycle; also marks job done/error |
 | `emit_trace(run_id, seq, workflow, agent, type, title, data_json, model, provider, latency_ms, tokens_in, tokens_out)` | inserts `trace_event` |
 | `agent_upsert_goal`, `agent_create_alert`, `agent_update_scenario`, `agent_coach_reply`, `set_huddle_status` | write results |
@@ -187,10 +188,21 @@ Route `/onboarding` (web). Every step is SpacetimeDB state, so a second family m
 
 Worker-only: `agent_set_account_options(household_id, item_id, rows_json)`. Alert `kind` gains `insight`.
 
-## 8. Phone line (planned, later): call the family's agent
+## 8. Voice line: "Talk to Keystone" button + optional phone number (built; design in `docs/voice-agent.md`, `docs/voice-selfhost.md`)
 
-Call a phone number and get a warm, human-sounding voice that explains the household's finances in plain words, and that
-can run a what-if by voice and narrate the result. Design lives in `docs/voice-agent.md` (research first, build after the
-core demo is solid). Constraints already decided: Nemotron answers through the same tools as the coach; every call is a traced
-`agent_run` (workflow `phone`), so the Agent Trail shows it; callers are matched to a member (phone number on file plus a PIN);
-synthetic data only; a spoken disclosure at the start of every call that it's an AI assistant.
+A warm voice explains the household's finances in plain words and runs what-ifs by voice. Constraints: Nemotron answers through
+the same tools as the coach; every call is a traced `agent_run` (workflow `phone`, agent `voice_agent`), so the Agent Trail shows it;
+synthetic data only; the first thing spoken is a disclosure that it is an AI assistant (no recording, demo data).
+
+- **Browser (primary):** Pipecat SmallWebRTC. `POST {VOICE_BASE}/api/offer` with the standard SmallWebRTC offer JSON
+  (`sdp`, `type`, `pc_id`, `restart_pc`, `requestData`/`request_data` = `{household_id, display_name}`); `PATCH` for trickle ICE.
+  Local `VOICE_BASE=http://localhost:7860`, prod `https://<host>/voice` (Caddy strips the prefix). No PIN: the household comes from the request data.
+  RTVI events carry the live captions, and one server message `{type: "run", run_id}` is sent as soon as the call's `agent_run` exists.
+- **Phone (optional):** SignalWire number -> `POST /voice/twiml` (cXML `<Connect><Stream>`) -> `wss://<host>/voice/ws`; a 4-digit keypad PIN
+  (worker env `PHONE_PINS=1234:hh_rivera`, 3 tries) gates everything. Caller numbers are only ever stored as a salted hash.
+- **Worker routes** (internal, `x-voice-secret` = `VOICE_SHARED_SECRET`; Caddy answers 404 for `/worker/phone/*`): `POST /phone/identify`,
+  `POST /phone/start`, `GET /phone/tools`, `POST /phone/tool`, `POST /phone/trace`, `POST /phone/end`. Tools are `get_health_indicators, get_forecast,
+  get_obligations, get_accounts, simulate_scenario, goal_feasibility, detect_scam_signals`; the model gets a trimmed `voiceView` of each result.
+- **Trace of a call:** `run_started` "Voice call connected (Rivera family)" -> `plan` -> briefing `tool_call`/`tool_result` ->
+  per turn `message` "Heard: ..." (model `nemotron-asr-streaming`) and "Said: ..." (Lightning; data has LLM first-token, TTS first-audio and voice-to-voice ms)
+  with `tool_call`/`tool_result` between them -> `final` (turns, tool calls, p50/p95 voice-to-voice).

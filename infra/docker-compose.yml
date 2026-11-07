@@ -1,4 +1,5 @@
-# Keystone production stack on one box: Caddy (TLS) -> web (Next.js) + worker (agents/ASR) + self-hosted SpacetimeDB.
+# Keystone production stack on one box: Caddy (TLS) -> web (Next.js) + worker (agents/ASR) + voice (Pipecat: Talk button + phone line)
+# + self-hosted SpacetimeDB.
 #
 # ALWAYS run it from the repo root with the root .env as the compose env file (that is how ${...} below and the
 # NEXT_PUBLIC_* build args are filled in; compose would otherwise look for infra/.env). infra/dc does this for you:
@@ -20,6 +21,8 @@ services:
     environment:
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}   # 52-72-164-85.sslip.io or keystone.tenvor.io in prod; "localhost" = Caddy's local CA
       ADMIN_IPS: ${ADMIN_IPS:-129.110.241.55/32}       # only these client IPs may publish/delete/inspect databases through Caddy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # /voice/* goes to the voice service, which runs on the host network (see `voice` below)
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data        # certificates + ACME account: keep it, Let's Encrypt rate-limits re-issuing
@@ -36,6 +39,7 @@ services:
         NEXT_PUBLIC_SPACETIME_URI: ${NEXT_PUBLIC_SPACETIME_URI:-wss://${PUBLIC_HOSTNAME:-localhost}}
         NEXT_PUBLIC_SPACETIME_DB: ${NEXT_PUBLIC_SPACETIME_DB:-${SPACETIME_DB:-keystone}}
         NEXT_PUBLIC_WORKER_URL: ${NEXT_PUBLIC_WORKER_URL:-https://${PUBLIC_HOSTNAME:-localhost}/worker}
+        NEXT_PUBLIC_VOICE_URL: ${NEXT_PUBLIC_VOICE_URL:-https://${PUBLIC_HOSTNAME:-localhost}/voice}   # the Talk button's /api/offer lives under this
         NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS:-0}
     image: keystone-web:latest
     restart: always
@@ -54,6 +58,8 @@ services:
       DATA_DIR: /data/seed
     expose:
       - "8787"
+    ports:
+      - "127.0.0.1:8787:8787"        # loopback only: the voice service (host network) calls /phone/* here. Not reachable from outside the box.
     extra_hosts:
       - "host.docker.internal:host-gateway"   # lets the worker reach a SpacetimeDB running on the Docker host (local testing)
     volumes:
@@ -67,6 +73,35 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Voice agent (Pipecat): the "Talk to Keystone" button (browser WebRTC) and the optional SignalWire phone line.
+  # - network_mode: host, because WebRTC media uses random UDP ports in 32768-60999 (aiortc has no port-range option) and Docker
+  #   cannot publish a random UDP range. That UDP range is open in the security group (DEPLOY.md, "Voice"). In this mode there are
+  #   no ports/expose/service-name DNS: it listens on the host at 0.0.0.0:7860 (the security group keeps TCP 7860 closed), reaches the
+  #   worker on 127.0.0.1:8787 and is reached by Caddy at host.docker.internal:7860 (Caddy strips the /voice prefix).
+  # - Secrets come from the same ../.env as the worker: NVIDIA_API_KEY (or NVIDIA_VOICE_API_KEY), VOICE_SHARED_SECRET,
+  #   PIPECAT_ICE_SERVERS, NVIDIA_TTS_VOICE, PHONE_CALLER_SALT, SIGNALWIRE_*. The SignalWire ones may all stay empty (button only).
+  voice:
+    build:
+      context: ../services/voice
+    image: keystone-voice:latest
+    network_mode: host
+    restart: always
+    env_file: ../.env
+    environment:
+      VOICE_HTTP: "0.0.0.0:7860"
+      WORKER_URL: "http://127.0.0.1:8787"
+      VOICE_TRANSPORTS: "webrtc,twilio"        # twilio = the Twilio-format media stream SignalWire speaks; drop it for button-only
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}
+    depends_on:
+      - worker
+    mem_limit: 1200m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:7860/health', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   # SpacetimeDB, self-hosted on this box (official image, pinned to the SDK/CLI version the repo uses, 2.14.1).
   # - The worker talks to it inside the compose network: SPACETIME_URI=ws://spacetime:3000.

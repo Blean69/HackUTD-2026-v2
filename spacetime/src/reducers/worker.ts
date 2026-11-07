@@ -3,7 +3,7 @@ import { t } from 'spacetimedb/server';
 import spacetimedb from '../schema';
 import { effectiveWorkerHash, sameHex } from '../config';
 import { sha256Hex } from '../sha256';
-import { cleanText, fail, newId, requireHousehold, type Ctx } from '../util';
+import { cleanText, enqueueJob, fail, newId, requireHousehold, WORKFLOWS, type Ctx } from '../util';
 
 const ALERT_SEVERITIES = ['info', 'warn', 'critical'];
 const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor', 'insight'];
@@ -35,6 +35,34 @@ export const register_worker = spacetimedb.reducer(
     if (ctx.db.worker.identity.find(ctx.sender)) ctx.db.worker.identity.update(row);
     else ctx.db.worker.insert(row);
     ctx.db.presence.identity.delete(ctx.sender); // the worker is not a person in the lobby
+  },
+);
+
+/**
+ * Queue a job on behalf of the worker. A live phone call (workflow `phone`) is not started by any client reducer: the voice
+ * service asks the worker, which enqueues the job here and then claims it itself (start_run needs a claimed job). The
+ * worker's JobQueue ignores `phone` jobs because no WorkflowDef is registered for it, so the call session owns the run.
+ */
+export const agent_enqueue_job = spacetimedb.reducer(
+  { workflow: t.string(), household_id: t.string(), subject_id: t.string(), input_json: t.string() },
+  (ctx, { workflow, household_id, subject_id, input_json }) => {
+    requireWorker(ctx);
+    oneOf(workflow, [...WORKFLOWS], 'workflow');
+    requireHousehold(ctx, household_id);
+    const subject = cleanText(subject_id, 'subject_id', 120, true);
+    const text = input_json.trim() === '' ? '{}' : input_json;
+    let input: unknown;
+    try {
+      input = JSON.parse(text);
+    } catch {
+      return fail('input_json must be valid JSON');
+    }
+    if (!input || typeof input !== 'object' || Array.isArray(input)) fail('input_json must be a JSON object');
+    if (text.length > 8192) fail('input_json is too long (max 8192 characters)');
+    for (const j of ctx.db.agent_job.household_id.filter(household_id)) {
+      if (j.workflow === workflow && j.subject_id === subject && subject !== '' && j.status === 'queued') fail(`a ${workflow} job for "${subject}" is already queued`);
+    }
+    enqueueJob(ctx, workflow as (typeof WORKFLOWS)[number], household_id, subject, input);
   },
 );
 

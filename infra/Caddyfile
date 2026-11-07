@@ -1,6 +1,9 @@
 # Keystone edge. One hostname, automatic HTTPS (Let's Encrypt for a real DNS name, Caddy's local CA for "localhost").
 #
+#   /worker/phone/*                           -> 404 (internal: only the voice service calls it, on the loopback)
 #   /worker/*                                 -> worker:8787, prefix stripped   (NEXT_PUBLIC_WORKER_URL=https://<host>/worker)
+#   /voice/*                                  -> voice service (host network) host.docker.internal:7860, prefix stripped:
+#                                                POST /voice/api/offer (WebRTC), WS /voice/ws and POST /voice/twiml (SignalWire)
 #   /v1/... what a browser/client needs       -> spacetime:3000, for everyone   (NEXT_PUBLIC_SPACETIME_URI=wss://<host>)
 #   /v1/... everything else (publish, ...)    -> spacetime:3000, ONLY from ADMIN_IPS; 403 for anyone else
 #   everything else                           -> web:3000 (Next.js)
@@ -31,6 +34,21 @@
 	log {
 		output stdout
 		format console
+	}
+
+	# The worker's phone routes are internal (the voice service calls them on 127.0.0.1:8787 with the x-voice-secret header).
+	# This block MUST stay above /worker/*: handle blocks are tried in file order and the first match wins.
+	handle /worker/phone/* {
+		respond "not found" 404
+	}
+
+	# Voice agent (Pipecat). It runs on the host network (WebRTC needs the host's UDP ports), so it is reached through the
+	# host-gateway alias declared on this service in docker-compose.yml. A WebSocket upgrade (/voice/ws) works through reverse_proxy.
+	handle /voice/* {
+		uri strip_prefix /voice
+		reverse_proxy host.docker.internal:7860 {
+			flush_interval -1
+		}
 	}
 
 	# Agent worker (GET /health, POST /asr, POST /plaid/*). The worker never sees the /worker prefix.

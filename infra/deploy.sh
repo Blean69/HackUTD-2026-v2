@@ -86,6 +86,8 @@ for svc in web worker; do
   $D image inspect "keystone-$svc:prev" >/dev/null 2>&1 || { echo "no keystone-$svc:prev image: nothing to roll back to" >&2; exit 1; }
   $D tag "keystone-$svc:prev" "keystone-$svc:latest"
 done
+# the voice service is optional (it came later): roll it back too when a previous image exists
+if $D image inspect keystone-voice:prev >/dev/null 2>&1; then $D tag keystone-voice:prev keystone-voice:latest; fi
 if [ "$D" = docker ]; then infra/dc up -d --no-build; else sudo infra/dc up -d --no-build; fi
 echo "rolled back."
 REMOTE
@@ -244,9 +246,9 @@ chmod +x infra/dc infra/deploy.sh 2>/dev/null || true
 D=docker; docker info >/dev/null 2>&1 || D="sudo docker"
 DC="infra/dc"; [ "$D" = docker ] || DC="sudo infra/dc"
 SERVICES=()                                                   # empty = every service, including spacetime
-if [ "$MAINCLOUD" = 1 ]; then SERVICES=(caddy web worker); fi
+if [ "$MAINCLOUD" = 1 ]; then SERVICES=(caddy web worker voice); fi
 # keep the images that are currently running so `deploy.sh --rollback` can go back one deploy
-for svc in web worker; do $D tag "keystone-$svc:latest" "keystone-$svc:prev" 2>/dev/null || true; done
+for svc in web worker voice; do $D tag "keystone-$svc:latest" "keystone-$svc:prev" 2>/dev/null || true; done
 $DC up -d --build --remove-orphans "${SERVICES[@]}"
 $DC ps
 $D image prune -f >/dev/null || true

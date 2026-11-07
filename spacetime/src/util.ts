@@ -8,7 +8,7 @@ import type spacetimedb from './schema';
 export type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
 export const ROLES = ['family', 'advisor', 'guest'] as const;
-export const WORKFLOWS = ['huddle', 'what_if', 'coach', 'scam_check', 'data_quality', 'plaid_sync', 'onboarding_insights'] as const;
+export const WORKFLOWS = ['huddle', 'what_if', 'coach', 'scam_check', 'data_quality', 'plaid_sync', 'onboarding_insights', 'phone'] as const;
 
 /** Reject the call with a message the client can show (a SenderError is the "expected error" channel). */
 export function fail(message: string): never {

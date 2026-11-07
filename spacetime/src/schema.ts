@@ -346,7 +346,7 @@ const agent_job = table(
   { name: 'agent_job', public: true },
   {
     id: t.u64().primaryKey().autoInc(),
-    workflow: t.string(), // huddle | what_if | coach | scam_check | data_quality | plaid_sync | onboarding_insights
+    workflow: t.string(), // huddle | what_if | coach | scam_check | data_quality | plaid_sync | onboarding_insights | phone
     household_id: t.string().index('btree'),
     subject_id: t.string(),
     input_json: t.string(),

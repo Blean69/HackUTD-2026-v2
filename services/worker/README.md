@@ -160,3 +160,14 @@ history is ready, tolerates a failed `/liabilities/get`, maps Plaid types to our
 ambiguous ones), flips Plaid's sign convention, upserts in batches, then `recompute_household`. Env: `PLAID_CLIENT_ID`,
 `PLAID_SECRET`, `PLAID_ENV` (sandbox), `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES`, `PLAID_POLL_ATTEMPTS`, `PLAID_POLL_MS`, `PLAID_SANDBOX_USER_FILE`.
 Code: `src/plaid/`, `src/workflows/plaid_sync.ts`. Live-tested: 7 accounts / 331 transactions synced.
+
+## Phone / voice routes (`src/phone/`)
+
+Internal routes for the Pipecat voice service (`services/voice`, design in `docs/voice-agent.md`): `POST /phone/identify`, `POST /phone/start`,
+`GET /phone/tools`, `POST /phone/tool`, `POST /phone/trace`, `POST /phone/end`. Every call needs the header `x-voice-secret` = `VOICE_SHARED_SECRET`
+(503 `voice_unconfigured` while it is unset, 503 `voice_disabled` with `VOICE_ENABLED=0`); Caddy answers 404 for `/worker/phone/*`, so they are only
+reachable on the box's loopback (`127.0.0.1:8787`). One call = one `agent_run` (workflow `phone`): `start` queues the job through the worker-only reducer
+`agent_enqueue_job`, claims it and runs the briefing tools; `tool` runs a tool through `RunContext.tool` (so `tool_call`/`tool_result` land in the trace) and
+returns a trimmed `voiceView`; `trace` takes the "Heard"/"Said" lines; `end` writes `final` and `finish_run`. No `WorkflowDef` is registered for `phone`, so the
+`JobQueue` leaves these jobs alone and a live call does not take one of its two slots. A reaper finishes calls with no traffic for 10 minutes as `error: abandoned`.
+Env: `VOICE_SHARED_SECRET`, `PHONE_PINS` (`1234:hh_rivera,...`), optional `VOICE_ENABLED`, `PHONE_MAX_SESSIONS` (4), `PHONE_IDLE_REAP_SECS` (600), `PHONE_MAX_CALL_SECS` (900).
