@@ -88,4 +88,5 @@ whole app runs without keys.
 - Agent tools are plain functions with a JSON schema in one registry (`services/worker/src/tools/`). Each returns small JSON.
 - Money: numbers in USD; format with `Intl.NumberFormat` in the UI; tabular numerals.
 - Prefer boring and visible over clever and hidden. A judge has 3 minutes.
-- When you think of an idea instead of building it, log it on the team brainstorm board (link in README).
+- Work is tracked as GitHub issues on the team Project (labels: `kind:*`, `track:*`, `P0/P1/P2`, `effort:*`). When you think of
+  an idea instead of building it, open an issue labelled `kind:idea`. Reference issues in commits (`Fixes #12`).
