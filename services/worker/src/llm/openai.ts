@@ -63,7 +63,7 @@ export function portableSchema(node: unknown): unknown {
 export function buildBody(cfg: ProviderConfig, model: string, req: ChatRequest): Record<string, unknown> {
   // Qwen on tenvor.io is the slow fallback (~37 tokens/s: one reasoning-enabled plan took 38 s), so it answers without reasoning
   // unless TENVOR_THINKING=1. NVIDIA models keep the per-request toggle.
-  const thinking = req.thinking === true && (cfg.id === 'nvidia' || process.env.TENVOR_THINKING === '1');
+  const thinking = req.thinking === true && (cfg.id === 'nvidia' || cfg.id === 'brev' || process.env.TENVOR_THINKING === '1');
   const kwargs: Record<string, unknown> = { enable_thinking: thinking };
   if (thinking && /nemotron-3-super/i.test(model)) kwargs.low_effort = true;
   // Ultra card: effort knob is medium_effort, and tool calls + reasoning need force_nonempty_content

@@ -101,8 +101,8 @@ describe('LLMClient failover', () => {
     const c = new LLMClient([fake('nvidia', () => new LLMError('x', 500))], { retriesPerProvider: 0, sleep: async () => undefined });
     await expect(c.chat(req)).rejects.toThrow(/all LLM providers failed/);
   });
-  it('default order is nvidia,tenvor_qwen; providers with an empty key, model or base URL are skipped silently', () => {
-    expect(loadConfig({}).providerOrder).toEqual(['nvidia', 'tenvor_qwen']);
+  it('default order is nvidia,brev,tenvor_qwen; providers with an empty key, model or base URL are skipped silently', () => {
+    expect(loadConfig({}).providerOrder).toEqual(['nvidia', 'brev', 'tenvor_qwen']);
     const env = { NVIDIA_API_KEY: 'k', TENVOR_API_KEY: 't', TENVOR_NEMOTRON_MODEL: '', TENVOR_QWEN_MODEL: 'Qwen/Qwen3-30B-A3B' };
     const c = loadConfig({ ...env, LLM_PROVIDER_ORDER: 'nvidia,tenvor_nemotron,tenvor_qwen' });
     expect(c.providers.find((p) => p.id === 'tenvor_nemotron')!.enabled).toBe(false);
@@ -110,6 +110,15 @@ describe('LLMClient failover', () => {
     expect(loadConfig({ ...env, TENVOR_BASE_URL: '' }).providers.find((p) => p.id === 'tenvor_qwen')!.enabled).toBe(false);
     expect(loadConfig({ NVIDIA_API_KEY: 'k', NEMOTRON_MODEL: '' }).providers[0]!.enabled).toBe(true); // empty model falls back to the default id
     expect(loadConfig({ NVIDIA_API_KEY: 'k', NVIDIA_BASE_URL: '' }).providers[0]!.enabled).toBe(false);
+  });
+  it('brev (our Nemotron on an NVIDIA Brev GPU) sits between the API and Qwen once configured; key defaults to EMPTY', () => {
+    const env = { NVIDIA_API_KEY: 'k', TENVOR_API_KEY: 't', TENVOR_QWEN_MODEL: 'qwen' };
+    expect(buildLLMClient(loadConfig(env)).providers.map((p) => p.id)).toEqual(['nvidia', 'tenvor_qwen', 'local']);
+    const c = loadConfig({ ...env, BREV_BASE_URL: 'https://brev.example/v1', BREV_NEMOTRON_MODEL: 'nemotron-lightning' });
+    expect(buildLLMClient(c).providers.map((p) => p.id)).toEqual(['nvidia', 'brev', 'tenvor_qwen', 'local']);
+    const brev = c.providers.find((p) => p.id === 'brev')!;
+    expect(brev.apiKey).toBe('EMPTY');
+    expect(brev.fastModel).toBe('nemotron-lightning');
   });
   it('builds from config: no keys -> local only; keys -> nvidia first, local appended', () => {
     expect(buildLLMClient(loadConfig({})).providers.map((p) => p.id)).toEqual(['local']);

@@ -8,12 +8,12 @@ export function modelLabel(model?: string, provider?: Provider): { text: string;
   const m = (model ?? "").toLowerCase();
   let name = model ?? provider ?? "";
   if (m.includes("nemotron")) {
-    const size = m.includes("nano") ? "Nano" : m.includes("super") ? "Super" : m.includes("ultra") ? "Ultra" : m.includes("vl") ? "VL" : "";
+    const size = m.includes("nano") ? "Nano" : m.includes("lightning") ? "Lightning" : m.includes("super") ? "Super" : m.includes("ultra") ? "Ultra" : m.includes("vl") ? "VL" : "";
     name = `Nemotron${size ? ` ${size}` : ""}`;
   } else if (m.includes("qwen")) name = "Qwen";
   const prov = provider === "tenvor_nemotron" || provider === "tenvor_qwen" ? "tenvor" : provider ?? "";
   const isFallback = provider === "tenvor_nemotron" || provider === "tenvor_qwen";
-  return { text: prov ? `${name} · ${prov}` : name, tone: isFallback ? "accent" : m.includes("nemotron") ? "brand" : "neutral", title: `${model ?? ""}${provider ? ` via ${provider}` : ""}` };
+  return { text: prov ? `${name} · ${prov}` : name, tone: isFallback ? "accent" : m.includes("nemotron") ? "brand" : "neutral", title: `${model ?? ""}${provider ? ` via ${provider === "brev" ? "our NVIDIA Brev GPU" : provider}` : ""}` };
 }
 
 export function ProviderBadge({ model, provider }: { model?: string; provider?: Provider }) {

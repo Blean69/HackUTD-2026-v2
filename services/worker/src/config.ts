@@ -17,8 +17,8 @@ export function loadEnv(): void {
   }
 }
 
-export type ProviderId = 'nvidia' | 'tenvor_nemotron' | 'tenvor_qwen' | 'local';
-export const REMOTE_PROVIDERS = ['nvidia', 'tenvor_nemotron', 'tenvor_qwen'] as const;
+export type ProviderId = 'nvidia' | 'brev' | 'tenvor_nemotron' | 'tenvor_qwen' | 'local';
+export const REMOTE_PROVIDERS = ['nvidia', 'brev', 'tenvor_nemotron', 'tenvor_qwen'] as const;
 
 export interface ProviderConfig {
   id: Exclude<ProviderId, 'local'>;
@@ -74,10 +74,10 @@ const num = (v: string | undefined, d: number): number => {
 const str = (v: string | undefined, d = ''): string => (v === undefined || v.trim() === '' ? d : v.trim());
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const order = str(env.LLM_PROVIDER_ORDER, 'nvidia,tenvor_qwen')
+  const order = str(env.LLM_PROVIDER_ORDER, 'nvidia,brev,tenvor_qwen')
     .split(',')
     .map((s) => s.trim())
-    .filter((s): s is ProviderId => ['nvidia', 'tenvor_nemotron', 'tenvor_qwen', 'local'].includes(s));
+    .filter((s): s is ProviderId => ['nvidia', 'brev', 'tenvor_nemotron', 'tenvor_qwen', 'local'].includes(s));
 
   const nvKey = str(env.NVIDIA_API_KEY);
   const tvKey = str(env.TENVOR_API_KEY);
@@ -88,6 +88,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const fast = str(env.NEMOTRON_FAST_MODEL, 'nvidia/nemotron-3.5-lightning-30b-a3b');
   const tvNemotron = str(env.TENVOR_NEMOTRON_MODEL);
   const tvQwen = str(env.TENVOR_QWEN_MODEL);
+  // Our own Nemotron on an NVIDIA Brev GPU (vLLM or NIM, OpenAI-compatible). No shared rate limit; empty base URL = off.
+  const brevBase = str(env.BREV_BASE_URL);
+  const brevModel = str(env.BREV_NEMOTRON_MODEL);
+  const brevFast = str(env.BREV_FAST_MODEL, brevModel);
 
   const providers: ProviderConfig[] = [
     {
@@ -98,6 +102,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       fastModel: fast,
       rpm: num(env.NVIDIA_RPM, 36), // free tier is ~40/min; leave headroom
       enabled: nvKey !== '' && nvBase !== '' && nemotron !== '',
+    },
+    {
+      id: 'brev',
+      baseUrl: brevBase,
+      apiKey: str(env.BREV_API_KEY, 'EMPTY'), // vLLM --api-key; 'EMPTY' when the server has none
+      agentModel: brevModel,
+      fastModel: brevFast,
+      rpm: num(env.BREV_RPM, 0),
+      enabled: brevBase !== '' && brevModel !== '',
     },
     {
       id: 'tenvor_nemotron',
@@ -121,7 +134,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const demo = str(env.DEMO_MODE, 'cache_first');
   return {
-    providerOrder: order.length ? order : ['nvidia', 'tenvor_qwen'],
+    providerOrder: order.length ? order : ['nvidia', 'brev', 'tenvor_qwen'],
     providers,
     localFallback: str(env.LLM_LOCAL_FALLBACK, '1') !== '0',
     llmTimeoutMs: num(env.LLM_TIMEOUT_MS, 60_000),

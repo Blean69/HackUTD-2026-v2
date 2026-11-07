@@ -39,6 +39,7 @@ registerCoreRoutes(
       return {
         ok: true,
         nvidia: pick('nvidia'),
+        brev: pick('brev'),
         tenvor_nemotron: pick('tenvor_nemotron'),
         tenvor_qwen: pick('tenvor_qwen'),
         local: 'always_available',

@@ -287,7 +287,7 @@ export type TraceType =
   | "message"
   | "final"
   | "error";
-export type Provider = "nvidia" | "tenvor_nemotron" | "tenvor_qwen" | "cache" | "local";
+export type Provider = "nvidia" | "brev" | "tenvor_nemotron" | "tenvor_qwen" | "cache" | "local";
 
 export interface TraceEvent {
   id: number;

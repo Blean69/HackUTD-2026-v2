@@ -218,6 +218,23 @@ Client: `OpenAI(base_url="https://<tenvor-host>/v1", api_key=...)`, `model="nemo
 
 Alternatives: (a) `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (32.7 GB repo, "Nemotron Open Model License", vllm >= 0.12): `wget https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8/resolve/main/nano_v3_reasoning_parser.py` then `VLLM_USE_FLASHINFER_MOE_FP8=1 vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8 --served-model-name nemotron --max-num-seqs 8 --max-model-len 262144 --trust-remote-code --enable-auto-tool-choice --tool-call-parser qwen3_coder --reasoning-parser-plugin nano_v3_reasoning_parser.py --reasoning-parser nano_v3 --kv-cache-dtype fp8` (tested H100-80GB). (b) 24 GB card: `nvidia/NVIDIA-Nemotron-3.5-Bolt-74B-A9B-24GB` (2-bit, 24.1 GB, VLM, OpenMDW-1.1) but its recipe needs a nightly vLLM image, `pip install b12x`, a custom `ultra_v3` reasoning-parser plugin and `--linear-backend b12x`; likely Blackwell-oriented, so treat as UNVERIFIED/risky for tonight. Note vLLM's reasoning docs list no Nemotron parser by name; parser names above come from the model cards.
 
+## 5b. Brev: our own Nemotron on an NVIDIA Brev GPU (team has $60 of Brev credits)
+
+Brev credits buy GPU hours, not API quota. A Brev instance serving Nemotron gives an OpenAI-compatible endpoint with no
+shared rate limit; the worker uses it as provider `brev` (order `nvidia,brev,tenvor_qwen`: the API's Ultra plans first,
+and when it rate-limits, runs move to our Brev Nemotron instead of Qwen; trace badges read "Nemotron Lightning · brev").
+
+1. brev.nvidia.com → New instance → a single GPU with **48–80 GB** (L40S 48 GB is the cheapest fit for Lightning NVFP4;
+   A100 80 GB or H100 80 GB if L40S is unavailable). At roughly $1–3/hour, $60 covers the rest of the event. Stop it overnight if
+   nobody is demoing.
+2. On the instance: the `vllm serve nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4 ...` command from section 5, plus
+   `--api-key <random>` (the endpoint will be public). On non-Blackwell GPUs, if the NVFP4/humming flags fail, use alternative (a),
+   Nemotron 3 Nano 30B-A3B FP8.
+3. Expose port 8000 with Brev's public share URL (Brev console → Access → share a port).
+4. In `.env` / `.env.prod`: `BREV_BASE_URL=https://<share-url>/v1`, `BREV_API_KEY=<the --api-key>`, `BREV_NEMOTRON_MODEL=nemotron`
+   (the `--served-model-name`). Redeploy (`infra/deploy.sh`). `GET /worker/health` should then list `brev`.
+5. Smoke test: `curl -s https://<share-url>/v1/models -H "Authorization: Bearer <key>"`.
+
 ## 6. Rate limits / credits (personal key)
 
 - Free tier: 40 requests/minute, per NVIDIA developer-forum threads (https://forums.developer.nvidia.com/t/request-for-nvidia-build-api-rate-limit-increase-40-rpm-200-rpm/378450); a moderator states the limit "depends on model, use-case and the amount of current overall traffic" and cannot be raised on the free tier. The NIM FAQ says limits vary per model and shows your account's limit in the build.nvidia.com nav bar (https://forums.developer.nvidia.com/t/nvidia-nim-faq/300317). Speech pages say "Traffic from other users may cause throttling".
