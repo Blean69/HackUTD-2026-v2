@@ -1,10 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { CoachPanel } from "@/components/coach/CoachPanel";
 import { BrandMark, IconActivity, IconClose, IconMenu, IconMore, IconSpark } from "@/components/icons";
 import { AgentActivityPanel } from "@/components/trace/AgentActivityPanel";
+import { CallPill, CallSheet } from "@/components/voice/CallSheet";
+import { TalkButton } from "@/components/voice/TalkButton";
+import { openCallSheet } from "@/lib/voiceCall/session";
 import { IconButton } from "@/components/ui";
 import { PRODUCT_NAME } from "@/lib/constants";
 import { useLatestRun } from "@/lib/data/hooks";
@@ -67,6 +70,16 @@ export function AppShell({ householdId, header, children }: { householdId: strin
   const latest = useLatestRun(householdId);
   const me = ident.name ?? "Someone";
 
+  // `?talk=1` (the QR code on the demo card) opens the call sheet. Opening needs no tap; starting the call still does.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("talk") !== "1") return;
+    q.delete("talk");
+    const rest = q.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`);
+    openCallSheet();
+  }, []);
+
   // Close the slide-over panels when navigating.
   useEffect(() => {
     closeCoach();
@@ -109,17 +122,21 @@ export function AppShell({ householdId, header, children }: { householdId: strin
 
       {/* phones: bottom tabs */}
       <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface md:hidden" aria-label="Quick navigation">
-        <ul className="mx-auto grid max-w-lg grid-cols-5">
-          {TABS.map((t) => {
+        <ul className="mx-auto grid max-w-lg grid-cols-6">
+          {TABS.map((t, i) => {
             const n = NAV.find((x) => x.key === t.key)!;
             const active = n.match(path, householdId);
             return (
-              <li key={t.key}>
-                <Link href={n.href(householdId)} aria-current={active ? "page" : undefined} className={cx("flex h-14 flex-col items-center justify-center gap-0.5 text-[0.68rem] font-medium", active ? "text-brand-strong" : "text-ink-3")}>
-                  <n.Icon size={21} />
-                  {t.label}
-                </Link>
-              </li>
+              <Fragment key={t.key}>
+                {/* The call button sits in the middle of the bar, raised, so it is the first thing a thumb finds. */}
+                {i === 2 ? <li><TalkButton variant="tab" /></li> : null}
+                <li>
+                  <Link href={n.href(householdId)} aria-current={active ? "page" : undefined} className={cx("flex h-14 flex-col items-center justify-center gap-0.5 text-[0.68rem] font-medium", active ? "text-brand-strong" : "text-ink-3")}>
+                    <n.Icon size={21} />
+                    {t.label}
+                  </Link>
+                </li>
+              </Fragment>
             );
           })}
           <li>
@@ -150,6 +167,9 @@ export function AppShell({ householdId, header, children }: { householdId: strin
         <CoachPanel householdId={householdId} me={me} />
       </SlideOver>
       <AgentActivityPanel open={trace.open} runId={target} onClose={closeTrace} />
+      {/* Voice call: the call lives in lib/voiceCall, so it survives leaving this page. */}
+      <CallSheet householdId={householdId} />
+      <CallPill />
     </div>
   );
 }

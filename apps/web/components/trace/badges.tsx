@@ -26,12 +26,13 @@ export function modelLabel(model?: string, provider?: Provider): { text: string;
   const m = (model ?? "").toLowerCase();
   let name = model ? (model.split("/").pop() ?? model) : (provider ?? "");
   if (m.includes("nemotron")) {
-    const size = m.includes("nano") ? "Nano" : m.includes("lightning") ? "Lightning" : m.includes("super") ? "Super" : m.includes("ultra") ? "Ultra" : m.includes("vl") ? "VL" : "";
+    const size = m.includes("nano") ? "Nano" : m.includes("lightning") ? "Lightning" : m.includes("super") ? "Super" : m.includes("ultra") ? "Ultra" : m.includes("asr") ? "ASR" : m.includes("vl") ? "VL" : "";
     name = `Nemotron${size ? ` ${size}` : ""}`;
-  } else if (m.includes("qwen")) name = "Qwen";
+  } else if (m.includes("magpie")) name = "Magpie TTS";
+  else if (m.includes("qwen")) name = "Qwen";
   const isFallback = provider === "tenvor_nemotron" || provider === "tenvor_qwen";
   const prov = providerName(provider);
-  const tone: Tone = isFallback ? "watch" : m.includes("nemotron") ? "brand" : "neutral";
+  const tone: Tone = isFallback ? "watch" : m.includes("nemotron") || m.includes("magpie") ? "brand" : "neutral";
   const via = provider ? ` via ${provider === "brev" ? "our NVIDIA Brev GPU" : isFallback ? "the Tenvor fallback provider" : prov}` : "";
   return { text: prov ? `${name} · ${prov}` : name, tone, title: `${model ?? ""}${via}`.trim() };
 }

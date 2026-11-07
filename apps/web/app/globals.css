@@ -198,6 +198,11 @@ summary {
 .anim-side { animation: side-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .anim-drawer { animation: drawer-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .anim-fade { animation: fade-in 0.25s ease-out both; }
+/* Call sheet: slides up as a bottom sheet on phones, fades in as a centred dialog from md up. */
+.anim-dialog { animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (min-width: 768px) {
+  .anim-dialog { animation: fade-in 0.2s ease-out both; }
+}
 .anim-rec { animation: pulse-ring 1.6s ease-out infinite; }
 .anim-blink { animation: blink 1.1s steps(2, start) infinite; }
 .anim-spin { animation: spin 0.9s linear infinite; }

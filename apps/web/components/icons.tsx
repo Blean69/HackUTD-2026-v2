@@ -12,6 +12,8 @@ function Svg({ size = 20, children, ...rest }: P) {
 
 // ---- actions
 export const IconMic = (p: P) => <Svg {...p}><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></Svg>;
+export const IconMicOff = (p: P) => <Svg {...p}><path d="M9 9v2a3 3 0 0 0 5.1 2.1M15 10.6V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 11.2 5.6M19 11c0 1-.2 1.9-.6 2.8M12 18v3M4 4l16 16" /></Svg>;
+export const IconPhone = (p: P) => <Svg {...p}><path d="M21 16.5v2.7a1.8 1.8 0 0 1-2 1.8 17.7 17.7 0 0 1-7.7-2.7 17.4 17.4 0 0 1-5.4-5.4A17.7 17.7 0 0 1 3.2 5a1.8 1.8 0 0 1 1.8-2h2.7a1.8 1.8 0 0 1 1.8 1.5c.1.9.4 1.8.7 2.6a1.8 1.8 0 0 1-.4 1.9L8.6 10.1a14.4 14.4 0 0 0 5.4 5.4l1.1-1.2a1.8 1.8 0 0 1 1.9-.4c.8.3 1.7.6 2.6.7A1.8 1.8 0 0 1 21 16.5z" /></Svg>;
 export const IconStop = (p: P) => <Svg {...p}><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" /></Svg>;
 export const IconPlay = (p: P) => <Svg {...p}><path d="M8 5.5v13l11-6.5z" fill="currentColor" /></Svg>;
 export const IconSend = (p: P) => <Svg {...p}><path d="M4 12 20 4l-4 16-4.5-6.5z" /><path d="M11.5 13.5 20 4" /></Svg>;

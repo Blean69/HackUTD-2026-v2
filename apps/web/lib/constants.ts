@@ -14,4 +14,9 @@ export const CHALLENGE_NOTE = "Built for the PNC 360° Financial Health Navigato
 export const SPACETIME_URI = process.env.NEXT_PUBLIC_SPACETIME_URI ?? "ws://localhost:3000";
 export const SPACETIME_DB = process.env.NEXT_PUBLIC_SPACETIME_DB ?? "keystone";
 export const WORKER_URL = process.env.NEXT_PUBLIC_WORKER_URL ?? "http://localhost:8787";
+/**
+ * Voice service (Pipecat SmallWebRTC): `POST {VOICE_URL}/api/offer` for signalling, `GET {VOICE_URL}/health` for the
+ * availability check. Local default is the bot on :7860; production is `https://<host>/voice` behind Caddy.
+ */
+export const VOICE_URL = (process.env.NEXT_PUBLIC_VOICE_URL ?? "http://localhost:7860").replace(/\/+$/, "");
 export const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "1";

@@ -276,7 +276,7 @@ export interface BankConnection {
 
 // ---------------------------------------------------------------- agent runs + trace (NVIDIA story)
 
-export type Workflow = "huddle" | "what_if" | "coach" | "scam_check" | "data_quality" | "plaid_sync" | "onboarding_insights";
+export type Workflow = "huddle" | "what_if" | "coach" | "scam_check" | "data_quality" | "plaid_sync" | "onboarding_insights" | "phone";
 export type TraceType =
   | "run_started"
   | "plan"
@@ -369,7 +369,7 @@ export interface Vote {
   updated_at: string;
 }
 
-export const WORKFLOWS: Workflow[] = ["huddle", "what_if", "coach", "scam_check", "data_quality", "plaid_sync", "onboarding_insights"];
+export const WORKFLOWS: Workflow[] = ["huddle", "what_if", "coach", "scam_check", "data_quality", "plaid_sync", "onboarding_insights", "phone"];
 
 export const WORKFLOW_LABEL: Record<Workflow, string> = {
   huddle: "Table Mode",
@@ -379,4 +379,5 @@ export const WORKFLOW_LABEL: Record<Workflow, string> = {
   data_quality: "Data quality",
   plaid_sync: "Bank sync",
   onboarding_insights: "Onboarding insights",
+  phone: "Voice call",
 };

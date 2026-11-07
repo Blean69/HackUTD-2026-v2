@@ -13,6 +13,8 @@ import {
 
 export const NEMO_SUPER = "nvidia/llama-3.3-nemotron-super-49b-v1.5";
 export const NEMO_NANO = "nvidia/nvidia-nemotron-nano-9b-v2";
+export const NEMO_FAST = "nvidia/nemotron-3.5-lightning-30b-a3b";
+export const NEMO_ASR = "nvidia/nemotron-asr-streaming";
 
 export interface Step {
   wait: number;
@@ -244,6 +246,8 @@ export function ambientScript(workflow: Workflow, cached: boolean): Step[] {
       return [mk("router", "run_started", "Coach question: \"Are we saving enough?\"", 200), mk("coach", "plan", "Plan: read savings rate and goals", 700, NEMO_SUPER), mk("coach", "tool_call", "get_health_indicators(household_id)", 500), mk("coach", "tool_result", "Savings rate 11% (watch)", 500), mk("coach", "final", "Answer ready", 900, NEMO_SUPER)];
     case "scam_check":
       return [mk("router", "run_started", "Scam check: Zelle payment of $950 to a new payee", 200), mk("scam_guard", "plan", "Plan: payee age, amount vs history, caller context", 700, NEMO_SUPER), mk("scam_guard", "tool_call", "payee_history(payee_id)", 500), mk("scam_guard", "tool_result", "New payee; first payment; 4.2x usual amount", 600), mk("scam_guard", "tool_call", "match_known_patterns()", 500), mk("scam_guard", "tool_result", "Matches tech-support scam (3 signals)", 600), mk("scam_guard", "final", "Alert raised: hold payment and call customer", 800, NEMO_SUPER)];
+    case "phone":
+      return [mk("router", "run_started", "Voice call connected from the browser (Maria)", 200), mk("voice_agent", "plan", "Plan: brief on health and forecast, then answer by voice", 700, NEMO_FAST), mk("voice_agent", "tool_call", "get_health_indicators(household_id)", 500), mk("voice_agent", "tool_result", "Runway 2.1 months, savings rate 11%", 600), mk("voice_agent", "message", "Heard: \"What if we buy a thirty-five thousand dollar car?\"", 700, NEMO_ASR), mk("voice_agent", "tool_call", "simulate_scenario(kind=\"purchase\", amount=35000)", 500), mk("voice_agent", "tool_result", "Low point $2,940 on Mar 14; verdict tight", 700), mk("voice_agent", "message", "Said: That would leave you tight in mid-March. Want to see it with a larger down payment?", 700, NEMO_FAST), mk("voice_agent", "final", "Call ended: 3 turns, 2 tool calls", 800)];
     case "plaid_sync":
       return [mk("router", "run_started", "Bank sync: First Platypus Bank", 200), mk("planner", "plan", "Plan: accounts, liabilities, transactions, map types", 700, NEMO_SUPER), mk("plaid_sync", "tool_call", "plaid.transactions_sync()", 500), mk("plaid_sync", "tool_result", "92 added", 700), mk("plaid_sync", "final", "Synced and recomputed", 800)];
     default:

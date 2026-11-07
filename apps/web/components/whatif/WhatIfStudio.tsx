@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { IconAlert, IconArrowRight, IconCheck, IconSend, IconSpark } from "@/components/icons";
 import { Button, Chip, Empty, inputCls, PageHeader, Panel, Skeleton, Spinner, type Tone } from "@/components/ui";
+import { AskOutLoudCard } from "@/components/voice/AskOutLoudCard";
 import { requestSimulation } from "@/lib/data/actions";
 import { useRuns, useScenarios } from "@/lib/data/hooks";
 import { cx, metric, relTime } from "@/lib/format";
@@ -178,6 +179,8 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
         sub="Describe a decision in plain English. Agents replay your next 90 days with it and show what changes."
         right={<Button variant="secondary" onClick={() => openTrace()}>Agent activity</Button>}
       />
+
+      <AskOutLoudCard className="mb-4" />
 
       <Panel title="Describe a decision" sub="Try a suggestion or write your own. Results appear for everyone in the room.">
         <form onSubmit={(e) => { e.preventDefault(); void submit(prompt); }}>

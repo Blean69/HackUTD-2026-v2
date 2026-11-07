@@ -1,4 +1,5 @@
 "use client";
+import { AskOutLoudCard } from "@/components/voice/AskOutLoudCard";
 import { FamilyVotingCard } from "@/components/voting/FamilyVotingCard";
 import { useRoomFinance } from "@/lib/data/finance-hooks";
 import { useGoals } from "@/lib/data/hooks";
@@ -19,6 +20,8 @@ export function Dashboard({ householdId }: { householdId: string }) {
   return (
     <div className="space-y-3">
       <KpiRow fin={fin} rangeLabel={label} />
+
+      <AskOutLoudCard />
 
       <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-12">
         <TrendCard fin={fin} rangeLabel={label} className="lg:col-span-2 2xl:col-span-5" />

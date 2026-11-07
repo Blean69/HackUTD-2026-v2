@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import { IconBroadcast, IconCalendar, IconChevronDown, IconPlus, IconUsers } from "@/components/icons";
 import { Avatar, Chip, IconButton, selectCls } from "@/components/ui";
+import { TalkButton } from "@/components/voice/TalkButton";
 import { PRODUCT_NAME } from "@/lib/constants";
 import { useAccounts, useHousehold, useHuddle, useHealth, useMembers, usePresence } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
@@ -117,6 +118,8 @@ export function RoomHeader({ householdId }: { householdId: string }) {
           Table Mode
           {live ? <span className="anim-blink h-1.5 w-1.5 rounded-full bg-[#3fd18a]" aria-label="live now" /> : null}
         </Link>
+        {/* Phones get the call button in the bottom tab bar instead. */}
+        <TalkButton variant="header" className="hidden md:inline-flex" />
         <span className="hidden items-center gap-2.5 md:flex">
           <AgentActivityButton householdId={householdId} />
           <NotificationsBell householdId={householdId} me={ident.name ?? "Someone"} />

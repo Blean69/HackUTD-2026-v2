@@ -181,7 +181,7 @@ class MockEngine {
   private seedHistory(now: Date): void {
     const plan: [Workflow, string, boolean, number][] = [
       ["huddle", "hh_okafor", true, 14], ["what_if", "hh_brooks", false, 11], ["scam_check", "hh_nguyen", false, 8],
-      ["coach", "hh_patel", true, 6], ["data_quality", "hh_patel", false, 4], ["huddle", "hh_brooks", false, 2],
+      ["coach", "hh_patel", true, 6], ["data_quality", "hh_patel", false, 4], ["phone", "hh_rivera", false, 3], ["huddle", "hh_brooks", false, 2],
     ];
     for (const [wf, hid, cached, minsAgo] of plan) this.seedRun(wf, hid, cached, minsAgo, now);
     // Each seeded proposal's verdict links to a finished affordability run, like the live module's.
