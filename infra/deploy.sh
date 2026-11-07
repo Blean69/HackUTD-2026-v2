@@ -184,17 +184,18 @@ D=docker; docker info >/dev/null 2>&1 || D="sudo docker"
 DC="infra/dc"; [ "$D" = docker ] || DC="sudo infra/dc"
 state=""
 for i in $(seq 1 30); do
-  state="$($DC exec -T worker node -e "fetch('http://127.0.0.1:8787/health').then(r=>r.json()).then(j=>process.stdout.write(String(j.spacetime)),()=>process.stdout.write('unreachable'))" 2>/dev/null || true)"
+  state="$($DC exec -T worker node -e "fetch('http://127.0.0.1:8787/health').then(r=>r.json()).then(j=>process.stdout.write(String(j.spacetime)),()=>process.stdout.write('unreachable'))" </dev/null 2>/dev/null || true)"
   [ "$state" = connected ] && break
   echo "worker spacetime state: ${state:-unknown} (attempt $i/30)"; sleep 4
 done
 if [ "$state" != connected ]; then
   echo "worker never connected to SpacetimeDB. Last worker logs:" >&2
-  $DC logs --tail=25 worker >&2 || true
+  $DC logs --tail=25 worker </dev/null >&2 || true
   echo "Did you publish the module (DEPLOY.md step 3/4) with the hash of THIS WORKER_SECRET?" >&2
   exit 1
 fi
-$DC exec -T worker npm run seed
+# </dev/null: this script arrives on stdin, and docker exec would otherwise swallow the rest of it
+$DC exec -T worker npm run seed </dev/null
 REMOTE
 fi
 
