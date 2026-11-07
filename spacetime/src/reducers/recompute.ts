@@ -1,0 +1,42 @@
+// Scheduled recompute (every 60 s) of households that changed, plus a daily refresh so forecasts roll forward.
+import spacetimedb, { recompute_tick } from '../schema';
+import { recomputeHousehold } from '../recompute';
+import { isoDay } from '../util';
+
+const MAX_PER_TICK = 20;
+
+/**
+ * Fired by the `recompute_tick` schedule row. Scheduled reducers are private in SpacetimeDB 2.x, so clients cannot
+ * call this directly. It recomputes (a) households flagged dirty by seed/import reducers and (b) households whose
+ * indicators were last computed on a previous day, at most MAX_PER_TICK per run.
+ */
+export const tick_recompute = spacetimedb.reducer(
+  { onSchedule: recompute_tick },
+  { arg: recompute_tick.rowType },
+  (ctx) => {
+    const today = isoDay(ctx.timestamp);
+    const todo: string[] = [];
+    const seen = new Set<string>();
+    for (const d of ctx.db.dirty_household.iter()) {
+      if (!seen.has(d.household_id)) { seen.add(d.household_id); todo.push(d.household_id); }
+    }
+    for (const hh of ctx.db.household.iter()) {
+      if (seen.has(hh.id)) continue;
+      const marker = ctx.db.health_indicator.id.find(`${hh.id}:liquidity_runway`);
+      if (!marker || isoDay(marker.updated_at) !== today) { seen.add(hh.id); todo.push(hh.id); }
+    }
+    todo.sort();
+    for (const id of todo.slice(0, MAX_PER_TICK)) {
+      if (!ctx.db.household.id.find(id)) {
+        ctx.db.dirty_household.household_id.delete(id);
+        continue;
+      }
+      try {
+        recomputeHousehold(ctx, id);
+      } catch (e) {
+        console.error(`tick_recompute: ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
+        ctx.db.dirty_household.household_id.delete(id); // do not retry a poison household every minute
+      }
+    }
+  },
+);

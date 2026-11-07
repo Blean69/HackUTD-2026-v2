@@ -1,0 +1,251 @@
+// Worker-only reducers. Every one except register_worker rejects callers that are not in the `worker` table.
+import { t } from 'spacetimedb/server';
+import spacetimedb from '../schema';
+import { sha256Hex } from '../sha256';
+import { cleanText, fail, newId, requireHousehold, type Ctx } from '../util';
+
+/**
+ * SHA-256 (hex) of the worker secret that `register_worker` accepts.
+ *
+ * This is the hash of the DEV secret `keystone-dev-secret`, so local development works out of the box.
+ * CHANGE IT BEFORE DEPLOYING TO MAINCLOUD (the repo is public and so is this hash):
+ *   printf %s 'a-long-random-secret' | sha256sum
+ * then paste the hex digest here, republish, and give the worker the same secret as WORKER_SECRET.
+ */
+const WORKER_SECRET_SHA256 = '42c50c717ac955d1a374d919e57aa767830e7a175f16f609657ea8fce2a422eb';
+
+const ALERT_SEVERITIES = ['info', 'warn', 'critical'];
+const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor'];
+const FEASIBILITIES = ['', 'on_track', 'stretch', 'off_track'];
+const GOAL_SOURCES = ['huddle', 'manual', 'coach'];
+const SCENARIO_STATUSES = ['queued', 'running', 'done', 'error'];
+const HUDDLE_STATUSES = ['live', 'analyzing', 'done'];
+const MAX_TRACE_DATA = 4096;
+
+function requireWorker(ctx: Ctx): void {
+  if (!ctx.db.worker.identity.find(ctx.sender)) fail('worker only');
+}
+function oneOf(value: string, allowed: string[], field: string): string {
+  if (!allowed.includes(value)) fail(`${field} must be one of: ${allowed.map((a) => a || '""').join(', ')}`);
+  return value;
+}
+
+export const register_worker = spacetimedb.reducer(
+  { secret: t.string(), label: t.string() },
+  (ctx, { secret, label }) => {
+    if (sha256Hex(secret) !== WORKER_SECRET_SHA256) fail('invalid worker secret');
+    const row = { identity: ctx.sender, label: cleanText(label, 'label', 60, true) || 'worker', registered_at: ctx.timestamp };
+    if (ctx.db.worker.identity.find(ctx.sender)) ctx.db.worker.identity.update(row);
+    else ctx.db.worker.insert(row);
+    ctx.db.presence.identity.delete(ctx.sender); // the worker is not a person in the lobby
+  },
+);
+
+/** queued -> claimed, atomically. A second claimer gets an error. */
+export const claim_job = spacetimedb.reducer({ job_id: t.u64() }, (ctx, { job_id }) => {
+  requireWorker(ctx);
+  const job = ctx.db.agent_job.id.find(job_id);
+  if (!job) fail(`unknown job ${job_id}`);
+  if (job.status !== 'queued') fail(`job ${job_id} is already ${job.status}`);
+  ctx.db.agent_job.id.update({ ...job, status: 'claimed', claimed_by: ctx.sender });
+});
+
+export const start_run = spacetimedb.reducer(
+  { run_id: t.string(), job_id: t.u64() },
+  (ctx, { run_id, job_id }) => {
+    requireWorker(ctx);
+    const job = ctx.db.agent_job.id.find(job_id);
+    if (!job) fail(`unknown job ${job_id}`);
+    if (job.status !== 'claimed') fail(`job ${job_id} must be claimed before start_run (is ${job.status})`);
+    const id = cleanText(run_id, 'run_id', 80);
+    if (ctx.db.agent_run.run_id.find(id)) fail(`run ${id} already exists`);
+    ctx.db.agent_run.insert({
+      run_id: id,
+      job_id,
+      workflow: job.workflow,
+      household_id: job.household_id,
+      status: 'running',
+      started_at: ctx.timestamp,
+      finished_at: undefined,
+      providers_json: '[]',
+      result_json: '',
+    });
+    ctx.db.agent_job.id.update({ ...job, run_id: id });
+  },
+);
+
+export const finish_run = spacetimedb.reducer(
+  { run_id: t.string(), status: t.string(), providers_json: t.string(), result_json: t.string() },
+  (ctx, { run_id, status, providers_json, result_json }) => {
+    requireWorker(ctx);
+    oneOf(status, ['done', 'error'], 'status');
+    const run = ctx.db.agent_run.run_id.find(run_id);
+    if (!run) fail(`unknown run ${run_id}`);
+    ctx.db.agent_run.run_id.update({ ...run, status, finished_at: ctx.timestamp, providers_json, result_json });
+    const job = ctx.db.agent_job.id.find(run.job_id);
+    if (job) ctx.db.agent_job.id.update({ ...job, status });
+  },
+);
+
+export const emit_trace = spacetimedb.reducer(
+  {
+    run_id: t.string(),
+    seq: t.u32(),
+    workflow: t.string(),
+    agent: t.string(),
+    type: t.string(),
+    title: t.string(),
+    data_json: t.string(),
+    model: t.string(),
+    provider: t.string(),
+    latency_ms: t.u32(),
+    tokens_in: t.u32(),
+    tokens_out: t.u32(),
+  },
+  (ctx, a) => {
+    requireWorker(ctx);
+    const run = ctx.db.agent_run.run_id.find(a.run_id);
+    if (!run) fail(`unknown run ${a.run_id} (call start_run first)`);
+    // Payloads over 4 KB would bloat every subscriber; keep a valid-JSON marker plus a preview instead.
+    const data_json =
+      a.data_json.length <= MAX_TRACE_DATA
+        ? a.data_json
+        : JSON.stringify({ truncated: true, original_length: a.data_json.length, preview: a.data_json.slice(0, 3500) });
+    ctx.db.trace_event.insert({
+      id: 0n,
+      run_id: a.run_id,
+      household_id: run.household_id,
+      seq: a.seq,
+      ts: ctx.timestamp,
+      workflow: a.workflow,
+      agent: a.agent,
+      type: a.type,
+      title: a.title.slice(0, 300),
+      data_json,
+      model: a.model,
+      provider: a.provider,
+      latency_ms: a.latency_ms,
+      tokens_in: a.tokens_in,
+      tokens_out: a.tokens_out,
+    });
+  },
+);
+
+/** Create or update a goal with the agent-owned fields. id "" creates a new goal. */
+export const agent_upsert_goal = spacetimedb.reducer(
+  {
+    id: t.string(),
+    household_id: t.string(),
+    title: t.string(),
+    target_amount: t.f64(),
+    target_date: t.string(),
+    priority: t.i32(),
+    feasibility: t.string(),
+    evidence_quote: t.string(),
+    source: t.string(),
+  },
+  (ctx, a) => {
+    requireWorker(ctx);
+    requireHousehold(ctx, a.household_id);
+    oneOf(a.feasibility, FEASIBILITIES, 'feasibility');
+    oneOf(a.source, GOAL_SOURCES, 'source');
+    const base = {
+      household_id: a.household_id,
+      title: cleanText(a.title, 'title', 140),
+      target_amount: Number.isFinite(a.target_amount) ? a.target_amount : 0,
+      target_date: cleanText(a.target_date, 'target_date', 32, true),
+      priority: a.priority,
+      feasibility: a.feasibility,
+      evidence_quote: cleanText(a.evidence_quote, 'evidence_quote', 300, true),
+      source: a.source,
+    };
+    const prev = a.id ? ctx.db.goal.id.find(a.id) : null;
+    if (prev) {
+      ctx.db.goal.id.update({ ...prev, ...base, updated_at: ctx.timestamp });
+      return;
+    }
+    const id = a.id || newId(ctx, 'goal_', (x) => !!ctx.db.goal.id.find(x));
+    ctx.db.goal.insert({ id, ...base, created_at: ctx.timestamp, updated_at: ctx.timestamp });
+  },
+);
+
+/** Create or replace an alert. A stable id makes re-runs idempotent. Ids starting with "rule:" are reserved. */
+export const agent_create_alert = spacetimedb.reducer(
+  {
+    id: t.string(),
+    household_id: t.string(),
+    severity: t.string(),
+    kind: t.string(),
+    title: t.string(),
+    detail: t.string(),
+    related_ids_json: t.string(),
+  },
+  (ctx, a) => {
+    requireWorker(ctx);
+    requireHousehold(ctx, a.household_id);
+    oneOf(a.severity, ALERT_SEVERITIES, 'severity');
+    oneOf(a.kind, ALERT_KINDS, 'kind');
+    if (a.id.startsWith('rule:')) fail('alert ids starting with "rule:" are reserved for recompute_household');
+    const row = {
+      household_id: a.household_id,
+      severity: a.severity,
+      kind: a.kind,
+      title: cleanText(a.title, 'title', 200),
+      detail: cleanText(a.detail, 'detail', 2000, true),
+      related_ids_json: a.related_ids_json || '[]',
+    };
+    const prev = a.id ? ctx.db.alert.id.find(a.id) : null;
+    if (prev) {
+      ctx.db.alert.id.update({ ...prev, ...row });
+      return;
+    }
+    const id = a.id || newId(ctx, 'alt_', (x) => !!ctx.db.alert.id.find(x));
+    ctx.db.alert.insert({ id, ...row, created_at: ctx.timestamp, acknowledged_by: '' });
+  },
+);
+
+export const agent_update_scenario = spacetimedb.reducer(
+  { id: t.string(), status: t.string(), result_json: t.string() },
+  (ctx, { id, status, result_json }) => {
+    requireWorker(ctx);
+    oneOf(status, SCENARIO_STATUSES, 'status');
+    const s = ctx.db.scenario.id.find(id);
+    if (!s) fail(`unknown scenario "${id}"`);
+    ctx.db.scenario.id.update({ ...s, status, result_json });
+  },
+);
+
+export const agent_coach_reply = spacetimedb.reducer(
+  { household_id: t.string(), text: t.string(), run_id: t.string() },
+  (ctx, { household_id, text, run_id }) => {
+    requireWorker(ctx);
+    requireHousehold(ctx, household_id);
+    ctx.db.coach_message.insert({
+      id: 0n,
+      household_id,
+      role: 'assistant',
+      author_name: 'Coach',
+      text: cleanText(text, 'text', 8000),
+      run_id,
+      created_at: ctx.timestamp,
+    });
+  },
+);
+
+export const set_huddle_status = spacetimedb.reducer(
+  { huddle_id: t.string(), status: t.string() },
+  (ctx, { huddle_id, status }) => {
+    requireWorker(ctx);
+    oneOf(status, HUDDLE_STATUSES, 'status');
+    const h = ctx.db.huddle.id.find(huddle_id);
+    if (!h) fail(`unknown huddle "${huddle_id}"`);
+    ctx.db.huddle.id.update({ ...h, status, ended_at: h.ended_at ?? (status === 'live' ? undefined : ctx.timestamp) });
+  },
+);
+
+/** Privacy: delete a huddle's raw transcript once the goals and evidence quotes have been extracted. */
+export const purge_transcript = spacetimedb.reducer({ huddle_id: t.string() }, (ctx, { huddle_id }) => {
+  requireWorker(ctx);
+  const n = ctx.db.transcript_line.huddle_id.delete(huddle_id);
+  console.info(`purge_transcript: removed ${n} line(s) for ${huddle_id}`);
+});
