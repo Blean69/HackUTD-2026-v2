@@ -118,6 +118,20 @@ describe('plaid_sync workflow', () => {
     expect(t.sink.traces.filter((e) => e.type === 'message' && /still loading/.test(e.title)).length).toBe(2);
   });
 
+  it('keeps polling a fresh item whose status says complete but which has produced no cursor yet (seen on the live sandbox)', async () => {
+    const t = setup();
+    addItem(t.store);
+    t.client.syncScript = [
+      page({ next_cursor: '', transactions_update_status: 'NOT_READY' }),
+      page({ next_cursor: '', transactions_update_status: 'HISTORICAL_UPDATE_COMPLETE' }), // 0 added, no cursor: Plaid is still generating
+      page({ added: manyTxns(5), next_cursor: 'c1', transactions_update_status: 'HISTORICAL_UPDATE_COMPLETE' }),
+    ];
+    await t.exec();
+    expect(t.client.count('transactionsSync')).toBe(3);
+    expect(t.store.txns.size).toBe(5);
+    expect(t.store.itemsById.get('item_fake_1')!.cursor).toBe('c1');
+  });
+
   it('treats PRODUCT_NOT_READY on a fresh item as "wait and retry", and gives up gracefully after the poll limit', async () => {
     const t = setup({ pollAttempts: 3 });
     addItem(t.store);

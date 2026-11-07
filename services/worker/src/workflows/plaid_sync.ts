@@ -239,7 +239,9 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
       cursor = page.next;
       cursorAdvanced = true;
     }
-    const waiting = page.status === 'NOT_READY' || page.status === 'INITIAL_UPDATE_COMPLETE' || (page.status === 'TRANSACTIONS_UPDATE_STATUS_UNKNOWN' && upserts.size === 0);
+    // Plaid's sandbox can report a finished status while it is still generating the history (0 added, no cursor yet), so
+    // an empty cursor on a fresh item also means "not ready"; a real cursor only exists once the first pull has happened.
+    const waiting = !cursor || page.status === 'NOT_READY' || page.status === 'INITIAL_UPDATE_COMPLETE' || (page.status === 'TRANSACTIONS_UPDATE_STATUS_UNKNOWN' && upserts.size === 0);
     if (!fresh || !waiting) break;
     if (attempt === maxAttempts) {
       historyPending = true;
