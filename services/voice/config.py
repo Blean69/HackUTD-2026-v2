@@ -11,7 +11,10 @@ from dotenv import load_dotenv
 def load_env() -> None:
     """Dev convenience: read the repo-root .env (or VOICE_ENV_FILE) without overriding real env vars. Production uses compose env_file."""
     explicit = os.environ.get("VOICE_ENV_FILE")
-    candidates = [Path(explicit)] if explicit else [Path(__file__).resolve().parents[2] / ".env", Path(__file__).resolve().parent / ".env"]
+    here = Path(__file__).resolve()
+    # In the repo this file is services/voice/config.py (repo root = parents[2]); in the image it is /app/config.py,
+    # which has no parents[2], so only look up the tree as far as it goes.
+    candidates = [Path(explicit)] if explicit else [*([here.parents[2] / ".env"] if len(here.parents) > 2 else []), here.parent / ".env"]
     for p in candidates:
         if p.is_file():
             load_dotenv(p, override=False)
