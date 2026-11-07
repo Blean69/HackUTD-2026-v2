@@ -222,6 +222,8 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
   let cursorAdvanced = false;
   let historyPending = false;
   let noTxns: string | null = null;
+  const quietNeeded = fresh ? (rt.quietPolls ?? 0) : 0;
+  let quiet = 0;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let page: SyncPageResult;
     try {
@@ -252,7 +254,17 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
     // Plaid's sandbox can report a finished status while it is still generating the history (0 added, no cursor yet), so
     // an empty cursor on a fresh item also means "not ready"; a real cursor only exists once the first pull has happened.
     const waiting = !cursor || page.status === 'NOT_READY' || page.status === 'INITIAL_UPDATE_COMPLETE' || (page.status === 'TRANSACTIONS_UPDATE_STATUS_UNKNOWN' && upserts.size === 0);
-    if (!fresh || !waiting) break;
+    if (!fresh) break;
+    if (!waiting) {
+      // "complete" is not proof the history is all here: wait for a poll that brings nothing new (see PlaidRuntime.quietPolls)
+      quiet = page.added.length + page.modified.length === 0 ? quiet + 1 : 0;
+      if (quiet >= quietNeeded) break;
+      if (attempt < maxAttempts) {
+        run.emit('bank_connector', 'message', `Plaid says ${inst}'s history is complete but just sent ${page.added.length + page.modified.length} more row(s); one more check in ${Math.round(rt.pollMs / 1000)}s (${attempt}/${maxAttempts})`, { have: upserts.size });
+        await rt.sleep(rt.pollMs);
+        continue;
+      }
+    }
     if (attempt === maxAttempts) {
       historyPending = true;
       break;

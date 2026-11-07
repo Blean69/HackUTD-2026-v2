@@ -222,6 +222,28 @@ describe('workflows on the local provider (no keys, no database)', () => {
     expect(sink.traces.some((t) => t.title.includes('Purged'))).toBe(true);
   });
 
+  it('Table Mode: what people read never says "Huddle" (workflow id, table and reducer names stay internal)', async () => {
+    const say = (text: string) => [{ speaker: 'Marisol', text }];
+    // a normal run, a run with a scam, an empty run (nothing to analyze) and a failing run
+    const runs: { name: string; titles: string[] }[] = [];
+    const collect = async (name: string, hd: ReturnType<typeof deps>, j: JobInfo) => {
+      await runJob(j, hd.d);
+      const alerts = hd.sink.of('createAlert').flatMap((a) => [(a[0] as { title: string }).title, (a[0] as { detail: string }).detail]);
+      runs.push({ name, titles: [...hd.sink.traces.map((t) => t.title), ...alerts] });
+    };
+    await collect('normal', deps(smallHousehold(), {}, say('We want to save nine thousand for Abuela\'s medical costs by next June.')), job('huddle', { subjectId: 'hud_1' }));
+    await collect('scam', deps(smallHousehold(), {}, [{ speaker: 'Tom', text: 'A man said he was our grandson in jail and told us to buy gift cards and keep it secret from his parents, right now.' }]), job('huddle', { subjectId: 'hud_2' }));
+    await collect('empty', deps(smallHousehold(), {}, []), job('huddle', { subjectId: 'hud_3' }));
+    const failing = deps(smallHousehold(), { loadData: async () => smallHousehold() }, say('x'));
+    failing.d.env = { transcript: async () => { throw new Error('transcript store offline'); } };
+    await collect('failing', failing, job('huddle', { subjectId: 'hud_4' }));
+    for (const r of runs) for (const t of r.titles) expect(t, `${r.name}: ${t}`).not.toMatch(/huddle/i);
+    const start = runs[0]!.titles.find((t) => /^Started /.test(t))!;
+    expect(start).toBe('Started Table Mode run for Test Family');
+    expect(runs[2]!.titles).toEqual(expect.arrayContaining(['Table Mode had no transcript lines, so there is nothing to analyze.', 'Table Mode closed with no transcript']));
+    expect(runs[3]!.titles).toContain('Table Mode analysis did not finish');
+  });
+
   it('a failing workflow ends in an error event, an error run, and cleans up (scenario error / transcript purge)', async () => {
     const { d, sink } = deps(smallHousehold(), { loadData: async () => smallHousehold() });
     const out = await runJob(job('what_if', { input: { prompt: '' } }), d);

@@ -64,6 +64,9 @@ done
 [ -n "$KEY" ] || die "need --key (or KEYSTONE_KEY)"
 [ -f "$KEY" ] || die "ssh key not found: $KEY"
 case "$REMOTE_DIR" in /*) ;; *) die "--dir must be an absolute path (is '$REMOTE_DIR')" ;; esac
+if [ "$MAINCLOUD" = 1 ] && { [ "$PUBLISH" = 1 ] || [ "$SET_HASH" = 1 ]; }; then
+  die "--publish / --set-worker-hash work inside the self-hosted spacetime container; with --maincloud use \`spacetime publish -s maincloud\` and \`spacetime call -s maincloud <db> admin_set_worker_secret_hash\` (DEPLOY.md)"
+fi
 case "$ENV_FILE" in /*) ;; *) ENV_FILE="$PWD/$ENV_FILE" ;; esac
 
 SSH_OPTS=(-i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=15)

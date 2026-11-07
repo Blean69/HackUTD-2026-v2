@@ -1,7 +1,7 @@
 // DEMO_MODE=cache_first: replay an earlier identical run (same workflow + normalized input) instead of calling the LLM.
 // Replay re-emits the original trace events under the new run with timing compressed to <= 8 s, provider "cache",
 // and re-applies the recorded results. New input always runs live.
-import { sha1, sleep as realSleep, truncate } from '../util.js';
+import { sha1, sleep as realSleep, truncate, workflowLabel } from '../util.js';
 import { applyEffects, type Effect, type RunContext } from './run.js';
 
 export interface CachedTraceEvent {
@@ -67,7 +67,7 @@ export async function replayRun(
   run.emit(
     'planner',
     'message',
-    `Cache hit: an identical ${run.info.workflow} run finished earlier. Replaying its ${body.length} steps (about ${Math.max(1, Math.round(totalMs / 1000))} s).`,
+    `Cache hit: an identical ${workflowLabel(run.info.workflow)} run finished earlier. Replaying its ${body.length} steps (about ${Math.max(1, Math.round(totalMs / 1000))} s).`,
     { replayed_from: cached.runId, steps: body.length },
     { provider: 'cache', model: '' },
   );

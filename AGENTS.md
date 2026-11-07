@@ -84,8 +84,8 @@ regenerate both binding folders. Commit the regenerated bindings.
 
 See `infra/DEPLOY.md`. In short: `.env.prod` (gitignored, never committed) holds production values; `infra/deploy.sh`
 rsyncs the tree to the box and runs Docker Compose; the module is published from inside the spacetime container;
-`infra/deploy.sh --seed` seeds. The production `WORKER_SECRET` hash is a **local, uncommitted edit** of
-`spacetime/src/reducers/worker.ts` at publish time. The committed value stays the dev hash so tests pass. Never commit
+`infra/deploy.sh --seed` seeds. The production worker secret is set in the database with `infra/deploy.sh --publish`
+(or `--set-worker-hash`), which calls the publisher-only `admin_set_worker_secret_hash` reducer; no source edit. Never commit
 `.env`, `.env.prod`, or a production hash. Don't run `docker compose config` without `-q`; it prints secrets.
 
 ## Configuration

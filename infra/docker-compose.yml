@@ -58,6 +58,7 @@ services:
       - "host.docker.internal:host-gateway"   # lets the worker reach a SpacetimeDB running on the Docker host (local testing)
     volumes:
       - ../data/seed:/data/seed:ro   # `docker compose exec worker npm run seed` reads these
+      - ../data/plaid:/data/plaid:ro # Plaid Sandbox custom user (the onboarding demo bank)
       - worker_data:/app/.data       # worker identity token (WORKER_TOKEN_FILE), so restarts keep the same identity
       - worker_cache:/app/.cache     # College Scorecard / external API cache
     healthcheck:

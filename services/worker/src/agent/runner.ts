@@ -3,7 +3,7 @@ import type { LLMLike } from '../llm/client.js';
 import type { ExternalApis } from '../tools/external.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { HouseholdData } from '../types.js';
-import { truncate } from '../util.js';
+import { truncate, workflowLabel } from '../util.js';
 import { getWorkflow } from '../workflows/index.js';
 import type { JobInfo, WorkflowEnv } from '../workflows/types.js';
 import { replayRun, type RunHistory } from './cache.js';
@@ -58,7 +58,7 @@ export async function runJob(job: JobInfo, deps: RunnerDeps): Promise<RunOutcome
         ...(deps.agentThinking !== undefined ? { agentThinking: deps.agentThinking } : {}),
       },
     );
-    run.emit('planner', 'run_started', `Started ${job.workflow.replace('_', ' ')} run for ${data.household.name}`, { job_id: job.id.toString(), workflow: job.workflow, subject_id: job.subjectId, household_id: job.householdId, demo_mode: deps.demoMode, template_id: data.household.template_id || data.household.id });
+    run.emit('planner', 'run_started', `Started ${workflowLabel(job.workflow)} run for ${data.household.name}`, { job_id: job.id.toString(), workflow: job.workflow, subject_id: job.subjectId, household_id: job.householdId, demo_mode: deps.demoMode, template_id: data.household.template_id || data.household.id });
 
     const def = getWorkflow(job.workflow);
     if (!def) throw new Error(`no workflow registered for "${job.workflow}"`);

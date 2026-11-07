@@ -8,6 +8,7 @@ cd data
 python3 generate.py                 # --seed 2026 by default, writes data/seed/*.json (about 0.73 MB)
 python3 generate.py --seed 7 --out /tmp/other   # any seed works; ids below are for seed 2026 only
 python3 generate.py --report        # also prints every planted anomaly (txn ids) and every balance
+python3 plaid_user.py               # only the Plaid Sandbox custom user -> data/plaid/sandbox_user.json (generate.py runs it too)
 ```
 
 Python 3.12 to 3.14, no third-party packages (`requirements.txt` is intentionally empty). The same seed gives
@@ -104,6 +105,36 @@ created_at, closes_at (ISO), status: "open" }`, `Vote { id: "<proposal_id>:<vote
 voter_name, choice: "yes"|"no"|"abstain", updated_at }`. `details` keys the worker understands: `kind` (`loan`, `down_payment`, `transfer`,
 `purchase`), `down_pct`, `term_months`, `rate_pct`, `proceeds_to_cash`; any string value is also read by the scam detector for proposals that move
 money to family.
+
+## Plaid Sandbox custom user (the onboarding demo bank)
+
+`plaid_user.py` (called by `generate.py`, or run alone) writes `data/plaid/sandbox_user.json`: a Plaid Sandbox **custom user** for a fictional
+family, the Whitfields (no real PII; fake masks, a 555-01xx phone). The worker's `POST /plaid/sandbox_connect` passes it to
+`/sandbox/public_token/create` as `override_username: "user_custom"`, `override_password: <this JSON as a string>` (plus
+`transactions.days_requested: 180`) on First Platypus Bank (`ins_109508`); the same JSON can be pasted as a named custom user in the Plaid
+Dashboard for the Link UI. Deterministic (`--seed`), standard library only, validated on every run (types/subtypes, routing-number checksums, size and
+transaction caps, balance reconciliation).
+
+| Mask | Account | Balance | Transactions |
+|---|---|---:|---:|
+| 0001 | checking | $6,200 | 139: two earners ($7.9k/month net), mortgage, auto loan, utilities, groceries, gas, dining, subscriptions, kids' activities, card payments, savings and IRA transfers, one-offs (car repair, vet, insurance premium, refund) |
+| 0002 | savings | $18,500 | 13 |
+| 0003 | credit card | $1,850 owed, $9,000 limit, 21.9% APR (liability block) | 72 |
+| 0004 | mortgage | $212,000 | none (see below) |
+| 0005 | auto loan | $14,300 | none |
+| 0006 | IRA | $88,000 | 6 buys, 4 holdings |
+| 0007 | 24-month CD | $30,000 | 2 |
+
+232 transactions in all, 2026-05-08 to 2026-11-06 (`roll_dates_forward: true`: Plaid shifts every date so the newest activity lands on the day the
+Item is created), 39 KB (Plaid's guidance is under about 55 KB, 250 transactions, 10 accounts). Facts that matter (checked against Plaid's custom-user docs
+and live against the Sandbox, Nov 2026):
+* Plaid's sign convention: positive = money out of a deposit account or a charge on a card, so paychecks are negative.
+* Mortgages cannot carry a liability block in a custom user, so the mortgage is a plain account (balance only; its terms live in `MORTGAGE_TERMS` in the
+  script). An auto-loan `loan` liability block makes `/sandbox/public_token/create` fail with `INTERNAL_SERVER_ERROR` whenever `liabilities` is among the
+  initial products (`AUTO_LOAN_LIABILITY = False`). With the current config every combination of `transactions`, `liabilities` and `investments` is accepted.
+* `starting_balance` is the current balance; transactions only fill in history. After linking, Plaid delivers the history in stages (about 38 rows first, the
+  rest on the next poll), which is why the worker's first sync waits for a quiet poll (`PLAID_QUIET_POLLS`, default 1).
+* Window: `ledger.py` starts at 2026-05-09; the Whitfield history starts one day earlier (one payroll deposit on 05-08).
 
 ## Planted anomalies (ids for seed 2026; `generate.py --report` prints them for any seed)
 

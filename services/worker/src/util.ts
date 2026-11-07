@@ -65,6 +65,11 @@ export function clamp(x: number, lo: number, hi: number): number {
 
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** How a workflow is named in trace titles and summaries people read. The workflow id `huddle` stays internal: the product calls it Table Mode. */
+export function workflowLabel(workflow: string): string {
+  return workflow === 'huddle' ? 'Table Mode' : workflow.replace(/_/g, ' ');
+}
+
 export function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, Math.max(0, n - 1)).trimEnd()}…`;
 }

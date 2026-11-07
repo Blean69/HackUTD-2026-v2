@@ -317,4 +317,34 @@ describe('plaid_sync workflow', () => {
     expect(t.store.connections.get('item_fake_1')).toMatchObject({ status: 'error' });
     expect(t.store.accounts.size).toBe(0);
   });
+
+  it('quietPolls: a fresh item is polled until a poll brings nothing new, because "complete" can arrive with only the first rows', async () => {
+    const t = setup();
+    t.rt.quietPolls = 1;
+    addItem(t.store);
+    const all = manyTxns(225);
+    t.client.syncScript = [
+      page({ added: all.slice(0, 38), next_cursor: 'c1' }), // HISTORICAL_UPDATE_COMPLETE, but only the first 38 rows
+      page({ added: all.slice(38), next_cursor: 'c2' }),
+      page({ next_cursor: 'c2' }), // quiet
+    ];
+    const out = await t.exec();
+    expect(t.client.syncCursors).toEqual(['', 'c1', 'c2']);
+    expect(t.sleeps).toEqual([1000, 1000]);
+    expect(t.store.txns.size).toBe(225);
+    expect(out).toMatchObject({ txns: 225 });
+    expect(t.sink.traces.some((e) => /history is complete but just sent 38 more row/.test(e.title))).toBe(true);
+    expect(t.sink.traces.some((e) => /had not finished/.test(e.title))).toBe(false);
+  });
+
+  it('quietPolls never loops forever: after the last attempt the rows we have are imported and the next sync continues', async () => {
+    const t = setup({ pollAttempts: 3 });
+    t.rt.quietPolls = 1;
+    addItem(t.store);
+    t.client.syncScript = [page({ added: manyTxns(10), next_cursor: 'c1' }), page({ modified: manyTxns(2), next_cursor: 'c2' })]; // the last page repeats and is never quiet
+    await t.exec();
+    expect(t.client.count('transactionsSync')).toBe(3);
+    expect(t.store.txns.size).toBe(10);
+    expect(t.sink.traces.some((e) => /had not finished/.test(e.title))).toBe(true);
+  });
 });

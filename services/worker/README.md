@@ -23,7 +23,7 @@ npm install
 npm run seed      # data/seed/*.json (incl. proposals + votes) -> seed_* reducers (batched) -> recompute_household. Idempotent;
                   # each NEW proposal queues its affordability check, so the worker fills in the verdicts when it runs.
 npm run dev       # tsx watch: claims jobs, serves :8787
-npm test          # 174 unit/integration tests, no network, no database, no keys
+npm test          # 177 unit/integration tests, no network, no database, no keys
 npm run typecheck
 ```
 
@@ -63,7 +63,7 @@ of the model that is driving the run.
 
 | Workflow | Subject | Agents | What it does |
 |---|---|---|---|
-| `huddle` | huddle id | planner, goal_extractor, scam_guard, reconciler | transcript -> structured goals/concerns/dates (fast model) -> `detect_scam_signals` -> accounts/obligations/health/forecast -> `goal_feasibility` per goal (College Scorecard for college, FRED for home/business/debt) -> `agent_upsert_goal` with `evidence_quote` -> scam alert -> `set_huddle_status done` -> `purge_transcript` |
+| `huddle` (shown to people as **Table Mode**) | huddle id | planner, goal_extractor, scam_guard, reconciler | transcript -> structured goals/concerns/dates (fast model) -> `detect_scam_signals` -> accounts/obligations/health/forecast -> `goal_feasibility` per goal (College Scorecard for college, FRED for home/business/debt) -> `agent_upsert_goal` with `evidence_quote` -> scam alert -> `set_huddle_status done` -> `purge_transcript` |
 | `what_if` | scenario id | planner, simulator | prompt -> structured Scenario -> `simulate_scenario` (12-24 months) -> `get_forecast` -> narrative -> `agent_update_scenario` (shape = `ScenarioResult` in `apps/web/lib/types.ts`) |
 | `what_if` (proposal) | proposal id | planner, simulator, scam_guard | **Family voting** (`create_proposal` / `seed_proposals` queue it; input has `proposal_id`): title/amount/details -> scenario (deterministic: loan, financed purchase from `down_pct`/`term_months`/`rate_pct`, or cash) -> `simulate_scenario` -> `get_forecast` -> `detect_scam_signals` only when the proposal moves money to family or mentions gift cards / wires / crypto -> narrative -> `agent_update_proposal` (verdict fine/tight/risky + `ScenarioResult`-style analysis; a medium/high scam risk forces `risky`, leads with a scam warning and raises a `scam` alert). Code: `src/workflows/proposal_check.ts` |
 | `coach` | message id | coach | plan -> real tool loop (up to `AGENT_MAX_STEPS`) -> `agent_coach_reply` (with `run_id`) |
