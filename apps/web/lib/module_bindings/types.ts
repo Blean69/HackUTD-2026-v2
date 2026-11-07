@@ -75,6 +75,21 @@ export const Alert = __t.object("Alert", {
 });
 export type Alert = __Infer<typeof Alert>;
 
+export const BankAccountOption = __t.object("BankAccountOption", {
+  id: __t.string(),
+  householdId: __t.string(),
+  itemId: __t.string(),
+  accountId: __t.string(),
+  name: __t.string(),
+  officialName: __t.string(),
+  mask: __t.string(),
+  type: __t.string(),
+  subtype: __t.string(),
+  balance: __t.f64(),
+  selected: __t.bool(),
+});
+export type BankAccountOption = __Infer<typeof BankAccountOption>;
+
 export const BankConnection = __t.object("BankConnection", {
   itemId: __t.string(),
   householdId: __t.string(),
@@ -176,6 +191,19 @@ export const Household = __t.object("Household", {
 });
 export type Household = __Infer<typeof Household>;
 
+export const HouseholdProfile = __t.object("HouseholdProfile", {
+  householdId: __t.string(),
+  onboardingStatus: __t.string(),
+  answersJson: __t.string(),
+  riskComfort: __t.u32(),
+  prioritiesJson: __t.string(),
+  votingEnabled: __t.bool(),
+  voiceConsent: __t.bool(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type HouseholdProfile = __Infer<typeof HouseholdProfile>;
+
 export const Huddle = __t.object("Huddle", {
   id: __t.string(),
   householdId: __t.string(),
@@ -196,6 +224,14 @@ export const Member = __t.object("Member", {
   incomeAnnual: __t.f64(),
 });
 export type Member = __Infer<typeof Member>;
+
+export const ModuleConfig = __t.object("ModuleConfig", {
+  id: __t.u8(),
+  publisher: __t.option(__t.identity()),
+  workerSecretHash: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type ModuleConfig = __Infer<typeof ModuleConfig>;
 
 export const Obligation = __t.object("Obligation", {
   id: __t.string(),
@@ -227,6 +263,22 @@ export const Presence = __t.object("Presence", {
   lastSeen: __t.timestamp(),
 });
 export type Presence = __Infer<typeof Presence>;
+
+export const Proposal = __t.object("Proposal", {
+  id: __t.string(),
+  householdId: __t.string(),
+  title: __t.string(),
+  amount: __t.f64(),
+  detailsJson: __t.string(),
+  createdByName: __t.string(),
+  createdAt: __t.timestamp(),
+  closesAt: __t.timestamp(),
+  status: __t.string(),
+  verdict: __t.string(),
+  analysisJson: __t.string(),
+  runId: __t.string(),
+});
+export type Proposal = __Infer<typeof Proposal>;
 
 export const RecomputeTick = __t.object("RecomputeTick", {
   scheduledId: __t.u64(),
@@ -288,6 +340,17 @@ export const Txn = __t.object("Txn", {
   source: __t.string(),
 });
 export type Txn = __Infer<typeof Txn>;
+
+export const Vote = __t.object("Vote", {
+  id: __t.string(),
+  proposalId: __t.string(),
+  householdId: __t.string(),
+  voterKey: __t.string(),
+  voterName: __t.string(),
+  choice: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type Vote = __Infer<typeof Vote>;
 
 export const Worker = __t.object("Worker", {
   identity: __t.identity(),

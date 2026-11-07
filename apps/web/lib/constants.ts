@@ -1,13 +1,15 @@
-/** Product name lives in exactly one place. Rename freely. */
-export const PRODUCT_NAME = "Keystone";
+/** Product name lives in exactly one place. */
+export const PRODUCT_NAME = "Cosign";
 
 export const PITCH =
-  "One live room where a family and a team of Nemotron agents see the whole financial picture together — and every AI decision is in plain view.";
+  "A shared financial room for the whole household: one live picture of your money, with every AI decision in plain view.";
 
 /** The shared demo room everyone can join. */
 export const DEMO_HOUSEHOLD_ID = "hh_rivera";
 
-export const SANDBOX_NOTE = "Private sandbox with synthetic data — nothing here is real money or real people.";
+export const SANDBOX_NOTE = "Private copy with synthetic data. Nothing here is real money or real people.";
+export const SYNTHETIC_NOTE = "All data in this demo is synthetic. Nothing here is real money or real people.";
+export const CHALLENGE_NOTE = "Built for the PNC 360° Financial Health Navigator challenge · HackUTD 2026";
 
 export const SPACETIME_URI = process.env.NEXT_PUBLIC_SPACETIME_URI ?? "ws://localhost:3000";
 export const SPACETIME_DB = process.env.NEXT_PUBLIC_SPACETIME_DB ?? "keystone";

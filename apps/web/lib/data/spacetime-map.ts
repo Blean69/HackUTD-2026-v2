@@ -4,9 +4,10 @@
  */
 import type * as B from "@/lib/module_bindings/types";
 import type {
-  Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, Feasibility,
-  ForecastPoint, Goal, GoalPriority, HealthIndicator, Household, Huddle, Member, Obligation, Presence, PresenceRole,
-  Provider, Scenario, ScenarioResult, TraceEvent, TraceType, TranscriptLine, Workflow,
+  Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, CreditProfile,
+  Feasibility, ForecastPoint, Goal, GoalPriority, HealthIndicator, Household, Huddle, Member, Obligation, Presence, PresenceRole,
+  Proposal, ProposalAnalysis, ProposalDetails, ProposalVerdict, Provider, Scenario, ScenarioResult, TraceEvent, TraceType,
+  Transaction, TranscriptLine, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
 
 interface TimestampLike {
@@ -50,9 +51,15 @@ export const mapObligation = (r: B.Obligation): Obligation => ({
   id: r.id, household_id: r.householdId, name: r.name, amount: r.amount, due_day: r.dueDay, account_id: r.accountId, kind: r.kind as Obligation["kind"],
 });
 
-export const mapCreditProfile = (r: B.CreditProfile) => ({
+export const mapCreditProfile = (r: B.CreditProfile): CreditProfile => ({
   member_id: r.memberId, household_id: r.householdId, score: r.score, utilization_pct: r.utilizationPct,
   hard_inquiries_12m: r.hardInquiries12M, oldest_account_years: r.oldestAccountYears, late_payments_24m: r.latePayments24M,
+});
+
+export const mapTxn = (r: B.Txn): Transaction => ({
+  id: r.id, household_id: r.householdId, account_id: r.accountId, date: r.date, amount: r.amount, merchant: r.merchant,
+  category: r.category, description: r.description, is_recurring: r.isRecurring, source: r.source === "plaid" ? "plaid" : "seed",
+  anomaly_truth: (r.anomalyTruth || "") as Transaction["anomaly_truth"],
 });
 
 export const mapConversation = (r: B.Conversation): Conversation => ({
@@ -131,4 +138,18 @@ export const mapTrace = (r: B.TraceEvent): TraceEvent => ({
 export const mapBank = (r: B.BankConnection): BankConnection => ({
   item_id: r.itemId, household_id: r.householdId, institution_name: r.institutionName, status: r.status as BankConnection["status"],
   accounts_count: r.accountsCount, txns_count: r.txnsCount, last_synced_at: isoOpt(r.lastSyncedAt), error: blank(r.error),
+});
+
+// ---------------------------------------------------------------- family voting (contracts.md section 6)
+
+export const mapProposal = (r: B.Proposal): Proposal => ({
+  id: r.id, household_id: r.householdId, title: r.title, amount: Number(r.amount), details: json<ProposalDetails>(r.detailsJson, {}),
+  created_by_name: r.createdByName, created_at: iso(r.createdAt), closes_at: iso(r.closesAt), status: r.status === "closed" ? "closed" : "open",
+  verdict: (["fine", "tight", "risky"].includes(r.verdict) ? r.verdict : "") as ProposalVerdict,
+  analysis: r.analysisJson ? json<ProposalAnalysis | undefined>(r.analysisJson, undefined) : undefined, run_id: r.runId,
+});
+
+export const mapVote = (r: B.Vote): Vote => ({
+  id: r.id, proposal_id: r.proposalId, household_id: r.householdId, voter_key: r.voterKey, voter_name: r.voterName,
+  choice: (["yes", "no", "abstain"].includes(r.choice) ? r.choice : "abstain") as VoteChoice, updated_at: iso(r.updatedAt),
 });

@@ -1,7 +1,7 @@
 import type {
   Account, AdvisorNote, AgentRun, Alert, BankConnection, CoachMessage, Conversation, CreditProfile, ForecastPoint, Goal,
-  HealthIndicator, Household, Huddle, Member, Obligation, Presence, Scenario, TraceEvent, Transaction,
-  TranscriptLine,
+  HealthIndicator, Household, Huddle, Member, Obligation, Presence, Proposal, Scenario, TraceEvent, Transaction,
+  TranscriptLine, Vote,
 } from "@/lib/types";
 
 /** One entry per SpacetimeDB table the UI reads. Rows are UI-shaped (see lib/types.ts). */
@@ -26,13 +26,15 @@ export interface TableRows {
   agent_run: AgentRun;
   trace_event: TraceEvent;
   bank_connection: BankConnection;
+  proposal: Proposal;
+  vote: Vote;
 }
 export type TableName = keyof TableRows;
 
 export const TABLES: TableName[] = [
   "household", "member", "account", "txn", "credit_profile", "obligation", "conversation", "health_indicator",
   "forecast_point", "alert", "goal", "presence", "huddle", "transcript_line", "scenario", "coach_message",
-  "advisor_note", "agent_run", "trace_event", "bank_connection",
+  "advisor_note", "agent_run", "trace_event", "bank_connection", "proposal", "vote",
 ];
 
 /** Primary key of each table, as a string. */
@@ -57,6 +59,8 @@ const PK: { [K in TableName]: (r: TableRows[K]) => string } = {
   agent_run: (r) => r.run_id,
   trace_event: (r) => String(r.id),
   bank_connection: (r) => r.item_id,
+  proposal: (r) => r.id,
+  vote: (r) => r.id,
 };
 
 export function keyOf<K extends TableName>(t: K, row: TableRows[K]): string {

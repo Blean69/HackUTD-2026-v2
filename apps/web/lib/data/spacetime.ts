@@ -16,13 +16,18 @@
  */
 import { SPACETIME_DB, SPACETIME_URI } from "@/lib/constants";
 import type { DbConnection, SubscriptionHandle } from "@/lib/module_bindings";
-import type { Goal, PresenceRole } from "@/lib/types";
+import type { Goal, PresenceRole, ProposalDetails, VoteChoice } from "@/lib/types";
 import type { Actions, Backend, DataScope } from "./backend";
 import { setConnection } from "./connection";
+import { createLocalProposalActions, seedProposals } from "./mock/proposals";
 import * as M from "./spacetime-map";
 import { keyOf, type DataStore, type TableName, type TableRows } from "./store";
 
 export { SPACETIME_DB, SPACETIME_URI };
+
+/** The live connection, for feature modules that own tables the shared store does not know (lib/data/onboarding.ts). */
+let liveConn: DbConnection | null = null;
+export const liveConnection = (): DbConnection | null => liveConn;
 
 const TOKEN_KEY = "keystone.token";
 const CONNECT_TIMEOUT_MS = 5000;
@@ -55,17 +60,23 @@ const saveToken = (k: string, v: string | undefined): void => {
 
 const safeId = (s: string) => s.replace(/[^\w:.-]/g, "");
 
-/** Which tables (all filtered by household_id) make up a family room. txn and credit_profile are never shown. */
+/**
+ * Which tables (all filtered by household_id) make up a family room. txn feeds the dashboard's derived history and
+ * cash-flow charts; credit_profile feeds the debt/credit ratios.
+ */
 const ROOM_TABLES = [
   "account", "member", "obligation", "conversation", "health_indicator", "forecast_point", "alert", "goal", "huddle",
-  "transcript_line", "scenario", "coach_message", "advisor_note", "agent_run", "trace_event", "bank_connection",
+  "transcript_line", "scenario", "coach_message", "advisor_note", "agent_run", "trace_event", "bank_connection", "txn",
+  "credit_profile",
 ];
+/** Added to the room subscription only when the published module has them (contracts.md section 6). */
+const VOTING_TABLES = ["proposal", "vote"];
 
-export function queriesFor(scope: DataScope): string[] {
+export function queriesFor(scope: DataScope, withVoting = false): string[] {
   switch (scope.kind) {
     case "room": {
       const id = safeId(scope.householdId);
-      return ROOM_TABLES.map((t) => `SELECT * FROM ${t} WHERE household_id = '${id}'`);
+      return [...ROOM_TABLES, ...(withVoting ? VOTING_TABLES : [])].map((t) => `SELECT * FROM ${t} WHERE household_id = '${id}'`);
     }
     case "advisor":
       return ["health_indicator", "alert", "goal", "account", "advisor_note", "agent_run", "trace_event"].map((t) => `SELECT * FROM ${t}`);
@@ -81,6 +92,15 @@ interface Tbl<R> {
   onInsert(cb: (ctx: unknown, row: R) => void): void;
   onUpdate(cb: (ctx: unknown, oldRow: R, newRow: R) => void): void;
   onDelete(cb: (ctx: unknown, row: R) => void): void;
+}
+
+/**
+ * True when the module this browser is connected to has the voting tables. The bindings include them, but a database
+ * published before section 6 of contracts.md does not, and subscribing to a missing table would fail the whole room.
+ */
+function supportsVoting(conn: DbConnection): boolean {
+  const db = conn.db as unknown as Record<string, unknown>;
+  return !!db.proposal && !!db.vote;
 }
 
 function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () => void, me: () => string): void {
@@ -115,6 +135,12 @@ function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () 
   wire(db.agentRun, "agent_run", M.mapRun);
   wire(db.traceEvent, "trace_event", M.mapTrace);
   wire(db.bankConnection, "bank_connection", M.mapBank);
+  wire(db.txn, "txn", M.mapTxn);
+  wire(db.creditProfile, "credit_profile", M.mapCreditProfile);
+  if (supportsVoting(conn)) {
+    wire(db.proposal, "proposal", M.mapProposal);
+    wire(db.vote, "vote", M.mapVote);
+  }
 }
 
 function open(DbConnectionCtor: typeof DbConnection, key: string, token: string | undefined, onLive: (up: boolean, detail: string) => void): Promise<{ conn: DbConnection; identity: string }> {
@@ -223,6 +249,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
     return { backend: null, detail: `Couldn't reach SpacetimeDB at ${SPACETIME_URI} (${e instanceof Error ? e.message : String(e)})` };
   }
   const { conn } = connected;
+  liveConn = conn;
   me = connected.identity;
 
   let lastJoin: [string, string, PresenceRole] | null = null;
@@ -245,6 +272,17 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
     return { backend: null, detail: "SpacetimeDB is up but has no households yet (run `npm run seed` in services/worker)" };
   }
 
+  // ------------------------------------------------------------------ voting
+  // Live reducers + tables when the module has them; otherwise an in-browser stand-in (seeded demo proposals, local
+  // votes, a deterministic quick check instead of the agent) so the card still works against an older module.
+  const voting = supportsVoting(conn);
+  if (!voting) {
+    const sp = seedProposals(new Date(), store.rows("household").map((h) => h.id));
+    store.upsertMany("proposal", sp.proposals);
+    store.upsertMany("vote", sp.votes);
+  }
+  const local = createLocalProposalActions(store, () => me);
+
   // ------------------------------------------------------------------ scope
   let active: { key: string; handle: SubscriptionHandle } | null = null;
   let generation = 0;
@@ -265,7 +303,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       .onError(() => {
         if (mine === generation) setConnection({ synced: true, detail: "A subscription failed; some data may be missing" });
       })
-      .subscribe(queriesFor(scope));
+      .subscribe(queriesFor(scope, voting));
   };
 
   // ------------------------------------------------------------------ actions
@@ -287,7 +325,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
     startHuddle: async (householdId, consentNames) => {
       await r.startHuddle({ householdId, consentNamesJson: JSON.stringify(consentNames) });
       const h = await poll(() => store.rows("huddle").filter((x) => x.household_id === householdId && x.status === "live").sort((a, b) => b.started_at.localeCompare(a.started_at))[0]);
-      if (!h) throw new Error("The Huddle didn't start. Please try again.");
+      if (!h) throw new Error("Table Mode didn't start. Please try again.");
       return h.id;
     },
 
@@ -330,6 +368,24 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
 
     requestBankSync: async (householdId) => {
       await r.requestBankSync({ householdId });
+    },
+
+    createProposal: async ({ householdId, title, amount, details, closesInDays, authorName }) => {
+      if (!voting) return local.createProposal({ householdId, title, amount, details, closesInDays, authorName });
+      const before = new Set(store.rows("proposal").filter((p) => p.household_id === householdId).map((p) => p.id));
+      await r.createProposal({ householdId, title, amount, detailsJson: JSON.stringify(details satisfies ProposalDetails), closesInDays, authorName });
+      const made = await poll(() => store.rows("proposal").filter((p) => p.household_id === householdId && !before.has(p.id) && p.title === title)[0]);
+      return made?.id ?? "";
+    },
+
+    castVote: async (proposalId, choice: VoteChoice, voterName) => {
+      if (!voting) return local.castVote(proposalId, choice, voterName);
+      await r.castVote({ proposalId, choice, voterName });
+    },
+
+    closeProposal: async (proposalId) => {
+      if (!voting) return local.closeProposal(proposalId);
+      await r.closeProposal({ proposalId });
     },
   };
 

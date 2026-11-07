@@ -1,4 +1,4 @@
-import type { Goal, PresenceRole } from "@/lib/types";
+import type { Goal, PresenceRole, ProposalDetails, VoteChoice } from "@/lib/types";
 
 /** What a page needs from the database. Live backends subscribe to just that; the mock ignores it. */
 export type DataScope =
@@ -36,6 +36,12 @@ export interface Actions {
   deleteGoal(goalId: string): Promise<void>;
   /** `request_bank_sync` — enqueues a plaid_sync job for the household. */
   requestBankSync(householdId: string): Promise<void>;
+  /** `create_proposal` — also enqueues the affordability `what_if` job. Resolves to the proposal id when known. */
+  createProposal(input: { householdId: string; title: string; amount: number; details: ProposalDetails; closesInDays: number; authorName: string }): Promise<string>;
+  /** `cast_vote` — one vote per identity; can be changed until the proposal closes. */
+  castVote(proposalId: string, choice: VoteChoice, voterName: string): Promise<void>;
+  /** `close_proposal` */
+  closeProposal(proposalId: string): Promise<void>;
 }
 
 export interface Backend {

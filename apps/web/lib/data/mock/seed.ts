@@ -166,7 +166,7 @@ function rivera(now: Date): SeedHousehold {
     mkGoal(hid, 1, { title: "Repaint the bakery storefront", target_amount: 2400, target_date: isoDate(addDays(now, 120)), priority: "low", feasibility: "on_track" }, now, 30),
   ];
   return {
-    household: { id: hid, name: "The Rivera Household", city: "Dallas", state: "TX", persona: "Marisol and Daniel run Rivera's Panadería in Oak Cliff. Two kids, plus Marisol's mother Lucía lives with them.", template_id: "", created_at: addDays(now, -400).toISOString() },
+    household: { id: hid, name: "The Rivera Household", home_value: 410000, vehicle_value: 47000, city: "Dallas", state: "TX", persona: "Marisol and Daniel run Rivera's Panadería in Oak Cliff. Two kids, plus Marisol's mother Lucía lives with them.", template_id: "", created_at: addDays(now, -400).toISOString() },
     members: [marisol, daniel, sofia, mateo, lucia], accounts, obligations, credit, conversations, alerts, goals, varSpend: 4600, nwTrend: 6.4,
   };
 }
@@ -197,7 +197,7 @@ function okafor(now: Date): SeedHousehold {
     mkOb(hid, 5, "Insurance bundle", 310, 14, "insurance", chk), mkOb(hid, 6, "Utilities + internet", 360, 19, "bill", chk),
   ];
   return {
-    household: { id: hid, name: "The Okafor Household", city: "Sugar Land", state: "TX", persona: "Dual-income professionals with a new baby, attacking student loans.", template_id: "", created_at: addDays(now, -300).toISOString() },
+    household: { id: hid, name: "The Okafor Household", home_value: 520000, vehicle_value: 38000, city: "Sugar Land", state: "TX", persona: "Dual-income professionals with a new baby, attacking student loans.", template_id: "", created_at: addDays(now, -300).toISOString() },
     members: [chidi, ngozi, amara], accounts, obligations,
     credit: [mkCredit(hid, chidi, 762, 15, 0, 12, 0), mkCredit(hid, ngozi, 748, 12, 1, 9, 0)],
     conversations: [{
@@ -235,7 +235,7 @@ function nguyen(now: Date): SeedHousehold {
     mkOb(hid, 3, "Utilities", 230, 18, "bill", chk), mkOb(hid, 4, "Phone + internet", 120, 22, "bill", chk),
   ];
   return {
-    household: { id: hid, name: "The Nguyen Household", city: "Garland", state: "TX", persona: "Retired couple on fixed income; grandson Kevin visits weekends. Target of a 'grandson in jail' call.", template_id: "", created_at: addDays(now, -500).toISOString() },
+    household: { id: hid, name: "The Nguyen Household", home_value: 280000, vehicle_value: 22000, city: "Garland", state: "TX", persona: "Retired couple on fixed income; grandson Kevin visits weekends. Target of a 'grandson in jail' call.", template_id: "", created_at: addDays(now, -500).toISOString() },
     members: [binh, lan, kevin], accounts, obligations,
     credit: [mkCredit(hid, binh, 790, 8, 0, 40, 0), mkCredit(hid, lan, 783, 8, 0, 38, 0)],
     conversations: [{
@@ -284,7 +284,7 @@ function patel(now: Date): SeedHousehold {
     mkOb(hid, 5, "Kids' activities", 380, 3, "bill", chk),
   ];
   return {
-    household: { id: hid, name: "The Patel Household", city: "Plano", state: "TX", persona: "Accounts spread over three banks with messy, duplicated and garbled transaction data.", template_id: "", created_at: addDays(now, -200).toISOString() },
+    household: { id: hid, name: "The Patel Household", home_value: 560000, vehicle_value: 45000, city: "Plano", state: "TX", persona: "Accounts spread over three banks with messy, duplicated and garbled transaction data.", template_id: "", created_at: addDays(now, -200).toISOString() },
     members: [raj, meera, dev, anika], accounts, obligations,
     credit: [mkCredit(hid, raj, 668, 85, 3, 15, 1), mkCredit(hid, meera, 681, 74, 2, 12, 0)],
     conversations: [{
@@ -329,7 +329,7 @@ function brooks(now: Date): SeedHousehold {
     mkOb(hid, 5, "Gym + streaming", 85, 6, "subscription", chk),
   ];
   return {
-    household: { id: hid, name: "The Brooks Household", city: "Fort Worth", state: "TX", persona: "Young couple saving for a first home.", template_id: "", created_at: addDays(now, -120).toISOString() },
+    household: { id: hid, name: "The Brooks Household", home_value: 0, vehicle_value: 18000, city: "Fort Worth", state: "TX", persona: "Young couple saving for a first home.", template_id: "", created_at: addDays(now, -120).toISOString() },
     members: [jordan, taylor], accounts, obligations,
     credit: [mkCredit(hid, jordan, 735, 28, 1, 8, 0), mkCredit(hid, taylor, 712, 33, 2, 7, 0)],
     conversations: [{

@@ -227,7 +227,7 @@ export function runScenario(s: ParsedScenario, c: SimCtx): ScenarioResult {
   const payBefore = c.accounts.filter((a) => LIABILITY_TYPES.has(a.type)).reduce((t, a) => t + (a.monthly_payment ?? 0), 0);
   const verdict: ScenarioResult["verdict"] = lowAfter.balance < 0 ? "risky" : lowAfter.balance < 1500 ? "tight" : "fine";
   let suggestion: string | undefined;
-  if (s.kind === "new_loan") suggestion = "An SBA 7(a) loan fits this: keep the $20k cash contribution in the Emergency Fund and apply before the January lease deadline. The Huddle goals can pre-fill the application.";
+  if (s.kind === "new_loan") suggestion = "An SBA 7(a) loan fits this: keep the $20k cash contribution in the Emergency Fund and apply before the January lease deadline. The Table Mode goals can pre-fill the application.";
   else if (s.kind === "purchase" && verdict !== "fine") suggestion = `Move about ${usd(Math.max(1500 - lowAfter.balance, 500), { compact: true })} from savings before ${shortDate(lowAfter.date)} or delay the purchase until after payday.`;
   else if (s.kind === "payoff") suggestion = `Interest saved: about ${usd(s.interestSavedYear ?? 0)} a year. Keep at least ${usd(Math.round(out * 2))} (two months) in savings afterwards.`;
   const verdictWords = verdict === "fine" ? "comfortably" : verdict === "tight" ? "tightly" : "not safely";

@@ -1,8 +1,14 @@
 import type { Metadata } from "next";
-import { AgentWall } from "@/components/agents/AgentWall";
+import { Suspense } from "react";
+import { AgentTrail } from "@/components/agents/AgentTrail";
 
-export const metadata: Metadata = { title: "Agent wall" };
+export const metadata: Metadata = { title: "Agent Trail" };
 
 export default function AgentsPage() {
-  return <AgentWall />;
+  // AgentTrail reads `?run=<run_id>` with useSearchParams, which needs a Suspense boundary.
+  return (
+    <Suspense fallback={null}>
+      <AgentTrail />
+    </Suspense>
+  );
 }

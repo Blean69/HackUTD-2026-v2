@@ -1,5 +1,5 @@
 "use client";
-import type { Goal, PresenceRole } from "@/lib/types";
+import type { Goal, PresenceRole, ProposalDetails, VoteChoice } from "@/lib/types";
 import { ensureBackend } from "./runtime";
 
 /** Thin async wrappers over the active backend's reducers. Safe to call before the connection is up. */
@@ -38,4 +38,13 @@ export async function deleteGoal(goalId: string) {
 }
 export async function requestBankSync(householdId: string) {
   return (await ensureBackend()).actions.requestBankSync(householdId);
+}
+export async function createProposal(input: { householdId: string; title: string; amount: number; details: ProposalDetails; closesInDays: number; authorName: string }) {
+  return (await ensureBackend()).actions.createProposal(input);
+}
+export async function castVote(proposalId: string, choice: VoteChoice, voterName: string) {
+  return (await ensureBackend()).actions.castVote(proposalId, choice, voterName);
+}
+export async function closeProposal(proposalId: string) {
+  return (await ensureBackend()).actions.closeProposal(proposalId);
 }

@@ -2,7 +2,7 @@
 import { WORKER_URL } from "@/lib/constants";
 
 /**
- * Huddle voice capture.
+ * Table Mode voice capture.
  *
  * Primary path: the browser's Web Speech API. Every FINAL phrase goes to `onFinal` (the caller turns it into
  * `append_transcript`, so every phone in the room sees it live).
@@ -67,8 +67,8 @@ export class VoiceCapture {
 
   async start(): Promise<void> {
     const sup = voiceSupport();
-    if (!sup.secure) return this.h.onError("The microphone needs HTTPS. Use the text box or play a sample Huddle instead.");
-    if (!sup.speech && !sup.recorder) return this.h.onError("This browser can't capture voice. Use the text box or play a sample Huddle.");
+    if (!sup.secure) return this.h.onError("The microphone needs HTTPS. Use the text box or play a sample conversation instead.");
+    if (!sup.speech && !sup.recorder) return this.h.onError("This browser can't capture voice. Use the text box or play a sample conversation.");
     this.running = true;
 
     if (sup.recorder && (await this.workerUp())) {
@@ -83,7 +83,7 @@ export class VoiceCapture {
     if (sup.speech) this.startSpeech();
     else if (this.asr === "off") {
       this.running = false;
-      this.h.onError("Live captions aren't supported in this browser. Use the text box or play a sample Huddle.");
+      this.h.onError("Live captions aren't supported in this browser. Use the text box or play a sample conversation.");
       return;
     }
     this.h.onMode?.(this.asr === "off" ? "browser" : "nvidia-asr");
@@ -134,9 +134,9 @@ export class VoiceCapture {
         this.running = false;
         this.h.onError("Microphone permission was blocked. Allow it in your browser, or use the text box.");
       } else if (e.error === "network") {
-        this.h.onError("The browser's speech service is unreachable. Use the text box or a sample Huddle.");
+        this.h.onError("The browser's speech service is unreachable. Use the text box or a sample conversation.");
       } else if (e.error === "audio-capture") {
-        this.h.onError("No microphone found. Use the text box or a sample Huddle.");
+        this.h.onError("No microphone found. Use the text box or a sample conversation.");
       }
     };
     rec.onend = () => {

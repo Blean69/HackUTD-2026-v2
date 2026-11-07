@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { LIABILITY_TYPES } from "@/lib/format";
 import type {
-  Account, AgentRun, Alert, HealthIndicator, HealthStatus, Presence, TraceEvent, Workflow,
+  Account, AgentRun, Alert, HealthIndicator, HealthStatus, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
 import type { DataScope } from "./backend";
 import { useConnection } from "./connection";
@@ -122,9 +122,57 @@ export function useNetWorth(accounts: readonly Account[], propertyValue = 0): Ne
   }, [accounts, propertyValue]);
 }
 
+export function useTxns(householdId: string) {
+  const rows = useRows("txn");
+  return useMemo(() => rows.filter((t) => t.household_id === householdId), [rows, householdId]);
+}
+export function useCreditProfiles(householdId: string) {
+  const rows = useRows("credit_profile");
+  return useMemo(() => rows.filter((c) => c.household_id === householdId), [rows, householdId]);
+}
+
 export function useBankConnections(householdId: string) {
   const rows = useRows("bank_connection");
   return useMemo(() => rows.filter((b) => b.household_id === householdId), [rows, householdId]);
+}
+
+// ------------------------------------------------------------------ family voting
+
+/** The household's proposals: open ones first (soonest to close), then closed ones (newest first). */
+export function useProposals(householdId: string): Proposal[] {
+  const rows = useRows("proposal");
+  return useMemo(
+    () =>
+      rows
+        .filter((p) => p.household_id === householdId)
+        .sort((a, b) => Number(a.status === "closed") - Number(b.status === "closed") || (a.status === "open" ? a.closes_at.localeCompare(b.closes_at) : b.closes_at.localeCompare(a.closes_at))),
+    [rows, householdId],
+  );
+}
+/** Votes for one household, or for one proposal when `proposalId` is given. */
+export function useVotes(householdId: string, proposalId?: string): Vote[] {
+  const rows = useRows("vote");
+  return useMemo(() => rows.filter((v) => v.household_id === householdId && (!proposalId || v.proposal_id === proposalId)), [rows, householdId, proposalId]);
+}
+
+export interface VoteTally {
+  yes: number;
+  no: number;
+  abstain: number;
+  total: number;
+}
+export function tallyVotes(votes: readonly Vote[]): VoteTally {
+  const t: VoteTally = { yes: 0, no: 0, abstain: 0, total: 0 };
+  for (const v of votes) {
+    t[v.choice] += 1;
+    t.total += 1;
+  }
+  return t;
+}
+/** The caller's current choice on a proposal (identity hex matches `voter_key`). */
+export function useMyVote(votes: readonly Vote[]): VoteChoice | undefined {
+  const { identity } = useConnection();
+  return useMemo(() => votes.find((v) => v.voter_key === identity)?.choice, [votes, identity]);
 }
 
 // ------------------------------------------------------------------ multiplayer

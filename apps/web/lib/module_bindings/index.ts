@@ -35,23 +35,30 @@ import {
 
 // Import all reducer arg schemas
 import AckAlertReducer from "./ack_alert_reducer";
+import AdminSetWorkerSecretHashReducer from "./admin_set_worker_secret_hash_reducer";
 import AgentCoachReplyReducer from "./agent_coach_reply_reducer";
 import AgentCreateAlertReducer from "./agent_create_alert_reducer";
 import AgentRemoveTxnsReducer from "./agent_remove_txns_reducer";
 import AgentSavePlaidItemReducer from "./agent_save_plaid_item_reducer";
+import AgentSetAccountOptionsReducer from "./agent_set_account_options_reducer";
 import AgentSetBankConnectionReducer from "./agent_set_bank_connection_reducer";
+import AgentUpdateProposalReducer from "./agent_update_proposal_reducer";
 import AgentUpdateScenarioReducer from "./agent_update_scenario_reducer";
 import AgentUpsertAccountsReducer from "./agent_upsert_accounts_reducer";
 import AgentUpsertGoalReducer from "./agent_upsert_goal_reducer";
 import AgentUpsertTxnsReducer from "./agent_upsert_txns_reducer";
 import AppendTranscriptReducer from "./append_transcript_reducer";
 import AskCoachReducer from "./ask_coach_reducer";
+import CastVoteReducer from "./cast_vote_reducer";
 import ClaimJobReducer from "./claim_job_reducer";
+import CloseProposalReducer from "./close_proposal_reducer";
+import CreateProposalReducer from "./create_proposal_reducer";
 import CreateSandboxReducer from "./create_sandbox_reducer";
 import DeleteGoalReducer from "./delete_goal_reducer";
 import DeleteSandboxReducer from "./delete_sandbox_reducer";
 import EmitTraceReducer from "./emit_trace_reducer";
 import EndHuddleReducer from "./end_huddle_reducer";
+import FinishOnboardingReducer from "./finish_onboarding_reducer";
 import FinishRunReducer from "./finish_run_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import PostAdvisorNoteReducer from "./post_advisor_note_reducer";
@@ -60,15 +67,20 @@ import RecomputeHouseholdReducer from "./recompute_household_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
 import RequestBankSyncReducer from "./request_bank_sync_reducer";
 import RequestSimulationReducer from "./request_simulation_reducer";
+import SaveOnboardingAnswersReducer from "./save_onboarding_answers_reducer";
 import SeedAccountsReducer from "./seed_accounts_reducer";
 import SeedConversationsReducer from "./seed_conversations_reducer";
 import SeedCreditReducer from "./seed_credit_reducer";
 import SeedHouseholdsReducer from "./seed_households_reducer";
 import SeedMembersReducer from "./seed_members_reducer";
 import SeedObligationsReducer from "./seed_obligations_reducer";
+import SeedProposalsReducer from "./seed_proposals_reducer";
 import SeedTxnsReducer from "./seed_txns_reducer";
+import SeedVotesReducer from "./seed_votes_reducer";
+import SelectBankAccountsReducer from "./select_bank_accounts_reducer";
 import SetHuddleStatusReducer from "./set_huddle_status_reducer";
 import StartHuddleReducer from "./start_huddle_reducer";
+import StartOnboardingReducer from "./start_onboarding_reducer";
 import StartRunReducer from "./start_run_reducer";
 import UpsertGoalReducer from "./upsert_goal_reducer";
 
@@ -80,6 +92,7 @@ import AdvisorNoteRow from "./advisor_note_table";
 import AgentJobRow from "./agent_job_table";
 import AgentRunRow from "./agent_run_table";
 import AlertRow from "./alert_table";
+import BankAccountOptionRow from "./bank_account_option_table";
 import BankConnectionRow from "./bank_connection_table";
 import CoachMessageRow from "./coach_message_table";
 import ConversationRow from "./conversation_table";
@@ -88,14 +101,17 @@ import ForecastPointRow from "./forecast_point_table";
 import GoalRow from "./goal_table";
 import HealthIndicatorRow from "./health_indicator_table";
 import HouseholdRow from "./household_table";
+import HouseholdProfileRow from "./household_profile_table";
 import HuddleRow from "./huddle_table";
 import MemberRow from "./member_table";
 import ObligationRow from "./obligation_table";
 import PresenceRow from "./presence_table";
+import ProposalRow from "./proposal_table";
 import ScenarioRow from "./scenario_table";
 import TraceEventRow from "./trace_event_table";
 import TranscriptLineRow from "./transcript_line_table";
 import TxnRow from "./txn_table";
+import VoteRow from "./vote_table";
 import WorkerPlaidItemsRow from "./worker_plaid_items_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -178,6 +194,23 @@ const tablesSchema = __schema({
       { name: 'alert_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, AlertRow),
+  bankAccountOption: __table({
+    name: 'bank_account_option',
+    indexes: [
+      { accessor: 'household_id', name: 'bank_account_option_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'bank_account_option_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'item_id', name: 'bank_account_option_item_id_idx_btree', algorithm: 'btree', columns: [
+        'itemId',
+      ] },
+    ],
+    constraints: [
+      { name: 'bank_account_option_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BankAccountOptionRow),
   bankConnection: __table({
     name: 'bank_connection',
     indexes: [
@@ -287,6 +320,17 @@ const tablesSchema = __schema({
       { name: 'household_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, HouseholdRow),
+  householdProfile: __table({
+    name: 'household_profile',
+    indexes: [
+      { accessor: 'household_id', name: 'household_profile_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+    ],
+    constraints: [
+      { name: 'household_profile_household_id_key', constraint: 'unique', columns: ['householdId'] },
+    ],
+  }, HouseholdProfileRow),
   huddle: __table({
     name: 'huddle',
     indexes: [
@@ -343,6 +387,20 @@ const tablesSchema = __schema({
       { name: 'presence_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PresenceRow),
+  proposal: __table({
+    name: 'proposal',
+    indexes: [
+      { accessor: 'household_id', name: 'proposal_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'proposal_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'proposal_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ProposalRow),
   scenario: __table({
     name: 'scenario',
     indexes: [
@@ -408,6 +466,23 @@ const tablesSchema = __schema({
       { name: 'txn_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TxnRow),
+  vote: __table({
+    name: 'vote',
+    indexes: [
+      { accessor: 'household_id', name: 'vote_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'vote_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'proposal_id', name: 'vote_proposal_id_idx_btree', algorithm: 'btree', columns: [
+        'proposalId',
+      ] },
+    ],
+    constraints: [
+      { name: 'vote_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, VoteRow),
   workerPlaidItems: __table({
     name: 'worker_plaid_items',
     indexes: [
@@ -420,23 +495,30 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
+  __reducerSchema("admin_set_worker_secret_hash", AdminSetWorkerSecretHashReducer),
   __reducerSchema("agent_coach_reply", AgentCoachReplyReducer),
   __reducerSchema("agent_create_alert", AgentCreateAlertReducer),
   __reducerSchema("agent_remove_txns", AgentRemoveTxnsReducer),
   __reducerSchema("agent_save_plaid_item", AgentSavePlaidItemReducer),
+  __reducerSchema("agent_set_account_options", AgentSetAccountOptionsReducer),
   __reducerSchema("agent_set_bank_connection", AgentSetBankConnectionReducer),
+  __reducerSchema("agent_update_proposal", AgentUpdateProposalReducer),
   __reducerSchema("agent_update_scenario", AgentUpdateScenarioReducer),
   __reducerSchema("agent_upsert_accounts", AgentUpsertAccountsReducer),
   __reducerSchema("agent_upsert_goal", AgentUpsertGoalReducer),
   __reducerSchema("agent_upsert_txns", AgentUpsertTxnsReducer),
   __reducerSchema("append_transcript", AppendTranscriptReducer),
   __reducerSchema("ask_coach", AskCoachReducer),
+  __reducerSchema("cast_vote", CastVoteReducer),
   __reducerSchema("claim_job", ClaimJobReducer),
+  __reducerSchema("close_proposal", CloseProposalReducer),
+  __reducerSchema("create_proposal", CreateProposalReducer),
   __reducerSchema("create_sandbox", CreateSandboxReducer),
   __reducerSchema("delete_goal", DeleteGoalReducer),
   __reducerSchema("delete_sandbox", DeleteSandboxReducer),
   __reducerSchema("emit_trace", EmitTraceReducer),
   __reducerSchema("end_huddle", EndHuddleReducer),
+  __reducerSchema("finish_onboarding", FinishOnboardingReducer),
   __reducerSchema("finish_run", FinishRunReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("post_advisor_note", PostAdvisorNoteReducer),
@@ -445,15 +527,20 @@ const reducersSchema = __reducers(
   __reducerSchema("register_worker", RegisterWorkerReducer),
   __reducerSchema("request_bank_sync", RequestBankSyncReducer),
   __reducerSchema("request_simulation", RequestSimulationReducer),
+  __reducerSchema("save_onboarding_answers", SaveOnboardingAnswersReducer),
   __reducerSchema("seed_accounts", SeedAccountsReducer),
   __reducerSchema("seed_conversations", SeedConversationsReducer),
   __reducerSchema("seed_credit", SeedCreditReducer),
   __reducerSchema("seed_households", SeedHouseholdsReducer),
   __reducerSchema("seed_members", SeedMembersReducer),
   __reducerSchema("seed_obligations", SeedObligationsReducer),
+  __reducerSchema("seed_proposals", SeedProposalsReducer),
   __reducerSchema("seed_txns", SeedTxnsReducer),
+  __reducerSchema("seed_votes", SeedVotesReducer),
+  __reducerSchema("select_bank_accounts", SelectBankAccountsReducer),
   __reducerSchema("set_huddle_status", SetHuddleStatusReducer),
   __reducerSchema("start_huddle", StartHuddleReducer),
+  __reducerSchema("start_onboarding", StartOnboardingReducer),
   __reducerSchema("start_run", StartRunReducer),
   __reducerSchema("upsert_goal", UpsertGoalReducer),
 );
@@ -470,6 +557,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "agent_job": Omit<typeof tablesSchema.schemaType.tables["agentJob"], "accessorName"> & { readonly accessorName: "agent_job" };
     /** @deprecated Use `agentRun` instead. This alias will be removed in the next major version. */
     readonly "agent_run": Omit<typeof tablesSchema.schemaType.tables["agentRun"], "accessorName"> & { readonly accessorName: "agent_run" };
+    /** @deprecated Use `bankAccountOption` instead. This alias will be removed in the next major version. */
+    readonly "bank_account_option": Omit<typeof tablesSchema.schemaType.tables["bankAccountOption"], "accessorName"> & { readonly accessorName: "bank_account_option" };
     /** @deprecated Use `bankConnection` instead. This alias will be removed in the next major version. */
     readonly "bank_connection": Omit<typeof tablesSchema.schemaType.tables["bankConnection"], "accessorName"> & { readonly accessorName: "bank_connection" };
     /** @deprecated Use `coachMessage` instead. This alias will be removed in the next major version. */
@@ -480,6 +569,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "forecast_point": Omit<typeof tablesSchema.schemaType.tables["forecastPoint"], "accessorName"> & { readonly accessorName: "forecast_point" };
     /** @deprecated Use `healthIndicator` instead. This alias will be removed in the next major version. */
     readonly "health_indicator": Omit<typeof tablesSchema.schemaType.tables["healthIndicator"], "accessorName"> & { readonly accessorName: "health_indicator" };
+    /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
+    readonly "household_profile": Omit<typeof tablesSchema.schemaType.tables["householdProfile"], "accessorName"> & { readonly accessorName: "household_profile" };
     /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
     readonly "trace_event": Omit<typeof tablesSchema.schemaType.tables["traceEvent"], "accessorName"> & { readonly accessorName: "trace_event" };
     /** @deprecated Use `transcriptLine` instead. This alias will be removed in the next major version. */
@@ -507,11 +598,13 @@ const tableAccessorAliases = {
   "advisor_note": "advisorNote",
   "agent_job": "agentJob",
   "agent_run": "agentRun",
+  "bank_account_option": "bankAccountOption",
   "bank_connection": "bankConnection",
   "coach_message": "coachMessage",
   "credit_profile": "creditProfile",
   "forecast_point": "forecastPoint",
   "health_indicator": "healthIndicator",
+  "household_profile": "householdProfile",
   "trace_event": "traceEvent",
   "transcript_line": "transcriptLine",
   "worker_plaid_items": "workerPlaidItems",
@@ -541,6 +634,8 @@ export type DbView = __DbViewBase & {
   readonly "agent_job": __DbViewBase["agentJob"];
   /** @deprecated Use `agentRun` instead. This alias will be removed in the next major version. */
   readonly "agent_run": __DbViewBase["agentRun"];
+  /** @deprecated Use `bankAccountOption` instead. This alias will be removed in the next major version. */
+  readonly "bank_account_option": __DbViewBase["bankAccountOption"];
   /** @deprecated Use `bankConnection` instead. This alias will be removed in the next major version. */
   readonly "bank_connection": __DbViewBase["bankConnection"];
   /** @deprecated Use `coachMessage` instead. This alias will be removed in the next major version. */
@@ -551,6 +646,8 @@ export type DbView = __DbViewBase & {
   readonly "forecast_point": __DbViewBase["forecastPoint"];
   /** @deprecated Use `healthIndicator` instead. This alias will be removed in the next major version. */
   readonly "health_indicator": __DbViewBase["healthIndicator"];
+  /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
+  readonly "household_profile": __DbViewBase["householdProfile"];
   /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
   readonly "trace_event": __DbViewBase["traceEvent"];
   /** @deprecated Use `transcriptLine` instead. This alias will be removed in the next major version. */
@@ -567,6 +664,8 @@ export type Tables = __TablesBase & {
   readonly "agent_job": __TablesBase["agentJob"];
   /** @deprecated Use `agentRun` instead. This alias will be removed in the next major version. */
   readonly "agent_run": __TablesBase["agentRun"];
+  /** @deprecated Use `bankAccountOption` instead. This alias will be removed in the next major version. */
+  readonly "bank_account_option": __TablesBase["bankAccountOption"];
   /** @deprecated Use `bankConnection` instead. This alias will be removed in the next major version. */
   readonly "bank_connection": __TablesBase["bankConnection"];
   /** @deprecated Use `coachMessage` instead. This alias will be removed in the next major version. */
@@ -577,6 +676,8 @@ export type Tables = __TablesBase & {
   readonly "forecast_point": __TablesBase["forecastPoint"];
   /** @deprecated Use `healthIndicator` instead. This alias will be removed in the next major version. */
   readonly "health_indicator": __TablesBase["healthIndicator"];
+  /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
+  readonly "household_profile": __TablesBase["householdProfile"];
   /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
   readonly "trace_event": __TablesBase["traceEvent"];
   /** @deprecated Use `transcriptLine` instead. This alias will be removed in the next major version. */

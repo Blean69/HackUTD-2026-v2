@@ -318,10 +318,61 @@ export interface AgentRun {
   result?: unknown;
 }
 
+// ---------------------------------------------------------------- family voting (contracts.md section 6)
+
+export type VoteChoice = "yes" | "no" | "abstain";
+export type ProposalVerdict = "" | "fine" | "tight" | "risky";
+
+/** `proposal.details_json`, parsed. Every field is optional: a proposal may be a plain "buy X for $Y". */
+export interface ProposalDetails {
+  down_pct?: number;
+  term_months?: number;
+  rate_pct?: number;
+  [key: string]: unknown;
+}
+
+/** `proposal.analysis_json`, parsed. The worker's shape is open, so the UI reads these fields defensively. */
+export interface ProposalAnalysis {
+  summary?: string;
+  headline?: string;
+  suggestion?: string;
+  metrics?: ScenarioResult["metrics"];
+  low_point?: ScenarioResult["low_point"];
+  [key: string]: unknown;
+}
+
+export interface Proposal {
+  id: string;
+  household_id: string;
+  title: string;
+  amount: number;
+  details: ProposalDetails;
+  created_by_name: string;
+  created_at: string;
+  closes_at: string;
+  status: "open" | "closed";
+  verdict: ProposalVerdict;
+  analysis?: ProposalAnalysis;
+  /** The agent run behind the verdict ("" until the worker has picked it up). */
+  run_id: string;
+}
+
+export interface Vote {
+  /** `${proposal_id}:${voter_key}` */
+  id: string;
+  proposal_id: string;
+  household_id: string;
+  /** Caller identity hex, or a member id for seeded votes. */
+  voter_key: string;
+  voter_name: string;
+  choice: VoteChoice;
+  updated_at: string;
+}
+
 export const WORKFLOWS: Workflow[] = ["huddle", "what_if", "coach", "scam_check", "data_quality", "plaid_sync"];
 
 export const WORKFLOW_LABEL: Record<Workflow, string> = {
-  huddle: "Huddle",
+  huddle: "Table Mode",
   what_if: "What-if",
   coach: "Coach",
   scam_check: "Scam check",

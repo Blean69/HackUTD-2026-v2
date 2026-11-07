@@ -7,11 +7,14 @@
  */
 import type { Actions, Backend } from "../backend";
 import type { DataStore } from "../store";
+import { usd } from "@/lib/format";
 import type {
-  Alert, Goal, Huddle, Presence, PresenceRole, TraceEvent, TranscriptLine, Workflow,
+  Alert, Goal, Huddle, Presence, PresenceRole, Proposal, TraceEvent, TranscriptLine, Workflow,
 } from "@/lib/types";
 import { computeForecast, computeHealth, type MathCtx } from "./math";
+import { createLocalProposalActions, seedProposals } from "./proposals";
 import { buildSeed, type SeedHousehold } from "./seed";
+import { buildTxns } from "./txns";
 import type { SimCtx } from "./sim";
 import { ambientScript, coachScript, dataQualityScript, huddleScript, plaidSyncScript, whatIfScript, type Effects, type Step } from "./scripts";
 
@@ -53,7 +56,11 @@ class MockEngine {
 
   start(): void {
     const now = new Date();
-    for (const s of buildSeed(now)) this.load(s, now);
+    const seeds = buildSeed(now);
+    for (const s of seeds) this.load(s, now);
+    const sp = seedProposals(now, seeds.map((s) => s.household.id));
+    this.store.upsertMany("proposal", sp.proposals);
+    this.store.upsertMany("vote", sp.votes);
     this.seedHistory(now);
     this.every(17000, () => this.ambientRun());
     this.after(6000, () => this.ambientRun());
@@ -85,6 +92,7 @@ class MockEngine {
     st.upsertMany("account", s.accounts);
     st.upsertMany("obligation", s.obligations);
     st.upsertMany("credit_profile", s.credit);
+    st.upsertMany("txn", buildTxns(s, now));
     st.upsertMany("conversation", s.conversations);
     st.upsertMany("alert", s.alerts);
     st.upsertMany("goal", s.goals);
@@ -175,25 +183,53 @@ class MockEngine {
       ["huddle", "hh_okafor", true, 14], ["what_if", "hh_brooks", false, 11], ["scam_check", "hh_nguyen", false, 8],
       ["coach", "hh_patel", true, 6], ["data_quality", "hh_patel", false, 4], ["huddle", "hh_brooks", false, 2],
     ];
-    for (const [wf, hid, cached, minsAgo] of plan) {
-      const steps = ambientScript(wf, cached);
-      const runId = rid("run");
-      const start = new Date(now.getTime() - minsAgo * 60000);
-      let t = start.getTime();
-      const providers = new Set<string>();
-      steps.forEach((s, i) => {
-        t += s.wait * 1.6;
-        if (s.provider) providers.add(s.provider);
-        this.store.upsert("trace_event", { id: ++this.eventId, run_id: runId, household_id: hid, seq: i + 1, ts: new Date(t).toISOString(), workflow: wf, agent: s.agent, type: s.type, title: s.title, data: s.data, model: s.model, provider: s.provider, latency_ms: s.latency_ms, tokens: s.tokens });
-      });
-      this.store.upsert("agent_run", { run_id: runId, job_id: ++this.jobId, workflow: wf, household_id: hid, status: "done", started_at: start.toISOString(), finished_at: new Date(t).toISOString(), providers: [...providers] });
+    for (const [wf, hid, cached, minsAgo] of plan) this.seedRun(wf, hid, cached, minsAgo, now);
+    // Each seeded proposal's verdict links to a finished affordability run, like the live module's.
+    for (const p of this.store.rows("proposal").filter((x) => x.verdict && !x.run_id)) {
+      this.store.patch("proposal", p.id, { run_id: this.seedRun("what_if", p.household_id, false, 20 + (p.id.length % 7), now) });
     }
+  }
+
+  /** One finished run, back-dated. Returns its run id. */
+  private seedRun(wf: Workflow, hid: string, cached: boolean, minsAgo: number, now: Date): string {
+    const steps = ambientScript(wf, cached);
+    const runId = rid("run");
+    const start = new Date(now.getTime() - minsAgo * 60000);
+    let t = start.getTime();
+    const providers = new Set<string>();
+    steps.forEach((s, i) => {
+      t += s.wait * 1.6;
+      if (s.provider) providers.add(s.provider);
+      this.store.upsert("trace_event", { id: ++this.eventId, run_id: runId, household_id: hid, seq: i + 1, ts: new Date(t).toISOString(), workflow: wf, agent: s.agent, type: s.type, title: s.title, data: s.data, model: s.model, provider: s.provider, latency_ms: s.latency_ms, tokens: s.tokens });
+    });
+    this.store.upsert("agent_run", { run_id: runId, job_id: ++this.jobId, workflow: wf, household_id: hid, status: "done", started_at: start.toISOString(), finished_at: new Date(t).toISOString(), providers: [...providers] });
+    return runId;
   }
 
   private ambientRun(): void {
     const wf = AMBIENT_WORKFLOWS[Math.floor(Math.random() * AMBIENT_WORKFLOWS.length)];
     const hid = AMBIENT_HOUSEHOLDS[Math.floor(Math.random() * AMBIENT_HOUSEHOLDS.length)];
     this.playRun(wf, hid, ambientScript(wf, Math.random() < 0.2));
+  }
+
+  private proposals() {
+    return createLocalProposalActions(this.store, () => this.me, (p) => this.runProposalAgent(p));
+  }
+
+  /** Stand-in for the worker's affordability check: a scripted what_if run whose result lands on the proposal. */
+  private runProposalAgent(p: Proposal): void {
+    const d = p.details;
+    const terms = [d.down_pct !== undefined ? `${d.down_pct}% down` : "", d.term_months ? `over ${d.term_months} months` : "", d.rate_pct !== undefined ? `at ${d.rate_pct}%` : ""].filter(Boolean).join(" ");
+    const prompt = `Buy ${p.title} for ${usd(p.amount)}${terms ? ` ${terms}` : ""}`;
+    const fx = this.effects(p.household_id, {
+      setScenario: (result) =>
+        this.store.patch("proposal", p.id, {
+          verdict: result.verdict ?? "fine",
+          analysis: { summary: result.summary, suggestion: result.suggestion, metrics: result.metrics, low_point: result.low_point },
+        }),
+    });
+    const runId = this.playRun("what_if", p.household_id, whatIfScript(this.ctx(p.household_id), prompt, p.created_by_name, fx));
+    this.store.patch("proposal", p.id, { run_id: runId });
   }
 
   // ------------------------------------------------------------------------------------------ simulated people
@@ -248,6 +284,14 @@ class MockEngine {
       }
       for (const o of st.rows("obligation").filter((x) => x.household_id === tpl.id)) st.upsert("obligation", { ...o, id: o.id + sfx, household_id: hid, account_id: accountMap.get(o.account_id) ?? o.account_id });
       for (const c of st.rows("credit_profile").filter((x) => x.household_id === tpl.id)) st.upsert("credit_profile", { ...c, member_id: memberMap.get(c.member_id) ?? c.member_id, household_id: hid });
+      for (const t of st.rows("txn").filter((x) => x.household_id === tpl.id)) st.upsert("txn", { ...t, id: t.id + sfx, household_id: hid, account_id: accountMap.get(t.account_id) ?? t.account_id });
+      for (const p of st.rows("proposal").filter((x) => x.household_id === tpl.id)) {
+        st.upsert("proposal", { ...p, id: p.id + sfx, household_id: hid, run_id: "" });
+        for (const v of st.rows("vote").filter((x) => x.proposal_id === p.id && memberMap.has(x.voter_key))) {
+          const key = memberMap.get(v.voter_key) ?? v.voter_key;
+          st.upsert("vote", { ...v, id: `${p.id + sfx}:${key}`, proposal_id: p.id + sfx, household_id: hid, voter_key: key });
+        }
+      }
       for (const c of st.rows("conversation").filter((x) => x.household_id === tpl.id)) st.upsert("conversation", { ...c, id: c.id + sfx, household_id: hid });
       for (const a of st.rows("alert").filter((x) => x.household_id === tpl.id && x.kind !== "advisor")) st.upsert("alert", { ...a, id: a.id + sfx, household_id: hid, acknowledged_by: "" });
       for (const g of st.rows("goal").filter((x) => x.household_id === tpl.id)) st.upsert("goal", { ...g, id: g.id + sfx, household_id: hid });
@@ -269,7 +313,7 @@ class MockEngine {
 
     appendTranscript: async (huddleId, speaker, text) => {
       const h = this.store.get("huddle", huddleId);
-      if (!h || h.status !== "live") throw new Error("This Huddle is not live");
+      if (!h || h.status !== "live") throw new Error("Table Mode is not live");
       const line: TranscriptLine = { id: ++this.lineId, huddle_id: huddleId, household_id: h.household_id, speaker, text, ts: iso() };
       this.store.upsert("transcript_line", line);
     },
@@ -329,6 +373,10 @@ class MockEngine {
     deleteGoal: async (id) => {
       this.store.remove("goal", id);
     },
+
+    createProposal: (input) => this.proposals().createProposal(input),
+    castVote: (proposalId, choice, voterName) => this.proposals().castVote(proposalId, choice, voterName),
+    closeProposal: (proposalId) => this.proposals().closeProposal(proposalId),
 
     requestBankSync: async (hid) => {
       const conns = this.store.rows("bank_connection").filter((b) => b.household_id === hid);

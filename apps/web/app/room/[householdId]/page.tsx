@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { RoomClient } from "@/components/room/RoomClient";
+import { Dashboard } from "@/components/dashboard/Dashboard";
 
-export const metadata: Metadata = { title: "Family room" };
+export const metadata: Metadata = { title: "Dashboard" };
 
-export default async function RoomPage({ params }: { params: Promise<{ householdId: string }> }) {
+export default async function Page({ params }: { params: Promise<{ householdId: string }> }) {
   const { householdId } = await params;
-  return <RoomClient householdId={decodeURIComponent(householdId)} />;
+  return <Dashboard householdId={decodeURIComponent(householdId)} />;
 }

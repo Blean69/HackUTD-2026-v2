@@ -1,15 +1,16 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { IconBriefcase, IconChevronDown, IconSend } from "@/components/icons";
+import { IconChevronDown, IconSend } from "@/components/icons";
 import { NamePrompt } from "@/components/NamePrompt";
-import { Shell } from "@/components/Shell";
-import { TraceDock } from "@/components/trace/TraceDrawer";
-import { Button, Card, Chip, Skeleton, StatusDot, type Tone } from "@/components/ui";
+import { AppShell } from "@/components/shell/AppShell";
+import { Avatar, Button, Card, Chip, Empty, PageHeader, Panel, Skeleton, StatusDot, TableScroll, type Tone } from "@/components/ui";
 import { joinRoom, postAdvisorNote } from "@/lib/data/actions";
-import { useLocalIdentity } from "@/lib/data/identity";
 import { useAdvisorNotes, useDataReady, useDataScope, useGoals, useHouseholds, useHouseholdSummaries, usePresenceAll, useRuns, type HouseholdSummary } from "@/lib/data/hooks";
+import { useLocalIdentity } from "@/lib/data/identity";
+import { useNow } from "@/lib/data/finance-hooks";
 import { cx, metric, relTime, usd } from "@/lib/format";
+import { useLastHousehold } from "@/lib/lastHousehold";
 import { WORKFLOW_LABEL } from "@/lib/types";
 
 const STATUS: Record<HouseholdSummary["status"], { tone: Tone; label: string }> = {
@@ -18,79 +19,118 @@ const STATUS: Record<HouseholdSummary["status"], { tone: Tone; label: string }> 
   risk: { tone: "risk", label: "At risk" },
 };
 const NOTE_IDEAS = ["Your Visa utilization is high. Can we talk about a payoff plan?", "Nice progress this month. Keep it up!", "Please review the new alert with me when you have a minute."];
+const FEAS_LABEL: Record<string, string> = { on_track: "On track", stretch: "Stretch", off_track: "Off track" };
 
-function Detail({ h, author }: { h: HouseholdSummary; author: string }) {
+const subHead = "text-[0.72rem] font-semibold uppercase tracking-wide text-ink-3";
+const COLS = 8;
+
+function Detail({ h, author, now }: { h: HouseholdSummary; author: string; now: number }) {
   const goals = useGoals(h.id);
   const notes = useAdvisorNotes(h.id);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
   async function post() {
     const t = text.trim();
     if (!t) return;
     setBusy(true);
+    setErr(null);
     try {
       await postAdvisorNote(h.id, author, t);
       setText("");
       setSent(true);
       setTimeout(() => setSent(false), 3500);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't post that note");
     } finally {
       setBusy(false);
     }
   }
+
   return (
-    <div className="grid gap-4 border-t border-line bg-surface-2 p-4 lg:grid-cols-3">
-      <div>
-        <h3 className="text-[0.72rem] font-semibold uppercase tracking-wide text-ink-2">Health indicators</h3>
+    <div className="grid gap-5 border-t border-line bg-surface-2 p-4 lg:grid-cols-3">
+      <section aria-label={`Health indicators for ${h.name}`}>
+        <h3 className={subHead}>Health indicators</h3>
         <ul className="mt-2 space-y-1.5">
           {h.indicators.map((i) => (
-            <li key={i.id} className="flex items-center gap-2 text-[0.84rem]">
+            <li key={i.id} className="flex items-center gap-2 text-[0.82rem]">
               <StatusDot tone={i.status} />
-              <span className="flex-1">{i.label}</span>
+              <span className="min-w-0 flex-1 truncate">{i.label}</span>
               <span className="num font-semibold">{metric(i.value, i.unit)}</span>
+              <span className="sr-only">{STATUS[i.status].label}</span>
             </li>
           ))}
+          {!h.indicators.length ? <li className="text-[0.82rem] text-ink-3">No indicators computed yet.</li> : null}
         </ul>
-      </div>
-      <div>
-        <h3 className="text-[0.72rem] font-semibold uppercase tracking-wide text-ink-2">Open alerts &amp; goals</h3>
+      </section>
+
+      <section aria-label={`Open alerts and goals for ${h.name}`}>
+        <h3 className={subHead}>Open alerts &amp; goals</h3>
         <ul className="mt-2 space-y-1.5">
           {h.openAlerts.length ? h.openAlerts.slice(0, 6).map((a) => (
-            <li key={a.id} className="flex items-start gap-2 text-[0.84rem] leading-snug"><StatusDot tone={a.severity === "critical" ? "risk" : a.severity === "warn" ? "watch" : "info"} /><span>{a.title}</span></li>
-          )) : <li className="text-[0.84rem] text-ink-3">No open alerts.</li>}
-          {h.openAlerts.length > 6 ? <li className="text-[0.8rem] text-ink-3">+ {h.openAlerts.length - 6} more in their room</li> : null}
+            <li key={a.id} className="flex items-start gap-2 text-[0.82rem] leading-snug">
+              <span className="mt-1"><StatusDot tone={a.severity === "critical" ? "risk" : a.severity === "warn" ? "watch" : "info"} /></span>
+              <span className="min-w-0 flex-1">{a.title}</span>
+              <span className="sr-only">{a.severity}</span>
+            </li>
+          )) : <li className="text-[0.82rem] text-ink-3">No open alerts.</li>}
+          {h.openAlerts.length > 6 ? <li className="text-[0.78rem] text-ink-3">+ {h.openAlerts.length - 6} more in their room</li> : null}
         </ul>
-        <ul className="mt-3 space-y-1">
+        <ul className="mt-3 space-y-1 border-t border-line pt-2">
           {goals.slice(0, 4).map((g) => (
-            <li key={g.id} className="flex items-baseline justify-between gap-2 text-[0.82rem]">
-              <span className="truncate">{g.title}</span>
-              <span className="shrink-0 text-ink-3">{g.feasibility ? g.feasibility.replace("_", " ") : "pending"}</span>
+            <li key={g.id} className="flex items-baseline justify-between gap-2 text-[0.8rem]">
+              <span className="min-w-0 truncate">{g.title}</span>
+              <span className="shrink-0 text-ink-3">{g.feasibility ? FEAS_LABEL[g.feasibility] : "Pending"}</span>
             </li>
           ))}
-          {!goals.length ? <li className="text-[0.82rem] text-ink-3">No goals yet.</li> : null}
+          {!goals.length ? <li className="text-[0.8rem] text-ink-3">No goals yet.</li> : null}
         </ul>
-      </div>
-      <div>
-        <h3 className="text-[0.72rem] font-semibold uppercase tracking-wide text-ink-2">Post a note to this family</h3>
+      </section>
+
+      <section aria-label={`Post a note to ${h.name}`}>
+        <h3 className={subHead}>Post a note to this family</h3>
         <form className="mt-2" onSubmit={(e) => { e.preventDefault(); void post(); }}>
           <label htmlFor={`note-${h.id}`} className="sr-only">Note for {h.name}</label>
-          <textarea id={`note-${h.id}`} value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Appears live in their room…" className="w-full resize-y rounded-xl border border-line-strong bg-surface p-2.5 text-[0.9rem] outline-none focus:border-brand" />
+          <textarea
+            id={`note-${h.id}`}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={3}
+            placeholder="Appears live in their room…"
+            className="w-full resize-y rounded-md border border-line-strong bg-surface p-2.5 text-[0.88rem] text-ink outline-none placeholder:text-ink-3 focus:border-brand"
+          />
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {NOTE_IDEAS.map((n) => <button key={n} type="button" onClick={() => setText(n)} className="rounded-full border border-line-strong bg-surface px-2.5 py-1 text-[0.72rem] text-ink-2 hover:border-brand hover:text-ink">{n.length > 34 ? `${n.slice(0, 32)}…` : n}</button>)}
+            {NOTE_IDEAS.map((n) => (
+              <button key={n} type="button" onClick={() => setText(n)} title={n} className="rounded-md border border-line-strong bg-surface px-2 py-1 text-[0.74rem] text-ink-2 hover:border-brand hover:text-ink">
+                {n.length > 34 ? `${n.slice(0, 32)}…` : n}
+              </button>
+            ))}
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={busy || !text.trim()}><IconSend size={14} /> Post note</Button>
-            <Link href={`/room/${h.id}`} className="text-[0.82rem] font-medium text-brand-strong underline-offset-2 hover:underline">Open their room</Link>
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={busy || !text.trim()}><IconSend size={15} /> Post note</Button>
+            <Link href={`/room/${h.id}`} className="text-[0.82rem] font-medium text-brand-strong hover:underline">Open their room</Link>
           </div>
           {sent ? <p role="status" className="mt-2 text-[0.8rem] font-medium text-good">Posted. It&apos;s live in their room now.</p> : null}
+          {err ? <p role="alert" className="mt-2 text-[0.8rem] text-risk">{err}</p> : null}
         </form>
-        {notes[0] ? <p className="mt-3 border-l-2 border-line-strong pl-2 text-[0.78rem] leading-snug text-ink-2">Last note ({relTime(notes[0].created_at)}): {notes[0].text}</p> : null}
-      </div>
+        {notes[0] ? <p className="mt-3 border-l-2 border-line-strong pl-2 text-[0.78rem] leading-snug text-ink-2">Last note ({relTime(notes[0].created_at, now)}): {notes[0].text}</p> : null}
+      </section>
     </div>
   );
 }
 
-export function AdvisorConsole() {
+function Kpi({ label, value, tone }: { label: string; value: number; tone?: string }) {
+  return (
+    <Card className="px-4 py-3">
+      <dt className="text-[0.76rem] text-ink-3">{label}</dt>
+      <dd className={cx("num mt-0.5 text-[1.5rem] font-semibold leading-tight", tone)}>{value}</dd>
+    </Card>
+  );
+}
+
+function ConsoleBody() {
   useDataScope("advisor");
   const ident = useLocalIdentity();
   const ready = useDataReady();
@@ -100,6 +140,7 @@ export function AdvisorConsole() {
   const everyone = usePresenceAll();
   const households = useHouseholds();
   const runs = useRuns();
+  const now = useNow(30_000).getTime();
   const [open, setOpen] = useState<string | null | undefined>(undefined);
   const name = ident.name;
 
@@ -113,8 +154,7 @@ export function AdvisorConsole() {
     const crit = (h: HouseholdSummary) => h.openAlerts.filter((x) => x.severity === "critical").length;
     return [...unsorted].sort((a, b) => crit(b) - crit(a) || rank[b.status] - rank[a.status] || a.name.localeCompare(b.name));
   }, [unsorted]);
-  const riskiest = summaries[0];
-  const expanded = open === undefined ? riskiest?.id : open;
+  const expanded = open === undefined ? summaries[0]?.id : open;
 
   const totals = useMemo(() => ({
     households: summaries.length,
@@ -124,85 +164,124 @@ export function AdvisorConsole() {
   }), [summaries, everyone]);
 
   return (
-    <Shell mood="advisor" maxWidth="max-w-6xl">
-      <header className="mb-4">
-        <div className="flex items-center gap-2 text-brand-strong"><IconBriefcase size={18} /><span className="text-[0.74rem] font-semibold uppercase tracking-[0.14em]">PNC advisor console</span></div>
-        <h1 className="mt-1 font-display text-2xl font-bold tracking-tight sm:text-3xl">Households</h1>
-        <p className="mt-1 max-w-2xl text-[0.9rem] text-ink-2">Every household&apos;s health, open alerts and goals in one place. Notes you post show up live in that family&apos;s room.</p>
-      </header>
+    <>
+      <PageHeader
+        title="Advisor Console"
+        sub="Every household's health, open alerts and goals in one place. Notes you post show up live in that family's room."
+        right={name ? (
+          <span className="inline-flex items-center gap-2 rounded-md border border-line bg-surface py-1 pl-1.5 pr-2.5 text-[0.82rem] font-medium">
+            <Avatar name={name} size={22} />
+            {name}
+            <Chip tone="brand">Advisor</Chip>
+          </span>
+        ) : undefined}
+      />
 
-      <dl className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {[["Households", totals.households, ""], ["Critical alerts", totals.critical, totals.critical ? "text-risk" : ""], ["At risk", totals.atRisk, totals.atRisk ? "text-watch" : ""], ["People online", totals.online, "text-good"]].map(([k, v, c]) => (
-          <div key={String(k)} className="rounded-xl border border-line bg-surface px-3.5 py-2.5 shadow-card">
-            <dt className="text-[0.72rem] text-ink-2">{k}</dt>
-            <dd className={cx("num font-display text-2xl font-bold", String(c))}>{v}</dd>
-          </div>
-        ))}
+      <dl className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Portfolio totals">
+        <Kpi label="Households" value={totals.households} />
+        <Kpi label="Critical alerts" value={totals.critical} tone={totals.critical ? "text-risk" : undefined} />
+        <Kpi label="At risk" value={totals.atRisk} tone={totals.atRisk ? "text-watch" : undefined} />
+        <Kpi label="People online" value={totals.online} tone={totals.online ? "text-good" : undefined} />
       </dl>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
         <Card className="overflow-hidden">
           {!ready ? (
-            <div className="space-y-2 p-3">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)}</div>
+            <div className="space-y-2 p-3" aria-busy="true" aria-label="Loading households">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}</div>
+          ) : summaries.length ? (
+            <TableScroll className="!mx-0 !px-0">
+              <table className="tbl">
+                <caption className="sr-only">Households, most urgent first</caption>
+                <thead>
+                  <tr>
+                    <th scope="col" className="!pl-4">Household</th>
+                    <th scope="col">Health</th>
+                    <th scope="col" className="hidden md:table-cell">Indicators</th>
+                    <th scope="col" className="r hidden sm:table-cell">Net worth</th>
+                    <th scope="col" className="r">Alerts</th>
+                    <th scope="col" className="r hidden sm:table-cell">Goals</th>
+                    <th scope="col" className="hidden md:table-cell">Online</th>
+                    <th scope="col" className="w-10 !pr-3"><span className="sr-only">Details</span></th>
+                  </tr>
+                </thead>
+                {summaries.map((h) => {
+                  const s = STATUS[h.status];
+                  const crit = h.openAlerts.filter((a) => a.severity === "critical").length;
+                  const isOpen = expanded === h.id;
+                  const toggle = () => setOpen(isOpen ? null : h.id);
+                  return (
+                    <tbody key={h.id} className="border-t border-line first:border-t-0">
+                      <tr onClick={toggle} className={cx("cursor-pointer hover:bg-surface-2", isOpen && "bg-surface-2")}>
+                        <td className="!border-b-0 !py-2.5 !pl-4">
+                          <button type="button" aria-expanded={isOpen} aria-controls={`adv-${h.id}`} onClick={(e) => { e.stopPropagation(); toggle(); }} className="block max-w-[9.5rem] rounded text-left sm:max-w-[15rem]">
+                            <span className="block truncate text-[0.88rem] font-semibold">{h.name}</span>
+                            <span className="block truncate text-[0.76rem] text-ink-2">{h.city}, {h.state} · {h.persona}</span>
+                          </button>
+                        </td>
+                        <td className="!border-b-0">
+                          <span className="flex flex-wrap gap-1">
+                            <Chip tone={s.tone}>{s.label}</Chip>
+                            {crit ? <Chip tone="risk">{crit} critical</Chip> : null}
+                          </span>
+                        </td>
+                        <td className="hidden !border-b-0 md:table-cell">
+                          <span className="flex items-center gap-1" role="img" aria-label={`${h.indicators.length} health indicators`}>
+                            {h.indicators.map((i) => <StatusDot key={i.id} tone={i.status} />)}
+                          </span>
+                        </td>
+                        <td className="num r hidden !border-b-0 text-[0.84rem] font-medium sm:table-cell">{usd(h.netWorth)}</td>
+                        <td className="num r !border-b-0 text-[0.84rem]"><b className={cx("font-semibold", h.openAlerts.length ? "text-ink" : "text-ink-3")}>{h.openAlerts.length}</b></td>
+                        <td className="num r hidden !border-b-0 text-[0.84rem] sm:table-cell">{h.openGoals}</td>
+                        <td className="hidden !border-b-0 md:table-cell">{h.online ? <Chip tone="good">{h.online} online</Chip> : <span className="text-[0.76rem] text-ink-3">—</span>}</td>
+                        <td className="!border-b-0 !pr-3 text-ink-3"><IconChevronDown size={16} className={cx("transition-transform", isOpen && "rotate-180")} /></td>
+                      </tr>
+                      {isOpen ? (
+                        <tr id={`adv-${h.id}`}>
+                          <td colSpan={COLS} className="!border-b-0 !p-0"><Detail h={h} author={name ?? "Advisor"} now={now} /></td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  );
+                })}
+              </table>
+            </TableScroll>
           ) : (
-            <ul className="divide-y divide-line">
-              {summaries.map((h) => {
-                const s = STATUS[h.status];
-                const crit = h.openAlerts.filter((a) => a.severity === "critical").length;
-                const isOpen = expanded === h.id;
-                return (
-                  <li key={h.id}>
-                    <button type="button" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : h.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2">
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-semibold">{h.name}</span>
-                          {h.isSandbox ? <Chip tone="accent">sandbox</Chip> : null}
-                          <Chip tone={s.tone}>{s.label}</Chip>
-                          {crit ? <Chip tone="risk">{crit} critical</Chip> : null}
-                        </span>
-                        <span className="mt-0.5 block truncate text-[0.78rem] text-ink-2">{h.city}, {h.state} · {h.persona}</span>
-                      </span>
-                      <span className="hidden shrink-0 items-center gap-1 sm:flex" aria-label="Indicator statuses">
-                        {h.indicators.map((i) => <StatusDot key={i.id} tone={i.status} />)}
-                      </span>
-                      <span className="hidden w-24 shrink-0 text-right sm:block">
-                        <span className="num block text-sm font-semibold">{usd(h.netWorth)}</span>
-                        <span className="block text-[0.7rem] text-ink-3">net worth</span>
-                      </span>
-                      <span className="w-14 shrink-0 text-right text-[0.78rem] text-ink-2">
-                        <span className="num block"><b className="text-ink">{h.openAlerts.length}</b> alerts</span>
-                        <span className="num block">{h.openGoals} goals</span>
-                      </span>
-                      {h.online ? <Chip tone="good" className="hidden md:inline-flex">{h.online} online</Chip> : null}
-                      <IconChevronDown size={16} className={cx("shrink-0 text-ink-3 transition-transform", isOpen && "rotate-180")} />
-                    </button>
-                    {isOpen ? <Detail h={h} author={name ?? "Advisor"} /> : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="p-4"><Empty title="No households yet">Households appear here once the demo data has loaded.</Empty></div>
           )}
         </Card>
 
         <aside aria-label="Live agent activity">
-          <Card className="p-4">
-            <h2 className="font-display text-base font-semibold">Live agent activity</h2>
-            <ul className="mt-2 space-y-2">
+          <Panel title="Live agent activity" sub="Latest runs across every household">
+            <ul className="space-y-2">
               {runs.slice(0, 6).map((r) => (
                 <li key={r.run_id} className="flex items-center gap-2 text-[0.82rem]">
                   <span className={cx("h-2 w-2 shrink-0 rounded-full", r.status === "running" ? "anim-blink bg-brand" : r.status === "error" ? "bg-risk" : "bg-good")} aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate"><span className="font-medium">{WORKFLOW_LABEL[r.workflow]}</span> <span className="text-ink-3">· {households.find((x) => x.id === r.household_id)?.name.replace("The ", "").replace(" Household", "") ?? "sandbox"}</span></span>
-                  <span className="shrink-0 text-[0.72rem] text-ink-3">{relTime(r.started_at)}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium">{WORKFLOW_LABEL[r.workflow]}</span>{" "}
+                    <span className="text-ink-3">· {households.find((x) => x.id === r.household_id)?.name.replace("The ", "").replace(" Household", "") ?? "Sandbox"}</span>
+                    <span className="sr-only">, {r.status === "running" ? "running" : r.status}</span>
+                  </span>
+                  <span className="num shrink-0 text-[0.74rem] text-ink-3">{relTime(r.started_at, now)}</span>
                 </li>
               ))}
-              {!runs.length ? <li className="text-sm text-ink-3">No runs yet.</li> : null}
+              {!runs.length ? <li className="text-[0.82rem] text-ink-3">No runs yet.</li> : null}
             </ul>
-            <Link href="/agents" className="mt-3 inline-block text-[0.82rem] font-medium text-brand-strong underline-offset-2 hover:underline">Open the agent wall →</Link>
-          </Card>
+            <Link href="/agents" className="mt-3 inline-block text-[0.82rem] font-medium text-brand-strong hover:underline">Open Agent Trail →</Link>
+          </Panel>
         </aside>
       </div>
-      <TraceDock />
+
       {ready && !name ? <NamePrompt title="Advisor sign-in" context="Your name is shown on the notes you post and in the room's presence list." advisor /> : null}
-    </Shell>
+    </>
+  );
+}
+
+/** Bank-internal portfolio view: every household's health, alerts and goals, with a note box per family. */
+export function AdvisorConsole() {
+  const householdId = useLastHousehold();
+  return (
+    <AppShell householdId={householdId} header={<h1 className="sr-only">Advisor Console</h1>}>
+      <ConsoleBody />
+    </AppShell>
   );
 }

@@ -64,7 +64,7 @@ export function huddleScript(c: SimCtx, lines: { speaker: string; text: string }
   const scam = screenForScam(fullText);
   const hasFinanceable = goals.some((g) => g.financeable);
   const steps: Step[] = [
-    { wait: 300, agent: "router", type: "run_started", title: `Huddle ended: ${lines.length} lines from ${speakers.size} speaker${speakers.size === 1 ? "" : "s"}. Starting analysis.`, provider: "local", data: { speakers: [...speakers] } },
+    { wait: 300, agent: "router", type: "run_started", title: `Table Mode ended: ${lines.length} lines from ${speakers.size} speaker${speakers.size === 1 ? "" : "s"}. Starting analysis.`, provider: "local", data: { speakers: [...speakers] } },
     llm("planner", "plan", "Plan: extract goals, check each against live balances, screen for scams, post goal cards", {
       wait: 500, latency: 2300, tIn: 1200 + lines.length * 55, tOut: 240,
       data: { steps: ["extract_goals(transcript)", "get_balances + forecast_balance", "check_feasibility(goal) for each goal", "scam_screen(transcript)", "publish goals, purge transcript"] },
@@ -93,7 +93,7 @@ export function huddleScript(c: SimCtx, lines: { speaker: string; text: string }
     steps.push(
       tool("scam_guard", "tool_result", `${scam.length} scam signals: ${scam.join(", ")}`, {
         wait: 600, data: { signals: scam },
-        effect: () => fx.addAlert({ severity: "critical", kind: "scam", title: "Scam Shield: this conversation matches a known scam pattern", detail: `Signals heard in the Huddle: ${scam.join(", ")}. Do not send money or gift-card numbers. Call the bank on the number printed on your card.` }),
+        effect: () => fx.addAlert({ severity: "critical", kind: "scam", title: "Scam Shield: this conversation matches a known scam pattern", detail: `Signals heard in Table Mode: ${scam.join(", ")}. Do not send money or gift-card numbers. Call the bank on the number printed on your card.` }),
       }),
     );
   } else {
@@ -237,7 +237,7 @@ export function ambientScript(workflow: Workflow, cached: boolean): Step[] {
   });
   switch (workflow) {
     case "huddle":
-      return [mk("router", "run_started", "Huddle ended: 9 lines from 3 speakers", 200), mk("planner", "plan", "Plan: extract goals, reconcile with ledger, scam screen", 700, NEMO_SUPER), mk("goal_extractor", "tool_result", "Extracted 3 candidate goals", 800, NEMO_NANO), mk("reconciler", "tool_call", "get_balances(household_id)", 500), mk("reconciler", "tool_result", "5 accounts; liquid cash $41,200", 500), mk("reconciler", "tool_result", "College fund: on track", 900), mk("scam_guard", "tool_result", "No scam signals", 700), mk("reconciler", "final", "Done. 3 goals posted, transcript deleted", 700, NEMO_SUPER)];
+      return [mk("router", "run_started", "Table Mode ended: 9 lines from 3 speakers", 200), mk("planner", "plan", "Plan: extract goals, reconcile with ledger, scam screen", 700, NEMO_SUPER), mk("goal_extractor", "tool_result", "Extracted 3 candidate goals", 800, NEMO_NANO), mk("reconciler", "tool_call", "get_balances(household_id)", 500), mk("reconciler", "tool_result", "5 accounts; liquid cash $41,200", 500), mk("reconciler", "tool_result", "College fund: on track", 900), mk("scam_guard", "tool_result", "No scam signals", 700), mk("reconciler", "final", "Done. 3 goals posted, transcript deleted", 700, NEMO_SUPER)];
     case "what_if":
       return [mk("router", "run_started", "What-if: \"refinance the car loan\"", 200), mk("planner", "plan", "Plan: parse, project baseline, apply, compare", 700, NEMO_SUPER), mk("simulator", "tool_call", "forecast_balance(days=90)", 500), mk("simulator", "tool_result", "Low point $6,120", 600), mk("simulator", "tool_call", "apply_scenario(kind=\"rate_change\")", 500), mk("simulator", "final", "Saves $38/mo; low point unchanged", 900, NEMO_SUPER)];
     case "coach":
