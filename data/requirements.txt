@@ -1,0 +1,2 @@
+# The generator uses only the Python standard library (Python 3.12+). Nothing to install.
+# (faker/reportlab are intentionally NOT used: the PDF and commercial-lending parts of the original plan were dropped.)

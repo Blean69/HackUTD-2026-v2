@@ -14,17 +14,25 @@ Written by `data/generate.py`, loaded into SpacetimeDB by `services/worker/src/s
 Ids are strings with a type prefix (`hh_`, `mem_`, `acct_`, `txn_`, `obl_`, `conv_`, `goal_`). Dates are ISO strings. Money is a number (USD).
 
 ```ts
-Household     { id, name, city, state, persona }
+Household     { id, name, city, state, persona, home_value: number /* 0 if renting */, vehicle_value: number }
 Member        { id, household_id, name, age, role: "parent"|"child"|"grandparent"|"other", income_annual }
 Account       { id, household_id, owner_member_ids: string[], type: "checking"|"savings"|"cd"|"ira"|"auto_loan"|
                 "personal_loan"|"credit_card"|"mortgage", institution, nickname, balance, rate_pct?, credit_limit?,
                 monthly_payment?, maturity_date?, opened_date }
-Transaction   { id, account_id, date, amount /* negative = outflow */, merchant, category, description, is_recurring,
+Transaction   { id, household_id, account_id, date, amount /* negative = outflow */, merchant, category, description, is_recurring,
                 anomaly?: "duplicate"|"garbled"|"impossible_value"|"card_testing"|"account_takeover"|"scam_payment"|"outlier" }  // ground truth; never shown in UI
-CreditProfile { member_id, score, utilization_pct, hard_inquiries_12m, oldest_account_years, late_payments_24m }
+CreditProfile { member_id, household_id, score, utilization_pct, hard_inquiries_12m, oldest_account_years, late_payments_24m }
 Obligation    { id, household_id, name, amount, due_day, account_id, kind: "bill"|"loan"|"subscription"|"tuition"|"insurance"|"tax" }
 Conversation  { id, household_id, title, turns: {speaker, text}[], expected_goals: Goal[], scam_signals?: string[] }
 ```
+Conventions (from the generator):
+- Debt accounts (`auto_loan`, `personal_loan`, `credit_card`, `mortgage`) store `balance` as the **positive amount owed**; a positive transaction on them is a payment received.
+- `obligations` is the complete schedule of recurring outflows, loan and card payments included (`kind: "loan"`), paid from checking.
+  Forecast = checking + savings now, plus recurring **inflows** (`is_recurring` and amount > 0), minus obligations on their `due_day`,
+  minus average daily discretionary spend (non-recurring outflows). Do not also subtract recurring outflow transactions, or bills count twice.
+- Net worth = checking + savings + cd + ira + `home_value` + `vehicle_value` − debt balances.
+- `anomaly` is omitted when empty. Duplicate and impossible-value rows are excluded from true balances.
+
 Households: `hh_rivera` (hero, bakery owners), `hh_okafor`, `hh_nguyen` (elder-scam target), `hh_patel` (messy data), `hh_brooks`.
 
 ## 2. SpacetimeDB module `keystone` — tables
@@ -34,7 +42,7 @@ Row ids are strings unless marked `u64 auto`. `ts`/`*_at` are SpacetimeDB `Times
 
 | Table | Columns | Written by |
 |---|---|---|
-| `household` | id pk, name, city, state, persona, template_id (""=seed template), owner (Identity?), created_at | seed, `create_sandbox` |
+| `household` | id pk, name, city, state, persona, home_value, vehicle_value, template_id (""=seed template), owner (Identity?), created_at | seed, `create_sandbox` |
 | `member` | id pk, household_id, name, age, role, income_annual | seed, sandbox copy |
 | `account` | id pk, household_id, type, institution, nickname, balance, rate_pct, credit_limit, monthly_payment, maturity_date, opened_date, owner_member_ids_json | seed, sandbox copy |
 | `txn` | id pk, household_id, account_id, date, amount, merchant, category, description, is_recurring, anomaly_truth ("" if none) | seed, sandbox copy |

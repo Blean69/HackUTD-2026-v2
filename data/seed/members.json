@@ -1,0 +1,17 @@
+[
+{"id":"mem_rivera_marisol","household_id":"hh_rivera","name":"Marisol Rivera","age":38,"role":"parent","income_annual":72000},
+{"id":"mem_rivera_daniel","household_id":"hh_rivera","name":"Daniel Rivera","age":41,"role":"parent","income_annual":84000},
+{"id":"mem_rivera_sofia","household_id":"hh_rivera","name":"Sofia Rivera","age":15,"role":"child","income_annual":0},
+{"id":"mem_rivera_mateo","household_id":"hh_rivera","name":"Mateo Rivera","age":9,"role":"child","income_annual":0},
+{"id":"mem_rivera_elena","household_id":"hh_rivera","name":"Elena Morales","age":68,"role":"grandparent","income_annual":14208},
+{"id":"mem_okafor_amara","household_id":"hh_okafor","name":"Amara Okafor","age":28,"role":"other","income_annual":74000},
+{"id":"mem_okafor_chidi","household_id":"hh_okafor","name":"Chidi Okafor","age":29,"role":"other","income_annual":68000},
+{"id":"mem_nguyen_tom","household_id":"hh_nguyen","name":"Thanh 'Tom' Nguyen","age":72,"role":"grandparent","income_annual":56412},
+{"id":"mem_nguyen_linh","household_id":"hh_nguyen","name":"Linh Nguyen","age":70,"role":"grandparent","income_annual":15156},
+{"id":"mem_patel_priya","household_id":"hh_patel","name":"Priya Patel","age":34,"role":"parent","income_annual":42500},
+{"id":"mem_patel_aarav","household_id":"hh_patel","name":"Aarav Patel","age":8,"role":"child","income_annual":0},
+{"id":"mem_brooks_terrence","household_id":"hh_brooks","name":"Terrence Brooks","age":46,"role":"parent","income_annual":96000},
+{"id":"mem_brooks_danielle","household_id":"hh_brooks","name":"Danielle Brooks","age":44,"role":"parent","income_annual":71500},
+{"id":"mem_brooks_jordan","household_id":"hh_brooks","name":"Jordan Brooks","age":16,"role":"child","income_annual":4300},
+{"id":"mem_brooks_walter","household_id":"hh_brooks","name":"Walter Brooks","age":74,"role":"grandparent","income_annual":24600}
+]

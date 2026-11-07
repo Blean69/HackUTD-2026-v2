@@ -1,0 +1,13 @@
+[
+{"member_id":"mem_rivera_marisol","household_id":"hh_rivera","score":741,"utilization_pct":15.7,"hard_inquiries_12m":1,"oldest_account_years":16,"late_payments_24m":0},
+{"member_id":"mem_rivera_daniel","household_id":"hh_rivera","score":726,"utilization_pct":10.4,"hard_inquiries_12m":2,"oldest_account_years":19,"late_payments_24m":0},
+{"member_id":"mem_rivera_elena","household_id":"hh_rivera","score":712,"utilization_pct":0.0,"hard_inquiries_12m":0,"oldest_account_years":34,"late_payments_24m":0},
+{"member_id":"mem_okafor_amara","household_id":"hh_okafor","score":671,"utilization_pct":86.3,"hard_inquiries_12m":3,"oldest_account_years":9,"late_payments_24m":0},
+{"member_id":"mem_okafor_chidi","household_id":"hh_okafor","score":648,"utilization_pct":61.0,"hard_inquiries_12m":2,"oldest_account_years":8,"late_payments_24m":1},
+{"member_id":"mem_nguyen_tom","household_id":"hh_nguyen","score":812,"utilization_pct":1.0,"hard_inquiries_12m":0,"oldest_account_years":41,"late_payments_24m":0},
+{"member_id":"mem_nguyen_linh","household_id":"hh_nguyen","score":806,"utilization_pct":1.0,"hard_inquiries_12m":0,"oldest_account_years":38,"late_payments_24m":0},
+{"member_id":"mem_patel_priya","household_id":"hh_patel","score":571,"utilization_pct":74.7,"hard_inquiries_12m":4,"oldest_account_years":7,"late_payments_24m":3},
+{"member_id":"mem_brooks_terrence","household_id":"hh_brooks","score":752,"utilization_pct":12.1,"hard_inquiries_12m":1,"oldest_account_years":22,"late_payments_24m":0},
+{"member_id":"mem_brooks_danielle","household_id":"hh_brooks","score":768,"utilization_pct":12.1,"hard_inquiries_12m":0,"oldest_account_years":21,"late_payments_24m":0},
+{"member_id":"mem_brooks_walter","household_id":"hh_brooks","score":791,"utilization_pct":0.0,"hard_inquiries_12m":0,"oldest_account_years":45,"late_payments_24m":0}
+]
