@@ -16,7 +16,7 @@ function Tip({ active, payload }: TipProps) {
   return (
     <div className="rounded-xl border border-line-strong bg-surface px-3 py-2 text-[0.8rem] shadow-card">
       <p className="font-semibold">{longDate(p.date)}</p>
-      <p className="num text-ink-2">Checking: <span className="font-semibold text-ink">{usd(p.balance)}</span></p>
+      <p className="num text-ink-2">Cash: <span className="font-semibold text-ink">{usd(p.balance)}</span></p>
       {p.scenario !== undefined ? <p className="num text-ink-2">With change: <span className="font-semibold text-accent">{usd(p.scenario)}</span></p> : null}
       {p.obligations_due > 0 ? <p className="num text-watch">Bills due: {usd(p.obligations_due)}</p> : null}
     </div>
@@ -39,6 +39,7 @@ export function ForecastChart({ points, low, overlay, height = 230, title = "Nex
   const data = points.map((p) => ({ ...p, scenario: over.get(p.date) }));
   const maxObl = Math.max(1, ...points.map((p) => p.obligations_due));
   const tight = low ? low.balance < BUFFER : false;
+  const showBuffer = !!low && low.balance < BUFFER * 4;
   const Wrap = embedded ? "div" : Card;
   return (
     <section aria-labelledby={embedded ? undefined : "fc-h"} aria-label={embedded ? title : undefined}>
@@ -53,7 +54,7 @@ export function ForecastChart({ points, low, overlay, height = 230, title = "Nex
       <Wrap className={embedded ? "" : "p-3 pt-4"}>
         <p className="px-1 pb-2 text-[0.84rem] leading-snug text-ink-2">
           {low ? (
-            <>Checking bottoms out at <span className="num font-semibold text-ink">{usd(low.balance)}</span> on <span className="font-semibold text-ink">{longDate(low.date)}</span>
+            <>Cash bottoms out at <span className="num font-semibold text-ink">{usd(low.balance)}</span> on <span className="font-semibold text-ink">{longDate(low.date)}</span>
               {tight ? <span className="text-watch"> — under a {usd(BUFFER)} safety buffer.</span> : <span>, comfortably above a {usd(BUFFER)} buffer.</span>}</>
           ) : null}
         </p>
@@ -71,7 +72,7 @@ export function ForecastChart({ points, low, overlay, height = 230, title = "Nex
               <YAxis yAxisId="bal" tickFormatter={(v: number) => usd(v, { compact: true })} tick={{ fontSize: 11, fill: "var(--ink-3)" }} tickLine={false} axisLine={false} width={46} domain={["auto", "auto"]} />
               <YAxis yAxisId="obl" hide domain={[0, maxObl * 5]} />
               <Tooltip content={<Tip />} cursor={{ stroke: "var(--line-strong)" }} />
-              <ReferenceLine yAxisId="bal" y={BUFFER} stroke="var(--watch)" strokeDasharray="4 4" strokeOpacity={0.7} />
+              {showBuffer ? <ReferenceLine yAxisId="bal" y={BUFFER} stroke="var(--watch)" strokeDasharray="4 4" strokeOpacity={0.7} /> : null}
               <Bar yAxisId="obl" dataKey="obligations_due" fill="var(--accent)" barSize={3} radius={[2, 2, 0, 0]} isAnimationActive={false} />
               <Area yAxisId="bal" type="monotone" dataKey="balance" stroke="var(--brand)" strokeWidth={2.25} fill="url(#fcfill)" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
               {overlay ? <Line yAxisId="bal" type="monotone" dataKey="scenario" stroke="var(--accent)" strokeWidth={2.25} strokeDasharray="5 3" dot={false} isAnimationActive={false} connectNulls /> : null}
@@ -80,10 +81,10 @@ export function ForecastChart({ points, low, overlay, height = 230, title = "Nex
           </ResponsiveContainer>
         </div>
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[0.72rem] text-ink-2">
-          <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-brand" aria-hidden="true" /> Checking balance</li>
+          <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-brand" aria-hidden="true" /> Cash balance</li>
           <li className="flex items-center gap-1.5"><span className="h-2.5 w-0.5 bg-accent" aria-hidden="true" /> Bill or loan payment due</li>
           <li className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-risk" aria-hidden="true" /> Low point</li>
-          <li className="flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-watch" aria-hidden="true" /> {usd(BUFFER)} safety buffer</li>
+          {showBuffer ? <li className="flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-watch" aria-hidden="true" /> {usd(BUFFER)} safety buffer</li> : null}
           {overlay ? <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 border-t-2 border-dashed border-accent" aria-hidden="true" /> With your what-if</li> : null}
         </ul>
       </Wrap>

@@ -10,7 +10,7 @@ import { DEMO_HOUSEHOLD_ID } from "@/lib/constants";
 import { joinRoom } from "@/lib/data/actions";
 import { useLocalIdentity } from "@/lib/data/identity";
 import {
-  useAccounts, useAdvisorNotes, useAlerts, useDataReady, useForecast, useGoals, useHealth, useHousehold, useHuddle, useNetWorth,
+  useAccounts, useAdvisorNotes, useAlerts, useDataReady, useDataScope, useForecast, useGoals, useHealth, useHousehold, useHuddle, useNetWorth,
 } from "@/lib/data/hooks";
 import { cx, relTime } from "@/lib/format";
 import { AccountsPanel, NetWorthCard } from "./AccountsPanel";
@@ -85,10 +85,12 @@ function RoomSkeleton() {
 
 export function RoomClient({ householdId }: { householdId: string }) {
   const ident = useLocalIdentity();
+  useDataScope("room", householdId);
   const ready = useDataReady();
   const household = useHousehold(householdId);
   const accounts = useAccounts(householdId);
-  const nw = useNetWorth(accounts);
+  const property = (household?.home_value ?? 0) + (household?.vehicle_value ?? 0);
+  const nw = useNetWorth(accounts, property);
   const health = useHealth(householdId);
   const alerts = useAlerts(householdId);
   const goals = useGoals(householdId);
@@ -157,7 +159,7 @@ export function RoomClient({ householdId }: { householdId: string }) {
 
           <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
             <div role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" className={cx("min-w-0 space-y-6", tab !== "overview" && "hidden lg:block lg:space-y-6")}>
-              <NetWorthCard nw={nw} />
+              <NetWorthCard nw={nw} property={property} />
               <HealthCards items={health} />
               <AdvisorNotes householdId={householdId} />
               <AlertsPanel alerts={alerts.filter((a) => a.kind !== "advisor")} me={name ?? "Someone"} />

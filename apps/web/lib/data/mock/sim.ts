@@ -231,11 +231,11 @@ export function runScenario(s: ParsedScenario, c: SimCtx): ScenarioResult {
   else if (s.kind === "purchase" && verdict !== "fine") suggestion = `Move about ${usd(Math.max(1500 - lowAfter.balance, 500), { compact: true })} from savings before ${shortDate(lowAfter.date)} or delay the purchase until after payday.`;
   else if (s.kind === "payoff") suggestion = `Interest saved: about ${usd(s.interestSavedYear ?? 0)} a year. Keep at least ${usd(Math.round(out * 2))} (two months) in savings afterwards.`;
   const verdictWords = verdict === "fine" ? "comfortably" : verdict === "tight" ? "tightly" : "not safely";
-  const summary = `${s.label}: this works ${verdictWords}. ${s.note} Checking would bottom out at ${usd(lowAfter.balance)} on ${longDate(lowAfter.date)} (baseline ${usd(lowBefore.balance)}).`;
+  const summary = `${s.label}: this works ${verdictWords}. ${s.note} Cash would bottom out at ${usd(lowAfter.balance)} on ${longDate(lowAfter.date)} (baseline ${usd(lowBefore.balance)}).`;
   return {
     summary, verdict, series, low_point: lowAfter, suggestion,
     metrics: [
-      { label: "Lowest checking balance", before: lowBefore.balance, after: lowAfter.balance, unit: "usd" },
+      { label: "Lowest cash balance", before: lowBefore.balance, after: lowAfter.balance, unit: "usd" },
       { label: "Cash runway", before: Math.round(runwayBefore * 10) / 10, after: Math.round(runwayAfter * 10) / 10, unit: "months" },
       { label: "Monthly loan + card payments", before: payBefore, after: payBefore + s.monthly - s.relief, unit: "usd" },
     ],

@@ -14,7 +14,7 @@ function detail(a: Account): string {
   return bits.join(" · ");
 }
 
-export function NetWorthCard({ nw, name }: { nw: NetWorth; name?: string }) {
+export function NetWorthCard({ nw, name, property = 0 }: { nw: NetWorth; name?: string; property?: number }) {
   const total = nw.assets + nw.liabilities || 1;
   return (
     <Card className="overflow-hidden p-5">
@@ -27,6 +27,7 @@ export function NetWorthCard({ nw, name }: { nw: NetWorth; name?: string }) {
         <div>
           <dt className="text-ink-2">Owns</dt>
           <dd className="num font-semibold text-good">{usd(nw.assets)}</dd>
+          {property > 0 ? <dd className="num text-[0.72rem] text-ink-3">incl. {usd(property, { compact: true })} home &amp; vehicle</dd> : null}
         </div>
         <div className="text-right">
           <dt className="text-ink-2">Owes</dt>

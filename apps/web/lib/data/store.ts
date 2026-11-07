@@ -59,6 +59,10 @@ const PK: { [K in TableName]: (r: TableRows[K]) => string } = {
   bank_connection: (r) => r.item_id,
 };
 
+export function keyOf<K extends TableName>(t: K, row: TableRows[K]): string {
+  return PK[t](row);
+}
+
 const EMPTY: readonly never[] = Object.freeze([]);
 
 /**

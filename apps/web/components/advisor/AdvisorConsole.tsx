@@ -8,7 +8,7 @@ import { TraceDock } from "@/components/trace/TraceDrawer";
 import { Button, Card, Chip, Skeleton, StatusDot, type Tone } from "@/components/ui";
 import { joinRoom, postAdvisorNote } from "@/lib/data/actions";
 import { useLocalIdentity } from "@/lib/data/identity";
-import { useAdvisorNotes, useDataReady, useGoals, useHouseholds, useHouseholdSummaries, usePresenceAll, useRuns, type HouseholdSummary } from "@/lib/data/hooks";
+import { useAdvisorNotes, useDataReady, useDataScope, useGoals, useHouseholds, useHouseholdSummaries, usePresenceAll, useRuns, type HouseholdSummary } from "@/lib/data/hooks";
 import { cx, metric, relTime, usd } from "@/lib/format";
 import { WORKFLOW_LABEL } from "@/lib/types";
 
@@ -55,9 +55,10 @@ function Detail({ h, author }: { h: HouseholdSummary; author: string }) {
       <div>
         <h3 className="text-[0.72rem] font-semibold uppercase tracking-wide text-ink-2">Open alerts &amp; goals</h3>
         <ul className="mt-2 space-y-1.5">
-          {h.openAlerts.length ? h.openAlerts.map((a) => (
+          {h.openAlerts.length ? h.openAlerts.slice(0, 6).map((a) => (
             <li key={a.id} className="flex items-start gap-2 text-[0.84rem] leading-snug"><StatusDot tone={a.severity === "critical" ? "risk" : a.severity === "warn" ? "watch" : "info"} /><span>{a.title}</span></li>
           )) : <li className="text-[0.84rem] text-ink-3">No open alerts.</li>}
+          {h.openAlerts.length > 6 ? <li className="text-[0.8rem] text-ink-3">+ {h.openAlerts.length - 6} more in their room</li> : null}
         </ul>
         <ul className="mt-3 space-y-1">
           {goals.slice(0, 4).map((g) => (
@@ -90,9 +91,12 @@ function Detail({ h, author }: { h: HouseholdSummary; author: string }) {
 }
 
 export function AdvisorConsole() {
+  useDataScope("advisor");
   const ident = useLocalIdentity();
   const ready = useDataReady();
-  const unsorted = useHouseholdSummaries();
+  const all = useHouseholdSummaries();
+  // Private sandboxes belong to whoever made them; the console is about the seeded households.
+  const unsorted = useMemo(() => all.filter((h) => !h.isSandbox), [all]);
   const everyone = usePresenceAll();
   const households = useHouseholds();
   const runs = useRuns();

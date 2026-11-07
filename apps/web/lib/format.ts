@@ -24,8 +24,8 @@ export function months(n: number): string {
   return `${n.toFixed(1)} mo`;
 }
 
-export function metric(value: number, unit: "usd" | "pct" | "months"): string {
-  return unit === "usd" ? usd(value) : unit === "pct" ? pct(value, 1) : months(value);
+export function metric(value: number, unit: "usd" | "pct" | "months" | "score"): string {
+  return unit === "usd" ? usd(value) : unit === "pct" ? pct(value, 1) : unit === "score" ? String(Math.round(value)) : months(value);
 }
 
 export function shortDate(iso: string): string {

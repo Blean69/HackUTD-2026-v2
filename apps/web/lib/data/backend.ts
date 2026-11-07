@@ -1,5 +1,12 @@
 import type { Goal, PresenceRole } from "@/lib/types";
 
+/** What a page needs from the database. Live backends subscribe to just that; the mock ignores it. */
+export type DataScope =
+  | { kind: "lobby" }
+  | { kind: "room"; householdId: string }
+  | { kind: "advisor" }
+  | { kind: "agents" };
+
 /**
  * Everything the UI can do. 1:1 with the client-callable reducers in docs/contracts.md section 3.
  * The mock engine and the SpacetimeDB adapter both implement this; components never talk to either directly.
@@ -36,5 +43,7 @@ export interface Backend {
   /** The caller's stable identity (Presence.identity of "me"). */
   identity: string;
   actions: Actions;
+  /** Switch the active subscription set. Resolves the connection's `synced` flag when the first rows arrive. */
+  setScope?(scope: DataScope): void;
   dispose(): void;
 }

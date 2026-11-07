@@ -6,7 +6,7 @@ import { ProviderBadge } from "@/components/trace/badges";
 import { runTotals, TraceTimeline } from "@/components/trace/TraceTimeline";
 import { Chip, Skeleton } from "@/components/ui";
 import { IconChevronDown } from "@/components/icons";
-import { useDataReady, useHouseholds, useRuns, useTraceByRun } from "@/lib/data/hooks";
+import { useDataReady, useDataScope, useHouseholds, useRuns, useTraceByRun } from "@/lib/data/hooks";
 import { cx, duration, relTime } from "@/lib/format";
 import { WORKFLOWS, WORKFLOW_LABEL, type AgentRun, type TraceEvent, type Workflow } from "@/lib/types";
 
@@ -52,6 +52,7 @@ function RunCard({ run, events, household, defaultOpen }: { run: AgentRun; event
 }
 
 export function AgentWall() {
+  useDataScope("agents");
   const ready = useDataReady();
   const [wf, setWf] = useState<Workflow | "all">("all");
   const all = useRuns();

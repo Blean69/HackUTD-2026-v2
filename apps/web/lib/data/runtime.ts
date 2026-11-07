@@ -1,6 +1,6 @@
 "use client";
 import { USE_MOCKS } from "@/lib/constants";
-import type { Backend } from "./backend";
+import type { Backend, DataScope } from "./backend";
 import { getConnection, setConnection } from "./connection";
 import { startMockBackend } from "./mock/engine";
 import { connectSpacetime } from "./spacetime";
@@ -8,14 +8,15 @@ import { store } from "./store";
 
 let pending: Promise<Backend> | null = null;
 let backend: Backend | null = null;
+let desired: DataScope = { kind: "lobby" };
 
 /**
- * Idempotent. Picks the backend once per page load: SpacetimeDB if configured and reachable, otherwise the mock
- * engine. Client-only; it is kicked off by <DataProvider> and awaited by every action.
+ * Idempotent. Picks the backend once per page load: SpacetimeDB if configured and reachable (and seeded),
+ * otherwise the in-browser mock engine. Client-only; kicked off by <DataProvider> and awaited by every action.
  */
 export function ensureBackend(): Promise<Backend> {
   if (pending) return pending;
-  setConnection({ status: "connecting" });
+  setConnection({ status: "connecting", synced: false });
   pending = (async () => {
     let detail = "";
     if (USE_MOCKS) {
@@ -25,7 +26,8 @@ export function ensureBackend(): Promise<Backend> {
         const res = await connectSpacetime(store);
         if (res.backend) {
           backend = res.backend;
-          setConnection({ status: "ready", kind: "spacetime", detail: "", identity: res.backend.identity });
+          setConnection({ status: "ready", kind: "spacetime", detail: "", identity: res.backend.identity, online: true });
+          res.backend.setScope?.(desired);
           return res.backend;
         }
         detail = res.detail;
@@ -35,10 +37,16 @@ export function ensureBackend(): Promise<Backend> {
     }
     const mock = startMockBackend(store);
     backend = mock;
-    setConnection({ status: "ready", kind: "mock", detail, identity: mock.identity });
+    setConnection({ status: "ready", kind: "mock", detail, identity: mock.identity, synced: true, online: true });
     return mock;
   })();
   return pending;
+}
+
+/** Declare which slice of the database the current page needs. Safe to call before the backend is up. */
+export function setDataScope(scope: DataScope): void {
+  desired = scope;
+  if (backend) backend.setScope?.(scope);
 }
 
 export function currentBackend(): Backend | null {

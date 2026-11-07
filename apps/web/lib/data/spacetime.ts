@@ -1,70 +1,354 @@
 /**
- * SpacetimeDB adapter — STUB.
+ * SpacetimeDB backend: the real thing.
  *
- * Another agent generates the TypeScript bindings into lib/module_bindings/ (never edit those) and replaces the body
- * of `connectSpacetime` below. Until then this reports "not wired" and the app runs on the mock engine
- * (lib/data/mock/), which implements the same `Backend` interface and writes into the same `store`.
+ * - Connects with the generated `DbConnection` (lib/module_bindings, never edited). The auth token is kept in
+ *   localStorage so a phone keeps its identity (and therefore its sandbox ownership). Append `?as=<label>` to the
+ *   first URL you open to get a separate identity in the same browser (handy for testing two people in two tabs).
+ * - Table callbacks map binding rows into the UI store (lib/data/spacetime-map.ts); components never see bindings.
+ * - Pages declare what they need through a `DataScope`; we subscribe to just that slice (household-scoped queries for
+ *   the room, runs and trace events for /agents, summaries for /advisor) and flip `connection.synced` when the first
+ *   rows have been applied. A small base subscription (households + presence) lives as long as the connection.
+ * - Every `Actions` method calls the matching reducer.
+ * - Resolves `{ backend: null }` (never throws) when the database is unreachable or empty, so the runtime falls back
+ *   to the mock engine.
  *
- * What `connectSpacetime(store)` must do when it is real:
- *   1. Connect with DbConnection.builder().withUri(SPACETIME_URI).withDatabaseName(SPACETIME_DB) (+ saved token).
- *   2. Subscribe to the tables listed in TABLES (lib/data/store.ts) and, in onInsert / onUpdate / onDelete,
- *      map each binding row to the UI row type in lib/types.ts (camelCase -> snake_case, parse the `*_json`
- *      columns, Timestamp -> ISO string) and call store.upsert / store.remove.
- *   3. Resolve to a Backend whose `actions` call the reducers (see Actions in ./backend.ts for the 1:1 mapping),
- *      `identity` is the connection's Identity hex string (so `usePresence` can mark "me"), and
- *      `dispose()` disconnects.
- *   4. Resolve to null (never throw) if the database is unreachable, so the runtime falls back to mocks.
- *
- * Env: NEXT_PUBLIC_SPACETIME_URI (default ws://localhost:3000), NEXT_PUBLIC_SPACETIME_DB (default "keystone"),
- *      NEXT_PUBLIC_USE_MOCKS=1 forces mocks.
+ * Env: NEXT_PUBLIC_SPACETIME_URI (default ws://localhost:3000), NEXT_PUBLIC_SPACETIME_DB (default "keystone").
  */
 import { SPACETIME_DB, SPACETIME_URI } from "@/lib/constants";
-import type { Backend } from "./backend";
-import type { DataStore } from "./store";
+import type { DbConnection, SubscriptionHandle } from "@/lib/module_bindings";
+import type { Goal, PresenceRole } from "@/lib/types";
+import type { Actions, Backend, DataScope } from "./backend";
+import { setConnection } from "./connection";
+import * as M from "./spacetime-map";
+import { keyOf, type DataStore, type TableName, type TableRows } from "./store";
 
 export { SPACETIME_DB, SPACETIME_URI };
 
-export interface SpacetimeProbe {
-  reachable: boolean;
-  detail: string;
+const TOKEN_KEY = "keystone.token";
+const CONNECT_TIMEOUT_MS = 5000;
+const SYNC_TIMEOUT_MS = 10000;
+
+/** Per-browser-tab identity namespace: `?as=alice` -> its own token. */
+function tokenKey(): string {
+  try {
+    const as = new URLSearchParams(window.location.search).get("as");
+    return as ? `${TOKEN_KEY}.${as.replace(/[^\w-]/g, "").slice(0, 24)}` : TOKEN_KEY;
+  } catch {
+    return TOKEN_KEY;
+  }
+}
+const readToken = (k: string): string | undefined => {
+  try {
+    return localStorage.getItem(k) || undefined;
+  } catch {
+    return undefined;
+  }
+};
+const saveToken = (k: string, v: string | undefined): void => {
+  try {
+    if (v) localStorage.setItem(k, v);
+    else localStorage.removeItem(k);
+  } catch {
+    /* private mode: identity lasts for this page load only */
+  }
+};
+
+const safeId = (s: string) => s.replace(/[^\w:.-]/g, "");
+
+/** Which tables (all filtered by household_id) make up a family room. txn and credit_profile are never shown. */
+const ROOM_TABLES = [
+  "account", "member", "obligation", "conversation", "health_indicator", "forecast_point", "alert", "goal", "huddle",
+  "transcript_line", "scenario", "coach_message", "advisor_note", "agent_run", "trace_event", "bank_connection",
+];
+
+export function queriesFor(scope: DataScope): string[] {
+  switch (scope.kind) {
+    case "room": {
+      const id = safeId(scope.householdId);
+      return ROOM_TABLES.map((t) => `SELECT * FROM ${t} WHERE household_id = '${id}'`);
+    }
+    case "advisor":
+      return ["health_indicator", "alert", "goal", "account", "advisor_note", "agent_run", "trace_event"].map((t) => `SELECT * FROM ${t}`);
+    case "agents":
+      return ["agent_run", "trace_event"].map((t) => `SELECT * FROM ${t}`);
+    default:
+      return ["SELECT * FROM agent_run"];
+  }
+}
+const scopeKey = (s: DataScope) => (s.kind === "room" ? `room:${s.householdId}` : s.kind);
+
+interface Tbl<R> {
+  onInsert(cb: (ctx: unknown, row: R) => void): void;
+  onUpdate(cb: (ctx: unknown, oldRow: R, newRow: R) => void): void;
+  onDelete(cb: (ctx: unknown, row: R) => void): void;
 }
 
-/** Cheap reachability check: can we open a WebSocket to the database endpoint within `timeoutMs`? */
-export function probeSpacetime(timeoutMs = 2000): Promise<SpacetimeProbe> {
-  return new Promise((resolve) => {
-    if (typeof WebSocket === "undefined") return resolve({ reachable: false, detail: "no WebSocket in this runtime" });
-    let done = false;
-    let ws: WebSocket | null = null;
-    const finish = (p: SpacetimeProbe) => {
-      if (done) return;
-      done = true;
+function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () => void, me: () => string): void {
+  const wire = <R, T extends TableName>(tbl: unknown, name: T, map: (r: R) => TableRows[T], onGone?: (row: TableRows[T]) => void) => {
+    const t = tbl as Tbl<R>;
+    t.onInsert((_c, r) => store.upsert(name, map(r)));
+    t.onUpdate((_c, _o, r) => store.upsert(name, map(r)));
+    t.onDelete((_c, r) => {
+      const row = map(r);
+      store.remove(name, keyOf(name, row));
+      onGone?.(row);
+    });
+  };
+  const db = conn.db;
+  wire(db.household, "household", M.mapHousehold);
+  wire(db.member, "member", M.mapMember);
+  wire(db.account, "account", M.mapAccount);
+  wire(db.obligation, "obligation", M.mapObligation);
+  wire(db.conversation, "conversation", M.mapConversation);
+  wire(db.healthIndicator, "health_indicator", M.mapHealth);
+  wire(db.forecastPoint, "forecast_point", M.mapForecast);
+  wire(db.alert, "alert", M.mapAlert);
+  wire(db.goal, "goal", M.mapGoal);
+  wire(db.presence, "presence", M.mapPresence, (p) => {
+    if (p.identity === me()) onOwnPresenceGone();
+  });
+  wire(db.huddle, "huddle", M.mapHuddle);
+  wire(db.transcriptLine, "transcript_line", M.mapTranscriptLine);
+  wire(db.scenario, "scenario", M.mapScenario);
+  wire(db.coachMessage, "coach_message", M.mapCoachMessage);
+  wire(db.advisorNote, "advisor_note", M.mapAdvisorNote);
+  wire(db.agentRun, "agent_run", M.mapRun);
+  wire(db.traceEvent, "trace_event", M.mapTrace);
+  wire(db.bankConnection, "bank_connection", M.mapBank);
+}
+
+function open(DbConnectionCtor: typeof DbConnection, key: string, token: string | undefined, onLive: (up: boolean, detail: string) => void): Promise<{ conn: DbConnection; identity: string }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let conn: DbConnection | null = null;
+    const fail = (e: unknown) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       try {
-        ws?.close();
+        conn?.disconnect();
       } catch {
         /* ignore */
       }
-      resolve(p);
+      reject(e instanceof Error ? e : new Error(String(e)));
     };
-    const timer = setTimeout(() => finish({ reachable: false, detail: `timed out connecting to ${SPACETIME_URI}` }), timeoutMs);
-    try {
-      ws = new WebSocket(`${SPACETIME_URI.replace(/\/$/, "")}/v1/database/${SPACETIME_DB}/subscribe`, "v1.bsatn.spacetimedb");
-      ws.onopen = () => finish({ reachable: true, detail: `${SPACETIME_URI} is reachable` });
-      ws.onerror = () => finish({ reachable: false, detail: `${SPACETIME_URI} refused the connection` });
-    } catch (e) {
-      finish({ reachable: false, detail: e instanceof Error ? e.message : "bad SpacetimeDB URI" });
-    }
+    const timer = setTimeout(() => fail(new Error(`timed out connecting to ${SPACETIME_URI}`)), CONNECT_TIMEOUT_MS);
+    const b = DbConnectionCtor.builder()
+      .withUri(SPACETIME_URI)
+      .withDatabaseName(SPACETIME_DB)
+      .withAutomaticReconnect()
+      .onConnect((c, identity, tok) => {
+        saveToken(key, tok);
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ conn: c, identity: identity.toHexString() });
+      })
+      .onAutomaticReconnect(() => onLive(true, ""))
+      .onConnectError((_ctx, err) => {
+        if (!settled) fail(err);
+        else onLive(false, err instanceof Error ? err.message : "connection error");
+      })
+      .onDisconnect((_ctx, err) => onLive(false, err ? String(err) : "disconnected"));
+    if (token) b.withToken(token);
+    conn = b.build();
   });
 }
 
-/** TODO(spacetime agent): replace with the real connection. Must resolve to null when it cannot connect. */
+function subscribeApplied(conn: DbConnection, queries: string[], timeoutMs = SYNC_TIMEOUT_MS): Promise<SubscriptionHandle> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("subscription timed out")), timeoutMs);
+    const handle: SubscriptionHandle = conn
+      .subscriptionBuilder()
+      .onApplied(() => {
+        clearTimeout(timer);
+        resolve(handle);
+      })
+      .onError((ctx) => {
+        clearTimeout(timer);
+        const ev = (ctx as { event?: unknown }).event;
+        reject(new Error(`subscription failed: ${ev instanceof Error ? ev.message : String(ev ?? "")}`));
+      })
+      .subscribe(queries);
+  });
+}
+
+function poll<T>(fn: () => T | undefined, ms = 5000): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const tick = () => {
+      const v = fn();
+      if (v !== undefined || Date.now() - t0 > ms) return resolve(v);
+      setTimeout(tick, 40);
+    };
+    tick();
+  });
+}
+
+const unsub = (h: SubscriptionHandle | null | undefined) => {
+  try {
+    h?.unsubscribe();
+  } catch {
+    /* already ended */
+  }
+};
+
 export async function connectSpacetime(store: DataStore): Promise<{ backend: Backend | null; detail: string }> {
-  void store;
-  const probe = await probeSpacetime();
+  if (typeof window === "undefined") return { backend: null, detail: "no browser" };
+  const key = tokenKey();
+  let mod: typeof import("@/lib/module_bindings");
+  try {
+    mod = await import("@/lib/module_bindings");
+  } catch (e) {
+    return { backend: null, detail: `SpacetimeDB bindings failed to load: ${e instanceof Error ? e.message : String(e)}` };
+  }
+
+  let connected: { conn: DbConnection; identity: string } | null = null;
+  let me = "";
+  let rejoin: (() => void) | null = null;
+  const onLive = (up: boolean, detail: string) => {
+    setConnection({ online: up, ...(up ? {} : { detail }) });
+    if (up) rejoin?.();
+  };
+  try {
+    const token = readToken(key);
+    try {
+      connected = await open(mod.DbConnection, key, token, onLive);
+    } catch (e) {
+      if (!token) throw e;
+      saveToken(key, undefined); // stale token (e.g. the database was recreated): try again as a new identity
+      connected = await open(mod.DbConnection, key, undefined, onLive);
+    }
+  } catch (e) {
+    return { backend: null, detail: `Couldn't reach SpacetimeDB at ${SPACETIME_URI} (${e instanceof Error ? e.message : String(e)})` };
+  }
+  const { conn } = connected;
+  me = connected.identity;
+
+  let lastJoin: [string, string, PresenceRole] | null = null;
+  const callJoin = () => {
+    if (lastJoin) void conn.reducers.joinRoom({ householdId: lastJoin[0], displayName: lastJoin[1], role: lastJoin[2] }).catch(() => undefined);
+  };
+  rejoin = callJoin;
+  // Two tabs of one identity share a presence row; if the other tab closes and deletes it, put ours back.
+  wireTables(conn, store, () => setTimeout(callJoin, 400), () => me);
+
+  // Base subscription for the life of the connection: who exists, who is online.
+  try {
+    await subscribeApplied(conn, ["SELECT * FROM household", "SELECT * FROM presence"]);
+  } catch (e) {
+    conn.disconnect();
+    return { backend: null, detail: `SpacetimeDB subscription failed (${e instanceof Error ? e.message : String(e)})` };
+  }
+  if (store.rows("household").length === 0) {
+    conn.disconnect();
+    return { backend: null, detail: "SpacetimeDB is up but has no households yet (run `npm run seed` in services/worker)" };
+  }
+
+  // ------------------------------------------------------------------ scope
+  let active: { key: string; handle: SubscriptionHandle } | null = null;
+  let generation = 0;
+  const applyScope = (scope: DataScope, force = false) => {
+    const k = scopeKey(scope);
+    if (!force && active?.key === k) return;
+    const mine = ++generation;
+    const prev = active;
+    setConnection({ synced: false });
+    const handle: SubscriptionHandle = conn
+      .subscriptionBuilder()
+      .onApplied(() => {
+        if (mine !== generation) return unsub(handle);
+        active = { key: k, handle };
+        setConnection({ synced: true });
+        if (prev) unsub(prev.handle);
+      })
+      .onError(() => {
+        if (mine === generation) setConnection({ synced: true, detail: "A subscription failed; some data may be missing" });
+      })
+      .subscribe(queriesFor(scope));
+  };
+
+  // ------------------------------------------------------------------ actions
+  const r = conn.reducers;
+  const actions: Actions = {
+    joinRoom: async (householdId, displayName, role) => {
+      lastJoin = [householdId, displayName, role];
+      await r.joinRoom({ householdId, displayName, role });
+    },
+
+    createSandbox: async (templateHouseholdId, displayName) => {
+      const before = new Set(store.rows("household").filter((h) => h.owner === me).map((h) => h.id));
+      await r.createSandbox({ templateHouseholdId, displayName });
+      const made = await poll(() => store.rows("household").filter((h) => h.owner === me && h.template_id === templateHouseholdId && !before.has(h.id)).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]);
+      if (!made) throw new Error("Your copy was created but hasn't appeared yet. Please try again.");
+      return made.id;
+    },
+
+    startHuddle: async (householdId, consentNames) => {
+      await r.startHuddle({ householdId, consentNamesJson: JSON.stringify(consentNames) });
+      const h = await poll(() => store.rows("huddle").filter((x) => x.household_id === householdId && x.status === "live").sort((a, b) => b.started_at.localeCompare(a.started_at))[0]);
+      if (!h) throw new Error("The Huddle didn't start. Please try again.");
+      return h.id;
+    },
+
+    appendTranscript: async (huddleId, speaker, text) => {
+      await r.appendTranscript({ huddleId, speaker, text });
+    },
+
+    endHuddle: async (huddleId) => {
+      await r.endHuddle({ huddleId });
+    },
+
+    requestSimulation: async (householdId, prompt) => {
+      await r.requestSimulation({ householdId, prompt });
+      return "";
+    },
+
+    askCoach: async (householdId, text) => {
+      // The module takes the author's name from their presence row, so the room must have been joined.
+      await r.askCoach({ householdId, text });
+    },
+
+    ackAlert: async (alertId, displayName) => {
+      await r.ackAlert({ alertId, displayName });
+    },
+
+    postAdvisorNote: async (householdId, authorName, text) => {
+      await r.postAdvisorNote({ householdId, authorName, text });
+    },
+
+    upsertGoal: async (g: Partial<Goal> & { household_id: string; title: string }) => {
+      await r.upsertGoal({
+        id: g.id ?? "", householdId: g.household_id, title: g.title, targetAmount: g.target_amount ?? 0, targetDate: g.target_date ?? "",
+        priority: M.priorityToDb(g.priority),
+      });
+    },
+
+    deleteGoal: async (id) => {
+      await r.deleteGoal({ id });
+    },
+
+    requestBankSync: async (householdId) => {
+      await r.requestBankSync({ householdId });
+    },
+  };
+
   return {
-    backend: null,
-    detail: probe.reachable
-      ? `${probe.detail}, but the SpacetimeDB adapter in lib/data/spacetime.ts is not wired yet — using mock data`
-      : `${probe.detail} — using mock data`,
+    detail: "",
+    backend: {
+      kind: "spacetime",
+      identity: me,
+      actions,
+      setScope: (scope) => {
+        applyScope(scope);
+      },
+      dispose: () => {
+        try {
+          conn.disconnect();
+        } catch {
+          /* ignore */
+        }
+      },
+    },
   };
 }

@@ -1,10 +1,12 @@
 "use client";
-import { useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { LIABILITY_TYPES } from "@/lib/format";
 import type {
   Account, AgentRun, Alert, HealthIndicator, HealthStatus, Presence, TraceEvent, Workflow,
 } from "@/lib/types";
+import type { DataScope } from "./backend";
 import { useConnection } from "./connection";
+import { setDataScope } from "./runtime";
 import { store, emptyRows, type TableName, type TableRows } from "./store";
 
 const subscribers = new Map<TableName, (cb: () => void) => () => void>();
@@ -28,7 +30,15 @@ export function useRows<K extends TableName>(t: K): readonly TableRows[K][] {
 
 /** True once a backend (mock or SpacetimeDB) is connected and the first sync has landed. */
 export function useDataReady(): boolean {
-  return useConnection().status === "ready";
+  const c = useConnection();
+  return c.status === "ready" && c.synced;
+}
+
+/** Tell the data layer which slice of the database this page needs (live mode subscribes to just that). */
+export function useDataScope(kind: DataScope["kind"], householdId = ""): void {
+  useEffect(() => {
+    setDataScope(kind === "room" ? { kind, householdId } : ({ kind } as DataScope));
+  }, [kind, householdId]);
 }
 
 // ------------------------------------------------------------------ household
@@ -58,7 +68,7 @@ export function useConversations(householdId: string) {
   return useMemo(() => rows.filter((c) => c.household_id === householdId), [rows, householdId]);
 }
 
-const HEALTH_ORDER = ["liquidity_runway", "emergency_fund", "debt_to_income", "credit_utilization", "savings_rate", "net_worth_trend"];
+const HEALTH_ORDER = ["liquidity_runway", "emergency_fund", "debt_to_income", "credit_utilization", "savings_rate", "net_worth_trend", "forecast_low_point", "credit_score"];
 export function useHealth(householdId: string): HealthIndicator[] {
   const rows = useRows("health_indicator");
   return useMemo(
@@ -100,16 +110,16 @@ export interface NetWorth {
   liabilities: number;
   net: number;
 }
-export function useNetWorth(accounts: readonly Account[]): NetWorth {
+export function useNetWorth(accounts: readonly Account[], propertyValue = 0): NetWorth {
   return useMemo(() => {
-    let assets = 0;
+    let assets = propertyValue;
     let liabilities = 0;
     for (const a of accounts) {
       if (LIABILITY_TYPES.has(a.type)) liabilities += a.balance;
       else assets += a.balance;
     }
     return { assets, liabilities, net: assets - liabilities };
-  }, [accounts]);
+  }, [accounts, propertyValue]);
 }
 
 export function useBankConnections(householdId: string) {
@@ -238,7 +248,7 @@ export function useHouseholdSummaries(): HouseholdSummary[] {
         const indicators = health.filter((i) => i.household_id === h.id);
         let status: HealthStatus = "good";
         for (const i of indicators) if (STATUS_RANK[i.status] > STATUS_RANK[status]) status = i.status;
-        let net = 0;
+        let net = (h.home_value ?? 0) + (h.vehicle_value ?? 0);
         for (const a of accounts) if (a.household_id === h.id) net += LIABILITY_TYPES.has(a.type) ? -a.balance : a.balance;
         const lastNote = notes.filter((n) => n.household_id === h.id).sort((a, b) => b.id - a.id)[0];
         return {

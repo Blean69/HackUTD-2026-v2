@@ -8,9 +8,13 @@ export interface Connection {
   /** Human-readable reason, e.g. why we fell back to mocks. */
   detail: string;
   identity: string;
+  /** True once the current page's subscription has delivered its first rows (always true for the mock). */
+  synced: boolean;
+  /** False while a live SpacetimeDB connection is down and reconnecting. */
+  online: boolean;
 }
 
-let current: Connection = { status: "idle", kind: null, detail: "", identity: "" };
+let current: Connection = { status: "idle", kind: null, detail: "", identity: "", synced: false, online: true };
 const listeners = new Set<() => void>();
 const SERVER: Connection = current;
 

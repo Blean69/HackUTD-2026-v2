@@ -24,6 +24,9 @@ export interface Household {
   /** "" = seed template, otherwise the household this sandbox was copied from. */
   template_id: string;
   owner?: string;
+  /** Estimated home / vehicle value; counted in net worth. 0 or absent when unknown. */
+  home_value?: number;
+  vehicle_value?: number;
   created_at: string;
 }
 
@@ -124,7 +127,9 @@ export type HealthKey =
   | "credit_utilization"
   | "savings_rate"
   | "net_worth_trend"
-  | "emergency_fund";
+  | "emergency_fund"
+  | "forecast_low_point"
+  | "credit_score";
 export type HealthStatus = "good" | "watch" | "risk";
 
 export interface HealthIndicator {
@@ -133,7 +138,7 @@ export interface HealthIndicator {
   key: HealthKey;
   label: string;
   value: number;
-  unit: "months" | "pct" | "usd";
+  unit: "months" | "pct" | "usd" | "score";
   status: HealthStatus;
   explanation: string;
   updated_at: string;

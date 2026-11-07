@@ -1,6 +1,6 @@
 "use client";
 import { Chip, SectionTitle, type Tone } from "@/components/ui";
-import { cx, metric } from "@/lib/format";
+import { cx, metric, usd } from "@/lib/format";
 import type { HealthIndicator, HealthStatus } from "@/lib/types";
 
 const TONE: Record<HealthStatus, { tone: Tone; label: string; bar: string }> = {
@@ -29,7 +29,7 @@ export function HealthCards({ items }: { items: readonly HealthIndicator[] }) {
                 <p className="text-[0.78rem] font-medium leading-tight text-ink-2">{h.label}</p>
                 <Chip tone={t.tone}>{t.label}</Chip>
               </div>
-              <p className="num mt-1.5 font-display text-[1.75rem] font-bold leading-none tracking-tight">{metric(h.value, h.unit)}</p>
+              <p className="num mt-1.5 font-display text-[1.75rem] font-bold leading-none tracking-tight">{h.key === "net_worth_trend" ? usd(h.value, { sign: true }) : metric(h.value, h.unit)}</p>
               <p className="mt-2 text-[0.78rem] leading-snug text-ink-2">{h.explanation}</p>
             </li>
           );

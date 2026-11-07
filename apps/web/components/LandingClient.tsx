@@ -8,12 +8,13 @@ import { Shell } from "@/components/Shell";
 import { Spinner } from "@/components/ui";
 import { DEMO_HOUSEHOLD_ID, PITCH, PRODUCT_NAME } from "@/lib/constants";
 import { createSandbox, joinRoom } from "@/lib/data/actions";
-import { useDataReady, usePresence, useRuns } from "@/lib/data/hooks";
+import { useDataReady, useDataScope, usePresence, useRuns } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
 
 export function LandingClient() {
   const router = useRouter();
   const ident = useLocalIdentity();
+  useDataScope("lobby");
   const ready = useDataReady();
   const rivera = usePresence(DEMO_HOUSEHOLD_ID);
   const runs = useRuns();
