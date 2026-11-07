@@ -67,7 +67,7 @@ Row ids are strings unless marked `u64 auto`. `ts`/`*_at` are SpacetimeDB `Times
 ### Trace event semantics (the NVIDIA story)
 `workflow` ∈ huddle | what_if | coach | scam_check | data_quality. `agent` e.g. planner, goal_extractor, reconciler,
 scam_guard, data_auditor, simulator, coach. `type` ∈ run_started | plan | thought | tool_call | tool_result | handoff | message | final | error.
-`title` is one human-readable line. `data_json` ≤ 4 KB. `provider` ∈ nvidia | tenvor_nemotron | tenvor_qwen | cache | local.
+`title` is one human-readable line. `data_json` ≤ 4 KB. `provider` ∈ nvidia | brev | tenvor_nemotron | tenvor_qwen | cache | local.
 
 ## 3. Reducers
 
