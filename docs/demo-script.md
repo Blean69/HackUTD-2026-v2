@@ -23,7 +23,7 @@ Open with that track's angle and close with the 20-second kicker.
 1. **0:00** "Every phone holding our QR code is starting agent runs. This is the live wall."
 2. **0:20** Expand a huddle run: plan → extract goals → query ledger → forecast → feasibility per goal → scam check → post results. Point at the badges: Nemotron reasoning model planned it, a small Nemotron extracted fields, and FRED and College Scorecard were called live.
 3. **1:20** Expand a what_if run: natural-language scenario → structured scenario → simulator tool → narrative.
-4. **2:00** Open a `thought` step to show Nemotron's reasoning, then point out two Nemotron models collaborating: Super plans and calls tools, Lightning extracts structured goals. (Keep every run at this table on Nemotron. Qwen on tenvor.io is only a silent safety net.)
+4. **2:00** Open a `thought` step to show Nemotron's reasoning, then point out two Nemotron models collaborating: Ultra plans and calls tools, Lightning extracts structured goals. (Keep every run at this table on Nemotron. Qwen on tenvor.io is only a silent safety net.)
 5. **2:45** Kicker.
 
 ## Kicker (20 s)

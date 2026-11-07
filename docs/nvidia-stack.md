@@ -8,7 +8,7 @@ IMPORTANT: the ids previously in `.env.example` (`nvidia/llama-3.3-nemotron-supe
 
 | Role | Model id | Where it runs | Why |
 |---|---|---|---|
-| Agent backbone (default) | `nvidia/nemotron-3-super-120b-a12b` | API Catalog | 12B active, 1M ctx, catalog flags: function calling + structured output + reasoning all Supported |
+| Agent backbone (default; **404s for our key, use Ultra**) | `nvidia/nemotron-3-super-120b-a12b` | API Catalog | 12B active, 1M ctx, catalog flags: function calling + structured output + reasoning all Supported |
 | Hardest reasoning step (optional) | `nvidia/nemotron-3-ultra-550b-a55b` | API Catalog | Flagship (55B active). Catalog says structured output NOT supported; slower; use for 1 "wow" step |
 | Fast extraction / classify / sub-agent | `nvidia/nemotron-3.5-lightning-30b-a3b` | API Catalog + self-host | 3B active, 1M ctx, tools + structured output Supported, thinking toggle |
 | Tiny / cheapest | `nvidia/nemotron-3.5-bolt-e4b` | API Catalog | 4B, only 64K ctx on the endpoint |
