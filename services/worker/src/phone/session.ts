@@ -77,6 +77,8 @@ export interface TraceItem {
   tokens_out?: number;
   interrupted?: boolean;
   tts_voice?: string;
+  tts_model?: string;
+  tts_provider?: string;
 }
 
 interface Session {
@@ -312,7 +314,7 @@ export class PhoneService {
           'voice_agent',
           'message',
           `Said: “${truncate(first, 160)}”${e.interrupted ? ' (caller interrupted)' : ''}`,
-          { text, asr_final_ms: ms(e.asr_ms), llm_first_token_ms: ms(e.llm_ms), tts_first_audio_ms: ms(e.tts_ms), voice_to_voice_ms: ms(e.v2v_ms), tts: { model: 'magpie-tts-multilingual', voice: clean(e.tts_voice, 80) }, interrupted: Boolean(e.interrupted), turn: s.turns },
+          { text, asr_final_ms: ms(e.asr_ms), llm_first_token_ms: ms(e.llm_ms), tts_first_audio_ms: ms(e.tts_ms), voice_to_voice_ms: ms(e.v2v_ms), tts: { model: clean(e.tts_model, 80) || 'magpie-tts-multilingual', provider: clean(e.tts_provider, 40) || 'magpie', voice: clean(e.tts_voice, 80) }, interrupted: Boolean(e.interrupted), turn: s.turns },
           { model, provider, latencyMs: ms(e.llm_ms), tokensIn: ms(e.tokens_in), tokensOut: ms(e.tokens_out) },
         );
         return true;
