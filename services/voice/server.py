@@ -34,7 +34,7 @@ from bot import CallInit, VoiceCall
 from config import Settings, load_env, load_settings
 from ice import parse_ice_servers
 from tts import choose_tts
-from twiml import build_twiml, caller_hash, make_stream_token, say_and_hangup, valid_signature, valid_stream_token
+from twiml import build_twiml, caller_hash, make_stream_token, say_and_hangup, url_variants, valid_stream_token, verify_webhook
 
 SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
 
@@ -42,6 +42,18 @@ SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
 def _safe_id(raw: str, prefix: str) -> str:
     keep = "".join(c for c in (raw or "") if c in SAFE)[:80]
     return keep or f"{prefix}-{secrets.token_hex(6)}"
+
+
+async def _form_fields(request: Request, raw: bytes) -> dict[str, str]:
+    """The webhook's fields as strings, parsed from the bytes already read (urlencoded form; a JSON object is accepted too)."""
+    try:
+        ctype = request.headers.get("content-type", "")
+        if "json" in ctype:
+            data = json.loads(raw or b"{}")
+            return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+        return {k: str(v) for k, v in (await request.form()).items()}
+    except Exception:
+        return {}
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -147,13 +159,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---- phone: SignalWire / Twilio cXML + media stream --------------------------------------------------------------------
     @app.post("/twiml")
     async def twiml(request: Request) -> Response:
-        form = {k: str(v) for k, v in (await request.form()).items()}
+        raw = await request.body()  # the signature covers the RAW body: read it before anything parses the form
+        form = await _form_fields(request, raw)
         public_url = f"https://{s.public_hostname}{s.public_path}/twiml"
         if s.signature_token:
-            sig = request.headers.get("x-signalwire-signature") or request.headers.get("x-twilio-signature")
-            if not valid_signature(s.signature_token, public_url, form, sig):
-                logger.warning("rejected a /twiml request with a bad signature")
+            urls = url_variants(public_url, request.url.query)
+            ok, info = verify_webhook(s.signature_token, urls, raw, form, request.headers)
+            if not ok:
+                logger.warning(f"rejected a /twiml request with a bad signature: headers present={info['headers'] or 'none'}, url variants tried={info['variants']}, body bytes={len(raw)}")
                 return Response("invalid signature", status_code=403)
+            logger.info(f"/twiml signature ok ({info['scheme']})")
         if not s.enabled or "twilio" not in s.transports:
             return Response(say_and_hangup(prompts.LINE_CLOSED), media_type="text/xml")
         ws_url = f"wss://{s.public_hostname}{s.public_path}/ws"
