@@ -91,7 +91,7 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
         <Panel
           id="cash-flow"
           title="Income vs expenses"
-          sub={sum.avgIncome !== null && sum.avgExpenses !== null ? <span className="num">{usd(sum.avgIncome)} in · {usd(sum.avgExpenses)} out, a month</span> : "Checking and savings, by month"}
+          sub={fin.cashFlow ? <span className="num">{usd(fin.cashFlow.income_monthly)} in · {usd(fin.cashFlow.expense_monthly)} out, a month (last 90 days)</span> : sum.avgIncome !== null && sum.avgExpenses !== null ? <span className="num">{usd(sum.avgIncome)} in · {usd(sum.avgExpenses)} out, a month</span> : "Checking and savings, by month"}
           className={BENTO.hero}
         >
           {cash.length ? <CashFlowChart months={cash} height={260} /> : <Empty title="No cash flow yet">Income and expenses appear once checking or savings activity is available.</Empty>}
