@@ -112,7 +112,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
         <IconButton label="Open menu" onClick={() => setMenu(true)} aria-expanded={menu} className="h-10 w-10 text-ink">
           <IconMenu size={21} />
         </IconButton>
-        <Link href="/" className="flex items-center gap-2 rounded-md px-1" aria-label={`${PRODUCT_NAME} home`}>
+        <Link href={householdId ? `/room/${householdId}` : "/"} className="flex items-center gap-2 rounded-md px-1" aria-label="Dashboard">
           <BrandMark size={24} />
           <span className="display text-[1.02rem]">{PRODUCT_NAME}</span>
         </Link>

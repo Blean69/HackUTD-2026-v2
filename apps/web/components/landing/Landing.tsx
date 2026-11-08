@@ -33,7 +33,7 @@ const btn = "press group inline-flex h-12 items-center justify-center gap-2 roun
 /** A still of the dashboard after setup: the same bento the product uses, built from the synthetic demo family. */
 function Preview() {
   return (
-    <figure className="motion-rise w-full max-w-[34rem] justify-self-center lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:justify-self-end" style={at(3)}>
+    <figure className="motion-rise w-full max-w-xl justify-self-center lg:col-start-2 lg:max-w-[34rem] lg:row-span-2 lg:row-start-1 lg:justify-self-end" style={at(3)}>
       <div className="card overflow-hidden !rounded-xl">
         <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -118,7 +118,7 @@ export function Landing() {
       </header>
 
       <main id="main" className="mx-auto grid w-full max-w-6xl flex-1 content-center items-center gap-x-14 gap-y-10 px-4 pb-14 pt-4 sm:px-6 sm:pt-10 lg:grid-cols-[1.05fr_1fr] lg:gap-y-10 lg:pb-20">
-        <div className="max-w-xl">
+        <div className="w-full max-w-xl justify-self-center lg:justify-self-start">
           <p className="motion-rise inline-flex items-center gap-2 rounded-full border border-line bg-surface py-1 pl-2 pr-3 text-caption font-medium text-ink-2" style={at(0)}>
             <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />
             Household finances, together
@@ -147,7 +147,7 @@ export function Landing() {
         <Preview />
 
         {/* Phones: after the preview. From lg: under the hero, beside the preview. */}
-        <ol className="card grid max-w-xl divide-y divide-line self-start overflow-hidden sm:grid-cols-3 sm:divide-x sm:divide-y-0" aria-label="How setup works">
+        <ol className="card grid w-full max-w-xl justify-self-center divide-y divide-line self-start lg:justify-self-start overflow-hidden sm:grid-cols-3 sm:divide-x sm:divide-y-0" aria-label="How setup works">
           {STEPS.map((s, i) => (
             <li key={s.n} className="motion-rise flex gap-3 px-4 py-3 sm:block sm:py-3.5" style={at(4 + i)}>
               <span className="num pt-px font-mono text-2xs font-medium text-brand-strong">{s.n}</span>

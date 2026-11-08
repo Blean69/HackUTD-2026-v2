@@ -34,7 +34,7 @@ export function Sidebar({ householdId, onNavigate, className }: { householdId: s
   const live = huddle?.status === "live";
   return (
     <aside className={cx("flex h-full w-full flex-col border-r border-line bg-side text-ink-2", className)} aria-label="Sidebar">
-      <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5 px-4 pb-5 pt-5" aria-label={`${PRODUCT_NAME} home`}>
+      <Link href={householdId ? `/room/${householdId}` : "/"} onClick={onNavigate} className="flex items-center gap-2.5 px-4 pb-5 pt-5" aria-label="Dashboard">
         <BrandMark size={28} />
         <span className="min-w-0 leading-tight">
           <span className="display block text-[1.05rem] text-ink">{PRODUCT_NAME}</span>
