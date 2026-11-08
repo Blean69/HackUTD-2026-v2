@@ -1,5 +1,6 @@
 // Pure tests for the synthetic credit score (docs/contracts.md section 9). No SpacetimeDB host needed:
 //   npx vitest run src/credit.test.ts
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -336,6 +337,7 @@ const rows = (f: string): Record<string, any>[] => JSON.parse(readFileSync(join(
 
 describe.skipIf(!haveSeed)('seeded households land in sensible, varied bands', () => {
   const byFamily = new Map<string, { member: string; score: number; band: string; history: number[] }[]>();
+  const historySha = new Map<string, string>();
   if (haveSeed) {
     const accounts = rows('accounts');
     const txns = rows('transactions');
@@ -354,6 +356,7 @@ describe.skipIf(!haveSeed)('seeded households land in sensible, varied bands', (
       };
       const live = scoreHousehold(input, analyzeHousehold(input, TODAY).indicators, TODAY);
       const hist = backfillHistory(input, TODAY);
+      historySha.set(hh.id, createHash('sha256').update(JSON.stringify(hist)).digest('hex'));
       byFamily.set(
         hh.id,
         live.map((s) => ({ member: s.member_id, score: s.score, band: s.band, history: hist.map((p) => p.members.find((m) => m.member_id === s.member_id)!.score) })),
@@ -388,5 +391,16 @@ describe.skipIf(!haveSeed)('seeded households land in sensible, varied bands', (
   it('the families are varied: five households span at least three bands', () => {
     const all = new Set([...byFamily.values()].flatMap((ms) => ms.map((m) => m.band)));
     expect(all.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('regression: the monthly history is exactly what it was before imported households got detected bills', () => {
+    // Fingerprints of backfillHistory (which reruns analyzeHousehold for each past month), taken with the earlier code.
+    expect(Object.fromEntries([...historySha.entries()].sort())).toEqual({
+      hh_brooks: '077878415f118d5b553c402ce90ce98043cbcdf79b5239039889d8514b55ab6b',
+      hh_nguyen: '7403b48c446f0d7c903bb02c20171415fc49365b517cd820ab4fc7f597ffd7f5',
+      hh_okafor: 'e017756926315b084ddfe896b8fdd8097f4bda9d09977c9db518034e77bd49e5',
+      hh_patel: '1431ae6cb9e0fb9ae506469321342d42fee27e2f27aff02dae55e3a783735870',
+      hh_rivera: '66a6252e79170b49648943b9b9e837c120d9a111e2c792a73d4d2f77bf7b9c5c',
+    });
   });
 });

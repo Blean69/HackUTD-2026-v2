@@ -7,6 +7,8 @@ import { fixedMonthly, upcomingObligations } from "@/lib/finance";
 import { cx, longDate, usd } from "@/lib/format";
 
 const sum = (rows: readonly { amount: number }[]) => rows.reduce((t, r) => t + r.amount, 0);
+/** A bill the module read from an imported household's own bank transactions (obligation id `auto:*`), not one entered by hand. */
+const detected = (id: string) => id.startsWith("auto:");
 
 /** The whole bill schedule, the cash low point, and three totals in one line. */
 export function BillsTab({ householdId }: { householdId: string }) {
@@ -23,7 +25,7 @@ export function BillsTab({ householdId }: { householdId: string }) {
   }, [obligations, accounts, today]);
 
   if (!ready) return <Skeleton className="h-72 !rounded-lg" />;
-  if (!obligations.length) return <Empty title="No bills on file">Loans, bills, subscriptions and insurance appear here once they are added.</Empty>;
+  if (!obligations.length) return <Empty title="No bills on file">Loans, bills, subscriptions and insurance appear here once they are added or show up as monthly payments in a linked bank account.</Empty>;
 
   const low = forecast.low_point;
   const due7 = sum(schedule.filter((s) => s.days <= 7));
@@ -37,7 +39,7 @@ export function BillsTab({ householdId }: { householdId: string }) {
           className="col-span-2 sm:col-span-1"
           label="Bills a month"
           value={usd(fixedMonthly(obligations))}
-          sub={`${obligations.length} on file`}
+          sub={`${obligations.length} ${obligations.every((o) => detected(o.id)) ? "found in your transactions" : "on file"}`}
           info="Every bill on file (loans, insurance, subscriptions and the rest), added up for one month. Recurring charges on Analytics is different: the repeat charges actually seen in the last 90 days of transactions, so the two totals can differ."
         />
         <StatCard label="Due this week" value={usd(due7)} tone={due7 > 0 ? "watch" : undefined} />
@@ -62,7 +64,7 @@ export function BillsTab({ householdId }: { householdId: string }) {
             <tbody>
               {schedule.map((s) => (
                 <tr key={s.id}>
-                  <td className="!pl-4 font-medium">{s.name}<span className="block text-caption font-normal capitalize text-ink-3">{s.kind}</span></td>
+                  <td className="!pl-4 font-medium">{s.name}<span className="block text-caption font-normal text-ink-3"><span className="capitalize">{s.kind}</span>{detected(s.id) ? " · detected from your transactions" : null}</span></td>
                   <td className="r num whitespace-nowrap font-semibold">{usd(s.amount, { cents: s.amount % 1 !== 0 })}</td>
                   <td className="whitespace-nowrap">
                     <span className="num">{longDate(s.due)}</span>

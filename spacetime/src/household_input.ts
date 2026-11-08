@@ -1,16 +1,24 @@
 // Reads one household's rows into the plain-data shape the pure math (finance.ts, credit.ts) works on.
-import type { HouseholdInput } from './finance';
+import { isAutoObligation, type HouseholdInput } from './finance';
 import { fail, type Ctx } from './util';
 
-/** The household's accounts, transactions (never `anomaly_truth`), obligations, members and credit profiles. */
+/**
+ * The household's accounts, transactions (never `anomaly_truth`), obligations, members and credit profiles.
+ *
+ * Obligations: the seeded or hand-entered rows only. The `auto:*` rows are recompute's own output (bills detected from the
+ * transactions), never its input: an imported household (any Plaid account) with no other obligation on file gets
+ * `derive_obligations`, and the math re-reads its bills from the transactions every time.
+ */
 export function loadHouseholdInput(ctx: Ctx, household_id: string): HouseholdInput {
   const hh = ctx.db.household.id.find(household_id);
   if (!hh) fail(`unknown household "${household_id}"`);
+  const accountRows = [...ctx.db.account.household_id.filter(household_id)];
+  const onFile = [...ctx.db.obligation.household_id.filter(household_id)].filter((o) => !isAutoObligation(o.id));
   const input: HouseholdInput = {
     household_id,
     home_value: hh.home_value,
     vehicle_value: hh.vehicle_value,
-    accounts: [...ctx.db.account.household_id.filter(household_id)].map((a) => ({
+    accounts: accountRows.map((a) => ({
       id: a.id,
       type: a.type,
       nickname: a.nickname,
@@ -31,7 +39,7 @@ export function loadHouseholdInput(ctx: Ctx, household_id: string): HouseholdInp
       description: x.description,
       is_recurring: x.is_recurring,
     })),
-    obligations: [...ctx.db.obligation.household_id.filter(household_id)].map((o) => ({
+    obligations: onFile.map((o) => ({
       id: o.id,
       name: o.name,
       amount: o.amount,
@@ -52,6 +60,7 @@ export function loadHouseholdInput(ctx: Ctx, household_id: string): HouseholdInp
       oldest_account_years: c.oldest_account_years,
       late_payments_24m: c.late_payments_24m,
     })),
+    derive_obligations: onFile.length === 0 && accountRows.some((a) => a.source === 'plaid'),
   };
   return input;
 }

@@ -1,18 +1,44 @@
 // Glue between the tables and the pure math in finance.ts: read a household's rows, run `analyzeHousehold`,
-// and replace the derived rows (health_indicator, forecast_point, rule alerts, credit scores) for that household.
+// and replace the derived rows (health_indicator, forecast_point, rule alerts, credit scores, detected bills) for that household.
 import { ScheduleAt } from 'spacetimedb';
-import { analyzeHousehold } from './finance';
+import { analyzeHousehold, isAutoObligation, type DerivedObligation } from './finance';
 import { loadHouseholdInput } from './household_input';
 import { updateCreditScores } from './credit_store';
 import { isoDay, type Ctx } from './util';
 
 const RULE_PREFIX = 'rule:';
 
+/**
+ * Keep the household's `auto:*` obligation rows equal to the bills the analysis detected: upsert by id (rows that did not
+ * change are not touched, so a recompute with the same data writes nothing), and delete the ones whose bill stopped. Rows
+ * from the seed or a person are never touched; a household that has any gets no detected bills, so its `auto:*` rows go.
+ */
+function syncDetectedBills(ctx: Ctx, household_id: string, bills: readonly DerivedObligation[]): void {
+  const keep = new Set<string>();
+  for (const b of bills) {
+    keep.add(b.id);
+    const row = { id: b.id, household_id, name: b.name, amount: b.amount, due_day: b.due_day, account_id: b.account_id, kind: b.kind };
+    const prev = ctx.db.obligation.id.find(b.id);
+    if (!prev) ctx.db.obligation.insert(row);
+    else if (prev.household_id !== household_id) console.error(`recompute: obligation ${b.id} belongs to ${prev.household_id}; not overwritten`);
+    else if (prev.name !== row.name || prev.amount !== row.amount || prev.due_day !== row.due_day || prev.account_id !== row.account_id || prev.kind !== row.kind) {
+      ctx.db.obligation.id.update(row);
+    }
+  }
+  for (const old of [...ctx.db.obligation.household_id.filter(household_id)]) {
+    if (isAutoObligation(old.id) && !keep.has(old.id)) ctx.db.obligation.id.delete(old.id);
+  }
+}
+
 export function recomputeHousehold(ctx: Ctx, household_id: string): void {
   const input = loadHouseholdInput(ctx, household_id);
 
+  // The analysis detects an imported household's bills first and builds its forecast on them (finance.ts).
   const result = analyzeHousehold(input, isoDay(ctx.timestamp));
   const now = ctx.timestamp;
+
+  // --- bills detected from the transactions (imported households with no obligations on file): the `auto:*` rows
+  syncDetectedBills(ctx, household_id, result.derived_obligations);
 
   // --- health indicators: upsert by id, drop keys that no longer apply
   const keepIndicators = new Set<string>();

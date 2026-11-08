@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   analyzeHousehold,
   detectDataQuality,
@@ -269,4 +270,191 @@ test('the shared cash numbers (cash_flow / cash_month) agree with the savings-ra
   assert.equal(last.month, TODAY.slice(0, 7));
   assert.equal(last.partial, true); // the current month is never shown as a full month
   for (const m of a.cash.months) assert.ok(Math.abs(m.net - (m.income - m.expenses)) < 0.02);
+});
+
+// ---- bills detected from the transactions (imported households) ---------------------------------------------------
+
+/**
+ * A household as it arrives from Plaid: no obligations on file, nothing marked recurring. Payroll twice a month, rent,
+ * a TXU electric bill that varies, a card paid in full from checking (by a different amount each month), Netflix on the
+ * card, a Spotify plan cancelled in August, a monthly transfer to savings, and everyday spending on both accounts.
+ */
+function importedHousehold(o: { netflixUntil?: string } = {}): HouseholdInput {
+  const txns: FinTxn[] = [];
+  const add = (account_id: string, date: string, amount: number, merchant: string, category: string, description = merchant) => {
+    if (date <= TODAY) txns.push(txn({ account_id, date, amount, merchant, category, description }));
+  };
+  const cardPays = [812.4, 905.1, 1010.75, 870.2, 930.6, 1004.3];
+  const txu = [118.2, 131.65, 176.4, 182.1, 150.35, 127.9];
+  ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'].forEach((m, i) => {
+    add('acct_p_chk', `${m}-01`, -1650, 'Oak Cliff Lofts', 'rent', 'RENT PAYMENT OAK CLIFF LOFTS');
+    add('acct_p_chk', `${m}-02`, 2480, 'ACH CREDIT ACME ROBOTICS PAYROLL', 'income');
+    add('acct_p_chk', `${m}-16`, 2480, 'ACH CREDIT ACME ROBOTICS PAYROLL', 'income');
+    add('acct_p_chk', `${m}-05`, -400, 'ONLINE TRANSFER TO SAVINGS 0002', 'savings');
+    add('acct_p_sav', `${m}-05`, 400, 'ONLINE TRANSFER FROM CHECKING 0001', 'transfer');
+    for (const d of ['03', '10', '17', '24']) add('acct_p_chk', `${m}-${d}`, -(95 + i * 3 + Number(d)), 'H-E-B', 'groceries');
+    add('acct_p_card', `${m}-12`, -(140 + i * 11), 'Target', 'shopping');
+    add('acct_p_card', `${m}-19`, -(48 + i), 'Shell', 'fuel');
+    if (!o.netflixUntil || m <= o.netflixUntil) add('acct_p_card', `${m}-06`, -15.49, 'Netflix', 'entertainment');
+    if (m <= '2026-08') add('acct_p_card', `${m}-09`, -11.99, 'Spotify', 'entertainment');
+    if (i < 6) {
+      add('acct_p_chk', `${m}-14`, -txu[i]!, 'TXU Energy', 'utilities', 'TXU ENERGY AUTOPAY');
+      add('acct_p_chk', `${m}-22`, -cardPays[i]!, 'CREDIT CARD AUTOPAY PAYMENT XXXX4321', 'credit_card_payment');
+      add('acct_p_card', `${m}-22`, cardPays[i]!, 'PAYMENT THANK YOU', 'credit_card_payment');
+    }
+  });
+  return {
+    household_id: 'hh_imp',
+    accounts: [
+      { id: 'acct_p_chk', type: 'checking', nickname: 'Everyday Checking ••0001', balance: 5200 },
+      { id: 'acct_p_sav', type: 'savings', nickname: 'Savings ••0002', balance: 9000 },
+      { id: 'acct_p_card', type: 'credit_card', nickname: 'Rewards Visa ••4321', balance: 1200, credit_limit: 8000 },
+    ],
+    txns,
+    obligations: [],
+    members: [{ id: 'mem_p', income_annual: 0, role: 'parent' }],
+    credit: [],
+    home_value: 0,
+    vehicle_value: 0,
+    derive_obligations: true,
+  };
+}
+const bills = (a: { derived_obligations: { id: string; name: string; kind: string; amount: number; due_day: number; account_id: string }[] }) =>
+  a.derived_obligations.map(({ id, name, kind, amount, due_day, account_id }) => ({ id, name, kind, amount, due_day, account_id }));
+
+test('imported household: bills are read from its own transactions (names, kinds, amounts, due days, paying account)', () => {
+  const a = analyzeHousehold(importedHousehold(), TODAY);
+  assert.deepEqual(bills(a), [
+    { id: 'auto:hh_imp:credit-card-autopay-payment-xxxx', name: 'Rewards Visa payment', kind: 'loan', amount: 915.11, due_day: 22, account_id: 'acct_p_chk' },
+    { id: 'auto:hh_imp:netflix', name: 'Netflix', kind: 'subscription', amount: 15.49, due_day: 6, account_id: 'acct_p_card' },
+    { id: 'auto:hh_imp:oak-cliff-lofts', name: 'Rent (Oak Cliff Lofts)', kind: 'bill', amount: 1650, due_day: 1, account_id: 'acct_p_chk' },
+    { id: 'auto:hh_imp:txu-energy', name: 'TXU Energy', kind: 'bill', amount: 150.35, due_day: 14, account_id: 'acct_p_chk' },
+  ]);
+  // The card payment is the median of the last three (870.20, 930.60, 1004.30) less the Netflix charged to that card, so
+  // the bill total counts every dollar once. Payroll, the savings transfer, groceries, Target and Shell are not bills, and
+  // Spotify (last charged in August) has stopped.
+  const total = a.derived_obligations.reduce((s, o) => s + o.amount, 0);
+  assert.equal(Math.round(total * 100) / 100, 2730.95);
+  const rent = a.derived_obligations.find((o) => o.name.startsWith('Rent'))!;
+  assert.equal(rent.txn_ids.length, 7);
+  assert.equal(rent.last_date, '2026-11-01');
+});
+
+test('imported household: detection is deterministic, order-free and idempotent', () => {
+  const input = importedHousehold();
+  const a = analyzeHousehold(input, TODAY);
+  assert.deepEqual(analyzeHousehold(structuredClone(input), TODAY), a);
+  assert.deepEqual(analyzeHousehold({ ...input, txns: [...input.txns].reverse(), accounts: [...input.accounts].reverse() }, TODAY), a);
+});
+
+test('imported household: a subscription that stopped drops off, and the card payment is no longer net of it', () => {
+  const a = analyzeHousehold(importedHousehold({ netflixUntil: '2026-08' }), TODAY);
+  assert.deepEqual(a.derived_obligations.map((o) => o.name).sort(), ['Rent (Oak Cliff Lofts)', 'Rewards Visa payment', 'TXU Energy']);
+  assert.equal(a.derived_obligations.find((o) => o.kind === 'loan')!.amount, 930.6);
+});
+
+test('imported household: the forecast schedules each detected bill once, exactly as the same bills entered by hand', () => {
+  const imported = importedHousehold();
+  const auto = analyzeHousehold(imported, TODAY);
+  // The seeded convention: the same bills as obligations, and their cash-account charges marked recurring.
+  const scheduled = new Set(auto.derived_obligations.flatMap((o) => o.txn_ids));
+  const byHand: HouseholdInput = {
+    ...imported,
+    derive_obligations: false,
+    obligations: auto.derived_obligations.map(({ txn_ids: _t, last_date: _l, ...o }) => o),
+    txns: imported.txns.map((t) => (scheduled.has(t.id) ? { ...t, is_recurring: true } : t)),
+  };
+  const manual = analyzeHousehold(byHand, TODAY);
+  assert.deepEqual(auto.forecast, manual.forecast);
+  assert.deepEqual(auto.indicators, manual.indicators);
+  // Each bill lands once a month on its day, and nothing else is scheduled (the window runs Nov 7 to Feb 4).
+  assert.deepEqual(
+    auto.forecast.filter((p) => p.obligations_due > 0).map((p) => `${p.date} ${p.obligations_due}`),
+    ['2026-11-14 150.35', '2026-11-22 915.11', '2026-12-01 1650', '2026-12-06 15.49', '2026-12-14 150.35', '2026-12-22 915.11',
+      '2027-01-01 1650', '2027-01-06 15.49', '2027-01-14 150.35', '2027-01-22 915.11', '2027-02-01 1650'],
+  );
+  // Without detection, rent and electric sat in the daily discretionary spend and the card bill was missing from the
+  // forecast altogether (the card's purchases are not cash). With it the card payment is in, and nothing counts twice.
+  const before = analyzeHousehold({ ...imported, derive_obligations: false }, TODAY);
+  assert.equal(before.derived_obligations.length, 0);
+  assert.ok(before.forecast.every((p) => p.obligations_due === 0));
+  const drop = before.forecast[89]!.balance - auto.forecast[89]!.balance;
+  assert.ok(drop > 2500 && drop < 3500, `90-day end balance moved by ${drop}`); // about three card payments
+});
+
+test('imported household: a bill already charged early this month is not due again before next month', () => {
+  const input = importedHousehold();
+  // November's electric came on the 3rd instead of the 14th.
+  input.txns.push(txn({ account_id: 'acct_p_chk', date: '2026-11-03', amount: -140.12, merchant: 'TXU Energy', category: 'utilities' }));
+  const a = analyzeHousehold(input, TODAY);
+  const txuBill = a.derived_obligations.find((o) => o.name === 'TXU Energy')!;
+  assert.equal(txuBill.due_day, 14);
+  assert.equal(a.forecast.find((p) => p.date === '2026-11-14')!.obligations_due, 0);
+  assert.equal(a.forecast.find((p) => p.date === '2026-12-14')!.obligations_due, txuBill.amount);
+});
+
+test('imported household: a payee renamed or re-filed between bank syncs is one bill; a misfiled utility is not a card payment', () => {
+  const input = importedHousehold();
+  for (const m of ['2026-05', '2026-06', '2026-07', '2026-08']) {
+    input.txns.push(txn({ account_id: 'acct_p_chk', date: `${m}-11`, amount: -84.99, merchant: 'SPECTRUM INTERNET AUTOPAY', category: 'credit_card_payment', description: 'SPECTRUM INTERNET AUTOPAY' }));
+  }
+  for (const m of ['2026-09', '2026-10']) {
+    input.txns.push(txn({ account_id: 'acct_p_chk', date: `${m}-11`, amount: -84.99, merchant: 'Spectrum', category: 'utilities', description: 'SPECTRUM INTERNET AUTOPAY' }));
+  }
+  const a = analyzeHousehold(input, TODAY);
+  const spectrum = a.derived_obligations.filter((o) => /spectrum/i.test(o.name));
+  assert.deepEqual(spectrum.map(({ name, kind, amount, due_day }) => ({ name, kind, amount, due_day })), [{ name: 'Spectrum internet', kind: 'bill', amount: 84.99, due_day: 11 }]);
+  assert.equal(spectrum[0]!.txn_ids.length, 6);
+  assert.equal(a.derived_obligations.filter((o) => o.kind === 'loan').length, 1); // still only the card payment
+});
+
+test('detection never runs for a household with obligations on file, even if asked to', () => {
+  const seeded = baseHousehold();
+  const plain = analyzeHousehold(seeded, TODAY);
+  const asked = analyzeHousehold({ ...seeded, derive_obligations: true }, TODAY);
+  assert.deepEqual(asked, plain);
+  assert.deepEqual(plain.derived_obligations, []);
+});
+
+// ---- regression: the five seeded families keep exactly their numbers -----------------------------------------------
+// Fingerprints of analyzeHousehold on data/seed/*.json, taken with the code from before bill detection existed. Any change
+// to a seeded family's indicators, forecast, alerts or cash numbers fails here.
+const SEED_DIR = new URL('../../data/seed/', import.meta.url);
+const SEEDED_ANALYSIS_SHA256: Record<string, string> = {
+  hh_rivera: '3c8993998b2d87140ae59abd82bf2db46b758ddff2e844266e9e0ff0caad5cb0',
+  hh_okafor: '01941002adc99b60a9daa440aea010ee8a30725115e2b9482329e1d266ccd378',
+  hh_nguyen: '14a5f3dd191ce69ebe07de7c61f54463f40bec5517901d47d7714c70668852eb',
+  hh_patel: 'af2bda85007cb8529af91ba25b0d4335a35cf29a1b871cdb1a8b34e9fd3bdf1f',
+  hh_brooks: 'c6a3a503cad1952b1cd27e686557d5b35c579359905934fb9d17c33e1673eccc',
+};
+const haveSeed = ['households', 'members', 'accounts', 'transactions', 'credit_profiles', 'obligations'].every((f) => existsSync(new URL(`${f}.json`, SEED_DIR)));
+
+test('the seeded families are unchanged: same indicators, forecast, alerts and cash numbers, and no detected bills', { skip: !haveSeed }, () => {
+  const rows = (f: string): Record<string, any>[] => JSON.parse(readFileSync(new URL(`${f}.json`, SEED_DIR), 'utf8'));
+  const accounts = rows('accounts');
+  const allTxns = rows('transactions');
+  const seen: string[] = [];
+  for (const hh of rows('households')) {
+    const accts = accounts.filter((a) => a.household_id === hh.id);
+    const ids = new Set(accts.map((a) => a.id));
+    const input: HouseholdInput = {
+      household_id: hh.id,
+      home_value: hh.home_value,
+      vehicle_value: hh.vehicle_value,
+      accounts: accts as never,
+      txns: allTxns.filter((t) => ids.has(t.account_id)).map((t) => ({ id: t.id, account_id: t.account_id, date: t.date, amount: t.amount, merchant: t.merchant, category: t.category, description: t.description, is_recurring: Boolean(t.is_recurring) })),
+      obligations: rows('obligations').filter((o) => o.household_id === hh.id) as never,
+      members: rows('members').filter((m) => m.household_id === hh.id) as never,
+      credit: rows('credit_profiles').filter((c) => c.household_id === hh.id) as never,
+    };
+    for (const derive of [undefined, true]) {
+      const a = analyzeHousehold({ ...input, derive_obligations: derive }, '2026-11-07');
+      const { as_of, indicators, forecast, alerts, cash } = a;
+      const sha = createHash('sha256').update(JSON.stringify({ as_of, indicators, forecast, alerts, cash })).digest('hex');
+      assert.equal(sha, SEEDED_ANALYSIS_SHA256[hh.id], `${hh.id} changed (derive_obligations=${derive})`);
+      assert.deepEqual(a.derived_obligations, []);
+    }
+    seen.push(hh.id);
+  }
+  assert.deepEqual(seen.sort(), Object.keys(SEEDED_ANALYSIS_SHA256).sort());
 });

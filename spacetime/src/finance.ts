@@ -66,6 +66,19 @@ export interface HouseholdInput {
   /** Estimated market value of the home / vehicle (0 if renting / none). Counted in net worth. */
   home_value: number;
   vehicle_value: number;
+  /**
+   * Read the bill schedule from the transactions (see "Bills detected from the transactions"). Set by the loader for an
+   * imported (Plaid) household that has no obligations on file; ignored whenever `obligations` is not empty.
+   */
+  derive_obligations?: boolean;
+}
+
+/** A bill read from the household's own transactions. Stored as an `obligation` row whose id starts with `auto:`. */
+export interface DerivedObligation extends FinObligation {
+  /** The charges it was read from: the bill schedules them, so they are not discretionary spend as well. */
+  txn_ids: string[];
+  /** Date (YYYY-MM-DD) of the latest charge. */
+  last_date: string;
 }
 
 export interface Indicator {
@@ -109,6 +122,8 @@ export interface Analysis {
   forecast: ForecastPoint[];
   alerts: RuleAlert[];
   cash: CashFlowResult;
+  /** Bills detected from the transactions (empty unless `derive_obligations`); the forecast above already uses them. */
+  derived_obligations: DerivedObligation[];
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -479,6 +494,7 @@ interface CleanTxn {
   amount: number;
   merchant: string;
   category: string;
+  description: string;
   norm: string;
   is_recurring: boolean;
   transferLike: boolean;
@@ -512,6 +528,7 @@ function classify(t: FinTxn, acctType: string, day: number): CleanTxn {
     amount: t.amount,
     merchant: t.merchant,
     category: t.category || 'other',
+    description: t.description ?? '',
     norm: normMerchant(t.merchant),
     is_recurring: t.is_recurring,
     transferLike: isTransferLike(t),
@@ -631,6 +648,354 @@ function* monthlyDates(dueDay: number, asOf: number, end: number): Generator<num
 }
 
 // ---------------------------------------------------------------------------------------------------------------
+// Bills detected from the transactions (imported households)
+// ---------------------------------------------------------------------------------------------------------------
+//
+// A household imported from a bank (Plaid) arrives with no obligation rows (nobody typed its bills in) and with no
+// transaction marked recurring. With `derive_obligations` its bill schedule is read from the transactions instead:
+//   - a bill is a run of outflows to one payee from one account about once a month: 3+ charges in 3+ calendar months,
+//     a median gap of 25-36 days, and the latest at most 45 days before the data's "now" (older means it stopped:
+//     cancelled or paid off, so it drops off the list);
+//   - bill-like categories (rent, mortgage, loans, card payments, utilities, insurance, taxes, tuition) may vary in
+//     amount; subscription-like ones (streaming, memberships, personal care, services, health) must hold their price.
+//     Groceries, dining, shopping, fuel, travel and the like are never bills, and neither are transfers between the
+//     household's own accounts, income, interest or fees;
+//   - a payee renamed or re-filed by the bank between syncs stays one bill (see mergeRenamedPayees);
+//   - bill-like charges left over (the same kind of bill paid to a different provider each month) form one monthly
+//     series per kind and account, e.g. "Utilities";
+//   - amount = median of the latest three charges, due_day = their usual day of the month, account_id = the account
+//     charged, kind = bill | loan | subscription | tuition | insurance | tax (card, loan and mortgage payments are loans);
+//   - a subscription charged to a credit card is inside that card's monthly payment, so the card payment is listed net
+//     of the subscriptions detected on that card: every dollar is counted once, in the bill total and in the forecast.
+// The charges behind a detected bill are then scheduled by that bill and left out of the discretionary spend, so the
+// forecast subtracts each payment exactly once (the same rule as for seeded obligations, docs/contracts.md section 1).
+
+export const AUTO_OBLIGATION_PREFIX = 'auto:';
+/** True for an obligation row recompute wrote from the transactions (never a seeded or hand-entered one). */
+export const isAutoObligation = (id: string): boolean => id.startsWith(AUTO_OBLIGATION_PREFIX);
+
+const BILL_MIN_CHARGES = 3;
+const BILL_MAX_SILENCE_DAYS = 45;
+const BILL_GAP_MIN_DAYS = 25;
+const BILL_GAP_MAX_DAYS = 36;
+/** Forecast: a detected bill charged this many days ago or fewer is not due again yet (this month's was paid early). */
+const BILL_REPEAT_DAYS = 20;
+
+type BillGroup = 'card' | 'mortgage' | 'loan' | 'rent' | 'utility' | 'insurance' | 'tax' | 'school' | 'subscription' | 'other';
+interface BillRule {
+  group: BillGroup;
+  kind: string;
+  /** true: the price must hold from one charge to the next (a subscription), not just the rhythm */
+  steady: boolean;
+  /** the name used when the bill has no single payee */
+  label: string;
+}
+
+const NOT_A_BILL_CATEGORY = /\b(income|payroll|salary|wages|deposit|dividend|transfer|xfer|savings|interest|fees?|refund)\b/;
+const SUBSCRIPTION_PAYEE =
+  /netflix|hulu|disney|spotify|youtube|\bhbo\b|\bmax\b|peacock|paramount|apple\.com|\bapple\b|audible|sirius|xbox|playstation|nintendo|amazon prime|prime video|icloud|google (one|storage)|dropbox|adobe|microsoft 365|patreon|crunchyroll|\bespn\b|sling|fubo|duolingo|peloton|\bgym\b|fitness|\bymca\b/i;
+
+const UTILITY_WORDS = /\b(internet|wireless|cable|electric|electricity|energy|water|utility|utilities|power|sewer|trash|broadband)\b/;
+const SAVING_WORDS = /\b(ira|roth|401k|contribution|invest\w*|brokerage|transfer|savings)\b/;
+const GENERIC_CATEGORY = /^(|other|general|uncategori[sz]ed|misc\w*|bills?)$/;
+
+function billRule(t: CleanTxn): BillRule | null {
+  const cat = t.category.toLowerCase().replace(/[_-]+/g, ' ').trim();
+  if (NOT_A_BILL_CATEGORY.test(cat)) return null;
+  const text = `${t.merchant} ${t.description}`.toLowerCase().replace(/[_-]+/g, ' ');
+  const onCard = t.acctType === 'credit_card'; // loans and card payments leave a cash account, never a card
+  const utility: BillRule = { group: 'utility', kind: 'bill', steady: false, label: 'Utilities' };
+  const insurance: BillRule = { group: 'insurance', kind: 'insurance', steady: false, label: 'Insurance' };
+  // A bank sometimes files a utility's autopay as a card payment ("SPECTRUM INTERNET AUTOPAY"): the payee's words win.
+  const misfiledCard = /card payment/.test(cat) && !CARD_PAYMENT_RE.test(text) && (UTILITY_WORDS.test(text) || /insur/.test(text));
+  if (!misfiledCard && (t.cardPayment || /card payment/.test(cat))) return onCard ? null : { group: 'card', kind: 'loan', steady: false, label: 'Credit card payment' };
+  if (/mortgage/.test(cat)) return onCard ? null : { group: 'mortgage', kind: 'loan', steady: false, label: 'Mortgage' };
+  if (/\bloan/.test(cat)) return onCard ? null : { group: 'loan', kind: 'loan', steady: false, label: 'Loan payment' };
+  if (/\brent\b|housing/.test(cat)) return { group: 'rent', kind: 'bill', steady: false, label: 'Rent' };
+  if (/utilit|phone|internet|cable|wireless/.test(cat)) return utility;
+  if (/insurance/.test(cat)) return insurance;
+  if (/\btax/.test(cat)) return { group: 'tax', kind: 'tax', steady: false, label: 'Taxes' };
+  if (/education|tuition|school|child ?care|daycare/.test(cat)) return { group: 'school', kind: 'tuition', steady: false, label: 'School and childcare' };
+  if (misfiledCard || GENERIC_CATEGORY.test(cat)) {
+    if (SAVING_WORDS.test(text)) return null; // an IRA contribution filed under "other" is saving, not a bill
+    if (UTILITY_WORDS.test(text)) return utility;
+    if (/insur/.test(text)) return insurance;
+  }
+  if (/subscri|entertainment|personal care|membership|stream|fitness|gym/.test(cat) || SUBSCRIPTION_PAYEE.test(text)) {
+    return { group: 'subscription', kind: 'subscription', steady: true, label: 'Subscriptions' };
+  }
+  if (/service|kids|health|medical/.test(cat)) return { group: 'other', kind: 'bill', steady: true, label: 'Monthly bills' };
+  return null;
+}
+
+interface BillSeries {
+  rule: BillRule;
+  txns: CleanTxn[]; // oldest first
+  amount: number;
+  due_day: number;
+  last: number;
+  account_id: string;
+}
+
+const monthIndex = (day: number): number => { const x = ymd(day); return x.y * 12 + x.m; };
+
+/** Usual day of the month, reading the 30th, 31st and 1st as neighbours (a bill that lands either side of a month end). */
+function usualDayOfMonth(days: number[]): number {
+  let doms = days.map((d) => ymd(d).d);
+  if (doms.some((d) => d >= 25) && doms.some((d) => d <= 6)) doms = doms.map((d) => (d <= 6 ? d + 31 : d));
+  const m = Math.round(median(doms));
+  return m > 31 ? m - 31 : Math.min(31, Math.max(1, m));
+}
+
+/** The charges as one monthly bill, or null when they are not one (see the rules above). */
+function monthlyBill(charges: CleanTxn[], rule: BillRule, asOf: number): BillSeries | null {
+  const xs = [...charges].sort((a, b) => a.day - b.day || (a.id < b.id ? -1 : 1));
+  const months = new Set(xs.map((t) => monthIndex(t.day))).size;
+  if (xs.length < BILL_MIN_CHARGES || months < BILL_MIN_CHARGES || xs.length > months + 1) return null;
+  const last = xs[xs.length - 1]!;
+  if (asOf - last.day > BILL_MAX_SILENCE_DAYS) return null;
+  const gaps: number[] = [];
+  for (let i = 1; i < xs.length; i++) gaps.push(xs[i]!.day - xs[i - 1]!.day);
+  const gap = median(gaps);
+  if (gap < BILL_GAP_MIN_DAYS || gap > BILL_GAP_MAX_DAYS) return null;
+  const recent = xs.slice(-3);
+  const amounts = recent.map((t) => -t.amount);
+  const amount = median(amounts);
+  if (rule.steady) {
+    const latest = -last.amount;
+    const before = -xs[xs.length - 2]!.amount;
+    if (Math.abs(latest - before) > Math.max(0.5, 0.01 * latest)) return null; // the price holds from one charge to the next
+    if (amounts.some((a) => Math.abs(a - amount) > 0.25 * amount)) return null;
+  }
+  if (!(amount >= 1)) return null;
+  return { rule, txns: xs, amount: round2(amount), due_day: usualDayOfMonth(recent.map((t) => t.day)), last: last.day, account_id: last.account_id };
+}
+
+// ---- names: "Rent (Cedar Point Properties)", "Mortgage (Prairie State)", "Spectrum internet", "Rewards Visa payment"
+
+const NOISE_WORDS = new Set(['ach', 'autopay', 'bill', 'billpay', 'com', 'debit', 'des', 'id', 'online', 'pay', 'payment', 'payments', 'pmt', 'pos', 'ppd', 'purchase', 'recurring', 'thank', 'web', 'www', 'you']);
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to']);
+const COMMON_SHORT = new Set(['aid', 'art', 'bus', 'car', 'day', 'fed', 'fin', 'gas', 'new', 'one', 'pet', 'svc', 'tax', 'two']);
+const LOAN_WORDS = ['loan', 'loans', 'ln', 'auto', 'car', 'personal', 'student', 'mortgage', 'mtg', 'home', 'house', 'installment', 'equity', 'heloc'];
+const RENT_WORDS = ['rent', 'rental', 'lease'];
+const SERVICE_WORDS = ['internet', 'wireless', 'mobile', 'cable', 'phone', 'water', 'electric', 'gas', 'energy', 'power', 'trash', 'sewer'];
+const hasWord = (text: string, w: string): boolean => new RegExp(`\\b${w}\\b`, 'i').test(text);
+/** An all-caps word kept as is: two letters (CU, LP), or three that do not read as a word (TXU, ISD, CVS; not OAK, SUN). */
+function looksLikeAcronym(w: string): boolean {
+  if (w.length <= 2) return true;
+  if (w.length !== 3 || COMMON_SHORT.has(w.toLowerCase())) return false;
+  const vowels = (w.match(/[AEIOU]/g) ?? []).length;
+  return vowels < 2 && !/^[^AEIOU][AEIOU][^AEIOU]$/.test(w);
+}
+
+/** "PRAIRIE STATE MORTGAGE HOME LOAN PMT #123" -> "Prairie State Mortgage Home Loan"; a mixed-case name keeps its case. */
+function payeeName(raw: string, drop: readonly string[] = []): string {
+  const text = raw.replace(/\(pending\)/gi, ' ').replace(/[#*]\S*/g, ' ').replace(/\.com\b/gi, ' ');
+  const words = text
+    .split(/\s+/)
+    .filter((w) => w && !/\d/.test(w) && !/^x{2,}$/i.test(w))
+    .map((w) => w.replace(/^[^\p{L}&']+|[^\p{L}&'.]+$/gu, ''))
+    .filter((w) => w && !NOISE_WORDS.has(w.toLowerCase()) && !drop.includes(w.toLowerCase()));
+  if (!words.length) return '';
+  if (/[a-z]/.test(raw) || (words.length === 1 && words[0]!.length <= 5)) return words.join(' '); // Netflix, YMCA, TXU
+  return words
+    .map((w, i) => {
+      const lw = w.toLowerCase();
+      if (i > 0 && SMALL_WORDS.has(lw)) return lw;
+      if (w.includes('&') || (!SMALL_WORDS.has(lw) && looksLikeAcronym(w))) return w; // AT&T, TXU, ISD, CU
+      return lw.charAt(0).toUpperCase() + lw.slice(1);
+    })
+    .join(' ')
+    .slice(0, 60);
+}
+
+/** "Rewards Visa ••9792" -> "Rewards Visa"; null for a nameless or generic card. */
+function cardName(a: FinAccount): string | null {
+  const n = payeeName((a.nickname ?? '').replace(/[•*]+/g, ' '));
+  return n && !/^(credit )?card$/i.test(n) ? n : null;
+}
+
+function billName(s: BillSeries, payee: boolean, card: FinAccount | null): string {
+  const t = s.txns[s.txns.length - 1]!;
+  const text = `${t.category} ${t.merchant} ${t.description}`.toLowerCase().replace(/[_-]+/g, ' ').replace(/auto\s*pay/g, ' ');
+  // The bank's own description names a lender more reliably than an enriched merchant name, which can be a guess.
+  const withLender = (label: string, drop: readonly string[]): string => {
+    const who = payee ? payeeName(t.description, drop) || payeeName(t.merchant, drop) : '';
+    return who && who.toLowerCase() !== label.toLowerCase() ? `${label} (${who})` : label;
+  };
+  switch (s.rule.group) {
+    case 'card': {
+      const n = card ? cardName(card) : null;
+      return n ? `${n} payment` : 'Credit card payment';
+    }
+    case 'mortgage':
+      return withLender('Mortgage', LOAN_WORDS);
+    case 'loan': {
+      const label = /student/.test(text) ? 'Student loan'
+        : /\bauto\b|\bcar\b|vehicle/.test(text) ? 'Auto loan'
+        : /home equity|heloc/.test(text) ? 'Home equity loan'
+        : /personal/.test(text) ? 'Personal loan'
+        : 'Loan payment';
+      return withLender(label, LOAN_WORDS);
+    }
+    case 'rent':
+      return withLender('Rent', RENT_WORDS);
+    default: {
+      if (!payee) return s.rule.label;
+      let name = payeeName(t.merchant) || payeeName(t.description) || s.rule.label;
+      if (s.rule.group === 'utility' && !SERVICE_WORDS.some((w) => hasWord(name, w))) {
+        const service = SERVICE_WORDS.find((w) => hasWord(t.description, w)); // "Spectrum" + "SPECTRUM INTERNET AUTOPAY"
+        if (service) name = `${name} ${service}`;
+      }
+      if (s.rule.group === 'insurance' && !/insur/i.test(name)) name = `${name} insurance`;
+      return name;
+    }
+  }
+}
+
+const slugOf = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'bill';
+
+const PAYEE_STOP_WORDS = new Set([...NOISE_WORDS, ...SMALL_WORDS, 'co', 'inc', 'llc']);
+const payeeWords = (norm: string): Set<string> => new Set(norm.split(' ').filter((w) => w.length > 1 && !/^x+$/.test(w) && !PAYEE_STOP_WORDS.has(w)));
+
+interface Outflow { t: CleanTxn; rule: BillRule | null }
+
+/**
+ * One payee whose name changed between bank syncs ("SPECTRUM INTERNET AUTOPAY" until September, "Spectrum" since) is one
+ * bill, not two short ones. Two groups on the same account merge when one ends before the other begins, the words of one
+ * name are all in the other, and at least one of them is bill-like. Groups that overlap in time (two Netflix plans) never merge.
+ */
+function mergeRenamedPayees(groups: Outflow[][]): Outflow[][] {
+  const gs = groups.map((items) => ({
+    items,
+    account: items[0]!.t.account_id,
+    words: payeeWords(items[items.length - 1]!.t.norm),
+    first: items[0]!.t.day,
+    last: items[items.length - 1]!.t.day,
+    billLike: items.some((c) => c.rule !== null),
+  }));
+  gs.sort((a, b) => (a.account < b.account ? -1 : a.account > b.account ? 1 : a.first - b.first || (a.items[0]!.t.id < b.items[0]!.t.id ? -1 : 1)));
+  const within = (a: Set<string>, b: Set<string>): boolean => a.size > 0 && [...a].every((w) => b.has(w));
+  for (let merged = true; merged; ) {
+    merged = false;
+    for (let i = 0; i < gs.length && !merged; i++) {
+      for (let j = i + 1; j < gs.length && !merged; j++) {
+        const a = gs[i]!, b = gs[j]!;
+        if (a.account !== b.account || !(a.billLike || b.billLike) || !(a.last < b.first)) continue;
+        if (!(within(a.words, b.words) || within(b.words, a.words))) continue;
+        gs[i] = { items: [...a.items, ...b.items], account: a.account, words: b.words, first: a.first, last: b.last, billLike: true };
+        gs.splice(j, 1);
+        merged = true;
+      }
+    }
+  }
+  return gs.map((g) => g.items);
+}
+
+/**
+ * The bill schedule read from a household's own (clean, classified) transactions. `scheduled` holds the ids of every
+ * charge a detected bill stands for, so the forecast does not also count them as discretionary spend.
+ */
+function deriveObligations(
+  household_id: string,
+  clean: CleanTxn[],
+  accounts: FinAccount[],
+  asOf: number,
+): { obligations: DerivedObligation[]; scheduled: Set<string> } {
+  // Every outflow that could pay a bill: from a cash account or a card, never a transfer between own accounts or a refund.
+  // `rule` is null for a charge whose category is no kind of bill (groceries, shopping, ...).
+  const outflows: Outflow[] = [];
+  for (const t of clean) {
+    if (!(t.amount < 0) || t.refund || t.transferLike) continue;
+    if (!LIQUID.has(t.acctType) && t.acctType !== 'credit_card') continue;
+    outflows.push({ t, rule: billRule(t) });
+  }
+  const groupBy = (key: (c: Outflow) => string | null): Outflow[][] => {
+    const m = new Map<string, Outflow[]>();
+    for (const c of outflows) {
+      const k = key(c);
+      if (k === null) continue;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(c);
+    }
+    return [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([, g]) => g); // clean is oldest first, so each group is too
+  };
+
+  interface Found { s: BillSeries; payee: boolean; slug: string; card: string | null; amount: number; drop: boolean }
+  const found: Found[] = [];
+  const used = new Set<string>();
+  // 1. One payee, one account, about once a month. Its latest charge with a bill-like category decides the kind, and its
+  //    uncategorised charges count only from before that payee was first categorised (a bank re-filing a payee between
+  //    syncs must not split it; a store purchase between two subscription charges is not part of the subscription).
+  const payees = groupBy((c) => `${c.t.account_id}|${c.t.norm}`).map((g) => {
+    const firstRuled = g.findIndex((c) => c.rule !== null);
+    return firstRuled < 0 ? g : [...g.slice(0, firstRuled), ...g.slice(firstRuled).filter((c) => c.rule !== null)];
+  });
+  for (const g of mergeRenamedPayees(payees)) {
+    const rule = [...g].reverse().find((c) => c.rule !== null)?.rule;
+    if (!rule) continue;
+    const s = monthlyBill(g.map((c) => c.t), rule, asOf);
+    if (!s) continue;
+    found.push({ s, payee: true, slug: slugOf(s.txns[s.txns.length - 1]!.norm), card: null, amount: s.amount, drop: false });
+    for (const t of s.txns) used.add(t.id);
+  }
+  // 2. bill-like leftovers of one kind on one account (a different utility provider every month, a switched insurer)
+  for (const g of groupBy((c) => (!c.rule || c.rule.steady || used.has(c.t.id) ? null : `${c.t.account_id}|${c.rule.group}`))) {
+    const s = monthlyBill(g.map((c) => c.t), g[g.length - 1]!.rule!, asOf);
+    if (s) found.push({ s, payee: false, slug: slugOf(s.rule.label), card: null, amount: s.amount, drop: false });
+  }
+
+  // 3. which card each card payment pays: the only card, or the one whose last four digits the payment quotes
+  const cards = accounts.filter((a) => a.type === 'credit_card');
+  const lastFour = (a: FinAccount): string | null => /(\d{4})\D*$/.exec(a.nickname ?? '')?.[1] ?? null;
+  for (const f of found) {
+    if (f.s.rule.group !== 'card') continue;
+    const t = f.s.txns[f.s.txns.length - 1]!;
+    const text = `${t.merchant} ${t.description}`;
+    const hits = cards.length === 1 ? cards : cards.filter((c) => { const d = lastFour(c); return d !== null && text.includes(d); });
+    f.card = hits.length === 1 ? hits[0]!.id : null;
+  }
+  // 4. a card's detected subscriptions are inside its payment: list the payment net of them
+  for (const c of cards) {
+    const onCard = found.filter((f) => f.s.account_id === c.id);
+    if (!onCard.length) continue;
+    const pays = found.filter((f) => f.s.rule.group === 'card' && f.card === c.id).sort((a, b) => b.amount - a.amount || (a.slug < b.slug ? -1 : 1));
+    if (pays.length) {
+      const p = pays[0]!;
+      p.amount = round2(p.amount - onCard.reduce((sum, f) => sum + f.amount, 0));
+      if (p.amount < 1) p.drop = true; // the card pays for little besides them: the subscriptions stand for the payment
+    } else if (found.some((f) => f.s.rule.group === 'card' && f.card === null)) {
+      for (const f of onCard) f.drop = true; // a card payment we cannot place may include them: listing both would count twice
+    }
+  }
+
+  const scheduled = new Set<string>();
+  const ids = new Set<string>();
+  const obligations: DerivedObligation[] = [];
+  for (const f of found) {
+    if (!f.drop || f.s.rule.group === 'card') for (const t of f.s.txns) scheduled.add(t.id);
+    if (f.drop) continue;
+    let id = `${AUTO_OBLIGATION_PREFIX}${household_id}:${f.slug}`;
+    if (ids.has(id)) id = `${id}-${fnv1a(f.s.account_id).slice(0, 4)}`;
+    for (let k = 2; ids.has(id); k++) id = `${AUTO_OBLIGATION_PREFIX}${household_id}:${f.slug}-${k}`;
+    ids.add(id);
+    const card = f.card ? (accounts.find((a) => a.id === f.card) ?? null) : null;
+    obligations.push({
+      id,
+      name: billName(f.s, f.payee, card).slice(0, 80),
+      amount: f.amount,
+      due_day: f.s.due_day,
+      account_id: f.s.account_id,
+      kind: f.s.rule.kind,
+      txn_ids: f.s.txns.map((t) => t.id),
+      last_date: formatDay(f.s.last),
+    });
+  }
+  obligations.sort((a, b) => (a.id < b.id ? -1 : 1));
+  return { obligations, scheduled };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------------------------------------------
 
@@ -641,7 +1006,6 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
 
   const accounts = [...input.accounts].sort((a, b) => (a.id < b.id ? -1 : 1));
   const acctById = new Map(accounts.map((a) => [a.id, a]));
-  const obligations = [...input.obligations].sort((a, b) => (a.id < b.id ? -1 : 1));
 
   // --- data quality first: its findings decide which rows are trustworthy for the math below
   const quality = detectDataQuality(hh, input.txns, today);
@@ -661,6 +1025,14 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
   const winStart = asOf - WINDOW_DAYS; // exclusive
   const inWin = clean.filter((t) => t.day > winStart && t.day <= asOf);
   const hasCardTxns = clean.some((t) => t.acctType === 'credit_card');
+
+  // --- the bill schedule: the obligations on file, or (an imported household with none) the bills its transactions show
+  const derived =
+    input.derive_obligations === true && input.obligations.length === 0
+      ? deriveObligations(hh, clean, accounts, asOf)
+      : { obligations: [] as DerivedObligation[], scheduled: new Set<string>() };
+  const obligations: FinObligation[] = [...input.obligations, ...derived.obligations].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const lastCharged = new Map(derived.obligations.map((o) => [o.id, parseDay(o.last_date)!]));
 
   const isCashflowTxn = (t: CleanTxn): boolean =>
     CASHFLOW_ACCOUNTS.has(t.acctType) && !t.transferLike && !(t.cardPayment && t.amount < 0 && hasCardTxns && t.acctType !== 'credit_card');
@@ -739,7 +1111,9 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
   //   balance(day) = checking+savings now
   //                + recurring INFLOWS (is_recurring, amount > 0) projected by their cadence
   //                - obligations on their due_day (the complete schedule of recurring outflows, loan and card payments
-  //                  included, so recurring outflow transactions are NOT subtracted again)
+  //                  included, so recurring outflow transactions are NOT subtracted again). For an imported household
+  //                  the schedule is the bills detected from its transactions, whose charges are not subtracted again either
+
   //                - average daily discretionary spend (non-recurring outflows on checking/savings)
   //                + average daily irregular income (non-recurring deposits such as owner draws; see the flag)
   // =============================================================================================================
@@ -759,7 +1133,9 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
   for (const s of series) for (const d of occurrences(s, asOf, end)) flow(d).in += s.amount;
   for (const o of obligations) {
     if (!(o.amount > 0)) continue;
+    const charged = lastCharged.get(o.id); // detected bills only: seeded obligations carry no charge history
     for (const d of monthlyDates(o.due_day, asOf, end)) {
+      if (charged !== undefined && d - charged <= BILL_REPEAT_DAYS) continue; // this month's was already charged, early
       const f = flow(d);
       f.out += o.amount;
       f.obligationIds.push(o.id);
@@ -767,11 +1143,12 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
   }
 
   // Discretionary spend / irregular income: non-recurring flows on checking+savings over the window.
-  // Transfers between the household's own accounts and card payments (already scheduled as obligations) are skipped.
+  // Transfers between the household's own accounts and card payments (already scheduled as obligations) are skipped,
+  // and so are the charges behind a detected bill (the bill schedules them; an imported household marks none recurring).
   let discretionaryOut = 0;
   let irregularIn = 0;
   for (const t of inWin) {
-    if (t.is_recurring || !LIQUID.has(t.acctType) || t.transferLike) continue;
+    if (t.is_recurring || !LIQUID.has(t.acctType) || t.transferLike || derived.scheduled.has(t.id)) continue;
     if (t.cardPayment && hasCardTxns) continue;
     if (t.amount < 0) discretionaryOut += -t.amount;
     else if (t.refund) discretionaryOut -= t.amount;
@@ -979,5 +1356,5 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
     });
   }
 
-  return { as_of: formatDay(asOf), indicators, forecast, alerts, cash: cashFlow };
+  return { as_of: formatDay(asOf), indicators, forecast, alerts, cash: cashFlow, derived_obligations: derived.obligations };
 }

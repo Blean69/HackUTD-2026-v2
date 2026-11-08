@@ -3,15 +3,28 @@ import spacetimedb, { recompute_tick } from '../schema';
 import { recomputeHousehold } from '../recompute';
 import { backfillCreditHistory, needsBackfill } from '../credit_store';
 import { closeExpiredProposals } from '../proposals';
-import { isoDay } from '../util';
+import { isoDay, type Ctx } from '../util';
 
 const MAX_PER_TICK = 20;
+
+function hasObligations(ctx: Ctx, household_id: string): boolean {
+  for (const _ of ctx.db.obligation.household_id.filter(household_id)) return true;
+  return false;
+}
+function hasPlaidAccount(ctx: Ctx, household_id: string): boolean {
+  for (const a of ctx.db.account.household_id.filter(household_id)) if (a.source === 'plaid') return true;
+  return false;
+}
+/** An imported household with no bills on file is looked at again at most this often (it may have none to detect). */
+const BILLS_RETRY_MICROS = 3_600_000_000n;
 
 /**
  * Fired by the `recompute_tick` schedule row. Scheduled reducers are private in SpacetimeDB 2.x, so clients cannot
  * call this directly. It recomputes (a) households flagged dirty by seed/import reducers and (b) households whose
  * indicators were last computed on a previous day or that have no cash_flow row yet (a module upgrade), at most MAX_PER_TICK per run. It also closes family-voting proposals
  * whose deadline has passed (`cast_vote` rejects late votes either way; the status flip is what the UI shows).
+ * (c) An imported (Plaid) household with no obligation rows at all, last recomputed over an hour ago, is recomputed so its
+ * bills are detected from its transactions: that fills households imported before bill detection existed (a module upgrade).
  */
 export const tick_recompute = spacetimedb.reducer(
   { onSchedule: recompute_tick },
@@ -29,7 +42,10 @@ export const tick_recompute = spacetimedb.reducer(
       const marker = ctx.db.health_indicator.id.find(`${hh.id}:liquidity_runway`);
       // no cash_flow row yet: the module was upgraded since this household's last recompute (self-healing backfill)
       const stale = !marker || isoDay(marker.updated_at) !== today || !ctx.db.cash_flow.household_id.find(hh.id);
-      if (stale) { seen.add(hh.id); todo.push(hh.id); }
+      if (stale) { seen.add(hh.id); todo.push(hh.id); continue; }
+      // (c) imported, no bills on file yet: detect them (self-healing backfill, retried at most hourly)
+      const idle = ctx.timestamp.microsSinceUnixEpoch - marker.updated_at.microsSinceUnixEpoch >= BILLS_RETRY_MICROS;
+      if (idle && !hasObligations(ctx, hh.id) && hasPlaidAccount(ctx, hh.id)) { seen.add(hh.id); todo.push(hh.id); }
     }
     todo.sort();
     for (const id of todo.slice(0, MAX_PER_TICK)) {
