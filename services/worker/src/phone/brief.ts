@@ -29,7 +29,7 @@ export function buildBrief(data: HouseholdData, tools: { health?: unknown; forec
   const fc = rec(tools.forecast);
   if (fc.available) {
     lines.push(`Next 90 days: cash starts near ${money(fc.start?.balance ?? 0)}, ends near ${money(fc.end?.balance ?? 0)}; the lowest point is about ${money(fc.lowest?.balance ?? 0)} on ${fc.lowest?.date}.`);
-    lines.push(fc.days_below_zero > 0 ? `Warning: the forecast dips below zero on ${fc.days_below_zero} day(s).` : 'The forecast never dips below zero.');
+    lines.push(fc.days_below_zero > 0 ? `Warning: the forecast dips below zero on ${fc.days_below_zero} ${fc.days_below_zero === 1 ? 'day' : 'days'}.` : 'The forecast never dips below zero.');
   }
 
   const obl = rec(tools.obligations);

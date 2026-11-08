@@ -3,7 +3,7 @@
 // suggests skipping a loan or card payment and never mislabels a bill.
 import { z } from 'zod';
 import type { Obligation } from '../types.js';
-import { round2, usd } from '../util.js';
+import { plural, round2, usd } from '../util.js';
 import { defineTool } from './registry.js';
 
 const STREAMING = /netflix|hulu|disney|spotify|prime|youtube|hbo|\bmax\b|peacock|paramount|apple\s*(tv|music|one)|audible|sirius|xbox|playstation|nintendo/i;
@@ -48,5 +48,8 @@ export const findSavings = defineTool({
       monthly_bills_total: round2(rows.reduce((s, r) => s + r.monthly, 0)),
     };
   },
-  summarize: (r) => `Could cut ${r.can_cut.length} bill(s), about ${usd(r.can_cut_total)} a month; ${r.shop_around.length} to shop around; ${r.keep_paying.length} to keep paying`,
+  summarize: (r) =>
+    r.can_cut.length
+      ? `${plural(r.can_cut.length, 'bill')} you could cut or pause, about ${usd(r.can_cut_total)} a month; ${r.shop_around.length} to shop around; ${r.keep_paying.length} to keep paying`
+      : `No bills to cut; ${r.shop_around.length} to shop around; ${r.keep_paying.length} to keep paying`,
 });

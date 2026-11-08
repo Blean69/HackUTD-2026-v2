@@ -2,7 +2,7 @@
 // proposal. Voting itself is NOT here: a vote belongs to one person's own phone (the module keys it by the caller's identity, and the worker
 // is a single identity for every family), so Brian would fake a voter. Family members vote in the app.
 import { z } from 'zod';
-import { truncate, usd } from '../util.js';
+import { plural, truncate, usd } from '../util.js';
 import { gate, needsAct, niceDate, pickByWords, sounds, spend } from './confirm.js';
 import { defineTool } from './registry.js';
 
@@ -23,7 +23,7 @@ export const getAlerts = defineTool({
     const shown = [...open].sort((a, b) => rank(a.severity) - rank(b.severity) || (a.created_at < b.created_at ? 1 : -1)).slice(0, 4);
     return { open: open.length, alerts: shown.map((a) => ({ severity: a.severity, title: truncate(a.title, 80), detail: truncate(a.detail, 110) })) };
   },
-  summarize: (r) => (r.open ? `${r.open} open alert(s), worst: ${truncate(r.alerts[0]?.title ?? '', 60)}` : 'No open alerts'),
+  summarize: (r) => (r.open ? `${plural(r.open, 'open alert')}, the most serious: ${truncate(r.alerts[0]?.title ?? '', 60)}` : 'No open alerts'),
 });
 
 export const markAlertHandled = defineTool({
@@ -78,7 +78,7 @@ export const getProposals = defineTool({
       }),
     };
   },
-  summarize: (r) => `${r.count} proposal(s)${r.proposals.length ? `: ${r.proposals.map((p: { proposal: string }) => truncate(p.proposal, 30)).join(', ')}` : ''}`,
+  summarize: (r) => `${plural(r.count, 'family vote')}${r.proposals.length ? `: ${r.proposals.map((p: { proposal: string }) => truncate(p.proposal, 30)).join(', ')}` : ''}`,
 });
 
 export const createProposal = defineTool({
@@ -106,7 +106,7 @@ export const createProposal = defineTool({
     spend(ctx.act, key);
     return { done: true, proposal: title, amount, days_open: days, note: 'It is open on the Family votes page. Everyone votes there on their own phone, and an agent is checking if the family can afford it.' };
   },
-  summarize: (r) => (r.done ? `Started a family vote: "${r.proposal}" (${usd(r.amount)}, ${r.days_open} day(s))` : r.ask ? `Asked first: ${r.ask}` : `Not started: ${r.note}`),
+  summarize: (r) => (r.done ? `Started a family vote: "${r.proposal}" (${usd(r.amount)}, open ${plural(r.days_open, 'day')})` : r.ask ? `Asked first: ${r.ask}` : `Not started: ${r.note}`),
 });
 
 export const familyTools = [getAlerts, markAlertHandled, getProposals, createProposal];

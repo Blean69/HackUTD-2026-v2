@@ -144,8 +144,8 @@ export class RunContext {
     const m = via ? meta(via) : {};
     this.emit(agent, 'tool_call', this.registry.describeCall(name, args), { tool: name, args }, m);
     const out = await this.registry.execute(name, args, this.deps.toolContext);
-    if (out.ok) this.emit(agent, 'tool_result', out.summary, { tool: name, ok: true, result: out.result }, { ...m, latencyMs: out.durationMs, tokensIn: 0, tokensOut: 0 });
-    else this.emit(agent, 'tool_result', `${name} failed: ${truncate(out.error, 160)}`, { tool: name, ok: false, error: out.error }, { ...m, latencyMs: out.durationMs, tokensIn: 0, tokensOut: 0 });
+    if (out.ok) this.emit(agent, 'tool_result', out.summary, { tool: name, ok: true, result: out.result, ...(out.adjusted ? { adjusted_args: out.adjusted } : {}) }, { ...m, latencyMs: out.durationMs, tokensIn: 0, tokensOut: 0 });
+    else this.emit(agent, 'tool_result', `${name.replace(/_/g, ' ')} did not work: ${truncate(out.error, 160)}`, { tool: name, ok: false, error: out.error }, { ...m, latencyMs: out.durationMs, tokensIn: 0, tokensOut: 0 });
     return out;
   }
 

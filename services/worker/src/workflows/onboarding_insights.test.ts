@@ -136,13 +136,13 @@ describe('onboarding_insights workflow (local provider)', () => {
     expect(roof).toMatchObject({ target_amount: 8000, title: 'Replace the roof for $8,000', evidence_quote: 'Replace the roof for $8,000' });
     expect(goals.find((g) => g.id.endsWith('_college'))!.evidence_quote).toBe('');
 
-    // the first proposal goes through the voting reducer, authored by Keystone, open for a week
+    // the first proposal goes through the voting reducer, authored by Brian (AI), open for a week
     const props = sink.of('createProposal').map((a) => a[0] as { household_id: string; title: string; amount: number; details: Record<string, unknown>; closes_in_days: number; author_name: string });
     expect(props).toHaveLength(1);
-    expect(props[0]).toMatchObject({ household_id: HH, author_name: 'Keystone', closes_in_days: 7 });
+    expect(props[0]).toMatchObject({ household_id: HH, author_name: 'Brian (AI)', closes_in_days: 7 });
     expect(props[0]!.amount).toBeGreaterThan(0);
     expect(props[0]!.amount).toBeLessThanOrEqual(30000);
-    expect(props[0]!.details).toMatchObject({ kind: 'purchase', suggested_by: 'Keystone onboarding' });
+    expect(props[0]!.details).toMatchObject({ kind: 'purchase', suggested_by: 'Brianotron onboarding' });
 
     // trace: plan first, real tool calls, goal checks, a final, provider + model everywhere
     const types = sink.traces.map((t) => t.type);

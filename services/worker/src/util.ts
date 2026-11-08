@@ -28,7 +28,7 @@ export function parseDay(s: string): number | null {
   return Math.floor(ms / MS_DAY);
 }
 export const formatDay = (day: number): string => new Date(day * MS_DAY).toISOString().slice(0, 10);
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 /** The next date a monthly bill falls due, as people say it ("November 9"): this month if the day is still ahead (or today), else next
  *  month, clamped to the month's length. The voice reads "November 9" as "November ninth"; a bare "day 9" came out as "day nine". */
 export function nextDueLabel(dueDay: number, asOf: string): string {
@@ -47,6 +47,14 @@ function ordinalSuffix(n: number): string {
   if (r >= 11 && r <= 13) return 'th';
   return ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
 }
+/** "2027-01-08" -> "January 2027". */
+export function monthYear(iso: string): string {
+  const d = parseDay(iso);
+  if (d === null) return iso;
+  const t = new Date(d * MS_DAY);
+  return `${MONTHS[t.getUTCMonth()]} ${t.getUTCFullYear()}`;
+}
+
 export const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 /** Whole months (fractional) between two ISO dates, never below 0. */
@@ -83,6 +91,16 @@ export function clamp(x: number, lo: number, hi: number): number {
 }
 
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** "1 goal", "3 goals", "1 inquiry" / "2 inquiries": counts people read, never "goal(s)". */
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** "a", "a and b", "a, b and c". */
+export function listWords(xs: readonly string[]): string {
+  return xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+}
 
 /** How a workflow is named in trace titles and summaries people read. The workflow id `huddle` stays internal: the product calls it Table Mode. */
 export function workflowLabel(workflow: string): string {

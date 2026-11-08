@@ -34,13 +34,38 @@ export interface CashFlow {
   monthly_net: number;
   /** Average monthly outflow for the largest categories (positive numbers). */
   top_outflow_categories: { category: string; monthly: number }[];
+  /** `cash_flow` = the recompute's row (what the dashboard shows); `ledger` = derived here because no row was loaded. */
+  origin: 'cash_flow' | 'ledger';
 }
 
 /**
- * Cash-basis monthly flow over the last `days` days on checking + savings accounts, ignoring transfers between
- * the household's own accounts. Credit-card spending shows up when the card is paid from checking.
+ * The household's monthly cash flow. When the recompute's `cash_flow` row is loaded (docs/contracts.md section 14) this IS that
+ * row, so every agent says the same surplus as the dashboard's Cash flow tile and the savings-rate indicator. Without it (tests,
+ * an older module) it falls back to a cash-basis derivation over the last `days` days on checking + savings, ignoring transfers
+ * between the household's own accounts.
  */
 export function cashFlow(data: HouseholdData, days = 90): CashFlow {
+  const row = data.cash_flow;
+  if (row && days === 90 && Number.isFinite(row.net_monthly)) {
+    const months = Math.max(1, row.window_days) / DAYS_PER_MONTH;
+    return {
+      window_days: row.window_days,
+      monthly_in: round2(row.income_monthly),
+      monthly_out: round2(row.expense_monthly),
+      monthly_net: round2(row.net_monthly),
+      top_outflow_categories: [...row.categories]
+        .filter((c) => c.total > 0)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5)
+        .map((c) => ({ category: c.category, monthly: round2(c.total / months) })),
+      origin: 'cash_flow',
+    };
+  }
+  return ledgerCashFlow(data, days);
+}
+
+/** The ledger-only derivation (the fallback of `cashFlow`). */
+export function ledgerCashFlow(data: HouseholdData, days = 90): CashFlow {
   const liquidIds = new Set(accountsOfType(data, LIQUID_TYPES).map((a) => a.id));
   const end = parseDay(data.asOf) ?? 0;
   const start = end - days;
@@ -70,6 +95,7 @@ export function cashFlow(data: HouseholdData, days = 90): CashFlow {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([category, v]) => ({ category, monthly: round2(v / months) })),
+    origin: 'ledger',
   };
 }
 

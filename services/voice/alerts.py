@@ -137,6 +137,7 @@ class Ctx:
     cards: list[tuple[str, str]] = field(default_factory=list)
     has_savings: bool = False
     bills: list[tuple[str, int]] = field(default_factory=list)  # (name, amount), biggest first
+    due_days: dict[str, int] = field(default_factory=dict)  # bill name -> day of the month it is due (from the obligations)
 
     @classmethod
     def from_payload(cls, payload: dict | None, rng: random.Random, today: date | None = None) -> "Ctx":
@@ -161,7 +162,10 @@ class Ctx:
             ctx.card_last4 = str(rng.randint(1000, 9999))
         for o in c.get("obligations") or []:
             if isinstance(o, dict) and isinstance(o.get("amount"), (int, float)) and o.get("name"):
-                ctx.bills.append((_clean(o["name"], 40), int(o["amount"])))
+                name = _clean(o["name"], 40)
+                ctx.bills.append((name, int(o["amount"])))
+                if isinstance(o.get("due_day"), (int, float)) and 1 <= int(o["due_day"]) <= 31:
+                    ctx.due_days[name] = int(o["due_day"])
         ctx.bills.sort(key=lambda b: -b[1])
         return ctx
 
@@ -211,18 +215,47 @@ def _t_new_payee_3am(ctx: Ctx, rng: random.Random) -> CallbackAlert:
     )
 
 
+def next_due(today: date, day: int) -> date:
+    """The next date a bill due on `day` of the month falls on (today counts), clamped to short months."""
+    y, m = today.year, today.month
+    if day < today.day:
+        y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    last = (date(y + (m == 12), m % 12 + 1, 1) - timedelta(days=1)).day
+    return date(y, m, min(day, last))
+
+
+def _two_bills(ctx: Ctx, rng: random.Random) -> list[tuple[str, int, date]]:
+    """Two of the household's biggest bills with their REAL next due dates: of the three biggest that have a due day, the pair that
+    falls closest together (the bigger pair on a tie). Without due days (no household data) two plausible bills two days apart."""
+    dated = [(n, a, next_due(ctx.today, ctx.due_days[n])) for n, a in ctx.bills if n in ctx.due_days][:3]
+    if len(dated) >= 2:
+        pairs = [(x, y) for i, x in enumerate(dated) for y in dated[i + 1:]]
+        x, y = min(pairs, key=lambda p: (abs((p[0][2] - p[1][2]).days), -(p[0][1] + p[1][1])))
+        return sorted([x, y], key=lambda b: (b[2], -b[1]))
+    first = ctx.today + timedelta(days=rng.randint(4, 9))
+    return [("the car payment", rng.choice([420, 480, 540]), first), ("the electric bill", rng.choice([160, 190, 230]), first + timedelta(days=2))]
+
+
 def _t_overdraft_two_bills(ctx: Ctx, rng: random.Random) -> CallbackAlert:
-    when = ctx.today + timedelta(days=rng.randint(4, 9))
-    bills = ctx.bills[:2] if len(ctx.bills) >= 2 else [("the car payment", rng.choice([420, 480, 540])), ("the electric bill", rng.choice([160, 190, 230]))]
+    a, b = _two_bills(ctx, rng)
+    when = max(a[2], b[2])  # after both have gone out
+    gap = abs((b[2] - a[2]).days)
     short = _round_to(rng.uniform(120, 640), 10)
-    cover = _round_to(short + 100, 50)
+    name_a, name_b = speakable(a[0].split(",")[0]), speakable(b[0].split(",")[0])
+    if gap == 0:
+        why = f"because two bills, {name_a} and {name_b}, land the same day."
+        dates = f"{a[0]} ({usd(a[1])}) and {b[0]} ({usd(b[1])}) are both due on {human_date(when)}"
+    else:
+        days = NUM_WORDS.get(gap, str(gap)) + (" day" if gap == 1 else " days")
+        why = f"because two big bills land {days} apart: {name_a} on {human_date(a[2])} and {name_b} on {human_date(b[2])}."
+        dates = f"{a[0]} ({usd(a[1])}) is due on {human_date(a[2])} and {b[0]} ({usd(b[1])}) on {human_date(b[2])}, {days} apart"
     return CallbackAlert(
         key="tpl:overdraft_two_bills", source="template", origin="template: overdraft_two_bills", kind="obligation",
         title=f"{ctx.checking_name.capitalize()} could go below zero on {human_date(when)}",
-        detail=f"{bills[0][0]} ({usd(bills[0][1])}) and {bills[1][0]} ({usd(bills[1][1])}) are both due on {human_date(when)}, which would leave {ctx.checking_name} about {usd(short)} below zero. Moving {usd(cover)} over from savings first would cover it.",
-        statement=f"Your {ctx.checking_name} is on track to go below zero on {human_date(when)}, about {usd(short)} short, because two bills, {speakable(bills[0][0].split(',')[0])} and {speakable(bills[1][0].split(',')[0])}, land the same day.",
-        action=f"Moving {usd(cover)} over from savings before then would cover it." if ctx.has_savings else f"Moving {usd(cover)} in before then would cover it.",
-        facts=_facts(date=human_date(when), shortfall=usd(short), first_bill=f"{bills[0][0]} {usd(bills[0][1])}", second_bill=f"{bills[1][0]} {usd(bills[1][1])}", suggested_transfer=usd(cover)),
+        detail=f"{dates}, which would leave {ctx.checking_name} about {usd(short)} below zero. Make sure checking can cover both payments before then.",
+        statement=f"Your {ctx.checking_name} is on track to go below zero on {human_date(when)}, about {usd(short)} short, {why}",
+        action="I'd make sure checking can cover both payments before then.",
+        facts=_facts(date=human_date(when), shortfall=usd(short), first_bill=f"{a[0]} {usd(a[1])}, due {human_date(a[2])}", second_bill=f"{b[0]} {usd(b[1])}, due {human_date(b[2])}"),
     )
 
 
@@ -331,8 +364,7 @@ def _render_real(c: dict, ctx: Ctx) -> CallbackAlert | None:
         statement = f"Your checking looks set to go below zero on {when}" + (f", about {usd(short)} short" if short else "") + "."
         if bills:
             statement += f" Bills due that day add up to {usd(bills)}."
-        cover = _round_to(short + 100, 50) if short else 0
-        return CallbackAlert(**base, origin="forecast: overdraft", statement=statement, action=f"Moving about {usd(cover)} over from savings before then would cover it." if cover else "I'd move some money over from savings before then.", facts=_facts(date=when, shortfall=usd(short) if short else "", bills_due=usd(bills) if bills else ""))
+        return CallbackAlert(**base, origin="forecast: overdraft", statement=statement, action="I'd make sure checking can cover the payments due then.", facts=_facts(date=when, shortfall=usd(short) if short else "", bills_due=usd(bills) if bills else "", bills_that_day=f.get("bills_that_day")))
     if typ in ("credit_drop", "open_alert") and title:
         origin = "open alert: credit score" if typ == "credit_drop" else f"open {c.get('severity', '')} alert"
         extra = _first_sentence(detail) if detail and _first_sentence(detail).lower() != title.lower() else ""

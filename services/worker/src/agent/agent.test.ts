@@ -219,7 +219,7 @@ describe('workflows on the local provider (no keys, no database)', () => {
     const order = sink.calls.map((c) => c.fn);
     expect(order.indexOf('upsertGoal')).toBeLessThan(order.indexOf('purgeTranscript')); // purge only after analysis
     expect(types(sink)).toEqual(expect.arrayContaining(['plan', 'handoff', 'tool_call', 'tool_result', 'message', 'final']));
-    expect(sink.traces.some((t) => t.title.includes('Purged'))).toBe(true);
+    expect(sink.traces.some((t) => t.title.includes('Deleted the raw transcript'))).toBe(true);
   });
 
   it('Table Mode: what people read never says "Huddle" (workflow id, table and reducer names stay internal)', async () => {

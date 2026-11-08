@@ -293,8 +293,91 @@ export function extractFromLines(lines: Line[], asOf: string): HuddleExtract {
   return { goals: goals.slice(0, 8), concerns, key_dates: keyDates };
 }
 
+// ---- what-if text helpers ---------------------------------------------------------------------------------------------
+// Deterministic readings of a what-if question. parseScenarioPrompt uses them, and the what-if workflow applies them on top of
+// the model's parse, so the same words always mean the same change whichever provider answered.
+
+/** "$150 a month", "$150/mo", "$200 monthly", "$200 per month": amounts said per month. */
+export function monthlyAmounts(text: string): number[] {
+  return findMoney(text)
+    .filter((m) => {
+      const after = text.slice(m.index + m.raw.length, m.index + m.raw.length + 16).toLowerCase();
+      const before = text.slice(Math.max(0, m.index - 10), m.index).toLowerCase();
+      return /^\s*(?:a|per|each|every|\/)\s*(?:month|mo)\b|^\s*monthly\b/.test(after) || /\bmonthly\s*$/.test(before);
+    })
+    .map((m) => m.value);
+}
+
+const INCOME_WORDS = /\b(?:income|salary|paycheck|pay ?cut|revenue|sales|earn(?:s|ed|ing)?|wages?|raise|bonus|hours|laid off|layoff|lose (?:my|his|her|our|their) job|job loss)\b/i;
+
+/**
+ * "Cancel cable and gym to save $150 a month", "cut $200 a month of dining", "drop Netflix, $15 a month": a monthly SPENDING CUT,
+ * returned as a negative change in spending (-150). Never income: a sentence about income, pay or sales returns null.
+ */
+export function spendingCutMonthly(text: string): number | null {
+  if (INCOME_WORDS.test(text)) return null;
+  const strong = /\b(?:cancel(?:l?ing|l?ed|s)?|cut(?:ting|s)?|drop(?:ping|s)?|trim(?:ming|s)?|stop(?:ping)? (?:paying|buying|ordering)|reduc(?:e|ing)|lower(?:ing)?|spend(?:ing)? less|get(?:ting)? rid of|switch(?:ing)? to a cheaper)\b/i.test(text);
+  const save = /\bsav(?:e|ing|es)\b/i.test(text);
+  if (!strong && !save) return null;
+  if (!strong && /\bsav(?:e|ing)\b[^.?!]*?\b(?:for|toward|towards|up|into|in a|in the)\b/i.test(text)) return null; // "save $500 a month for college" sets money aside
+  const amt = monthlyAmounts(text)[0];
+  return amt ? -amt : null;
+}
+
+/** "Pay off all debt", "pay off all of our loans and the credit card", "everything we owe": the payoff covers every matching debt. */
+export function debtScopeHint(text: string): string | null {
+  const t = text.toLowerCase();
+  if (!/\bpay(?:ing)?\s+(?:it\s+|them\s+)?(?:off|down)\b|\bpayoff\b|\bclear(?:ing)?\b|\bwipe out\b|\bget rid of\b|\bdebt[- ]free\b/.test(t)) return null;
+  const all = /\b(?:all|every|everything|each|entire|whole)\b[^.?!]{0,30}\b(?:debts?|loans?|cards?|we owe|owed?|balances?)\b|\beverything we owe\b|\bdebt[- ]free\b/.test(t);
+  if (!all) return null;
+  const cards = /\bcards?\b/.test(t);
+  const loans = /\bloans?\b|\bmortgage\b/.test(t);
+  if (/\bdebts?\b|\bowe\b|debt[- ]free/.test(t) || (cards && loans)) return 'all';
+  return cards ? 'all cards' : loans ? 'all loans' : 'all';
+}
+
+/** "with a $250,000 loan", "a $250k SBA 7(a) loan", "borrow $40,000": the amount borrowed, when the text names one. */
+export function loanAmount(text: string): number | null {
+  for (const m of findMoney(text)) {
+    const after = text.slice(m.index + m.raw.length, m.index + m.raw.length + 32).toLowerCase();
+    const before = text.slice(Math.max(0, m.index - 14), m.index).toLowerCase();
+    if (/^\s*(?:[a-z0-9()]+\s+){0,2}loan\b/.test(after) || /\bborrow(?:ing|ed)?\s+(?:about\s+|around\s+)?$/.test(before)) return m.value;
+  }
+  return null;
+}
+
+/** Borrowed money that stays in the bank ("borrow $10,000 to keep as a cushion"). Otherwise a loan pays for what it was taken for. */
+export function keepsLoanInCash(text: string): boolean {
+  return /\b(?:keep|park|hold|sit|leave)\b[^.?!]{0,40}\b(?:bank|savings|checking|cushion|reserve|account)\b|\bas (?:a |an )?(?:cushion|reserve|buffer|emergency fund)\b|\bfor (?:a |an |our )?(?:cushion|reserve|buffer|emergency fund)\b/i.test(text);
+}
+
+export const statesRate = (text: string): boolean => /\d+(?:\.\d+)?\s*(?:%|percent|per ?cent)/i.test(text);
+export const statesTerm = (text: string): boolean => /\b\d+\s*-?\s*(?:years?|yrs?|months?|mos?)\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty)[- ](?:years?|months?)\b/i.test(text);
+/** "gamble all of our cash", "spend all our savings", "our life savings". */
+export const allCashPhrase = (text: string): boolean => /\ball (?:of )?(?:our|my|the|your)?\s*(?:cash|money|savings)\b|\beverything we have\b|\blife savings\b/i.test(text);
+
+/**
+ * The month a what-if names for the change: "in January", "this March", "in March 2027", "next month" -> calendar months from `asOf`
+ * (0 = this month). "by March" is a deadline, not a start, so it returns null, as does a question that names no month.
+ */
+export function statedMonthOffset(text: string, asOf: string): number | null {
+  const t = text.toLowerCase();
+  const today = parseDay(asOf);
+  if (today === null) return null;
+  if (/\bnext month\b/.test(t)) return 1;
+  const m = new RegExp(`\\b(?:in|on|during|starting(?: in)?|from|this|next|come|early|late|mid|around)\\s+(?:early\\s+|late\\s+|mid[- ])?${MONTH_RE}\\b(?:\\s+(?:of\\s+)?(20\\d\\d))?`).exec(t);
+  if (!m) return null;
+  const d = new Date(today * 86_400_000);
+  const ay = d.getUTCFullYear();
+  const am = d.getUTCMonth() + 1;
+  const mo = monthNum(m[1]!);
+  const y = m[2] ? Number(m[2]) : mo < am ? ay + 1 : ay;
+  const diff = (y - ay) * 12 + (mo - am);
+  return diff < 0 ? null : Math.min(24, diff);
+}
+
 // ---- natural language -> Scenario ------------------------------------------------------------------------------------
-export function parseScenarioPrompt(prompt: string): Scenario {
+export function parseScenarioPrompt(prompt: string, asOf?: string): Scenario {
   const p = prompt.trim();
   const lower = p.toLowerCase();
   const money = findMoney(p);
@@ -310,12 +393,16 @@ export function parseScenarioPrompt(prompt: string): Scenario {
   const months = /(\d+)\s*(?:-|\s)?(year|yr|month|mo)/i.exec(p);
   const termMonths = months ? (months[2]!.toLowerCase().startsWith('y') ? Number(months[1]) * 12 : Number(months[1])) : undefined;
   const label = truncate(p.replace(/\s+/g, ' ').replace(/[?.!]+$/, ''), 90);
+  const scope = debtScopeHint(p);
+  const cut = spendingCutMonthly(p);
+  const borrowed = loanAmount(p);
 
   let kind: Scenario['kind'] = 'purchase';
-  if (/\b(pay(?:ing)? off|payoff|pay down|paying down|clear the)\b/.test(lower)) kind = 'payoff';
+  if (scope || /\b(pay(?:ing)? off|payoff|pay down|paying down|clear the)\b/.test(lower)) kind = 'payoff';
+  else if (cut !== null) kind = 'spending_change';
   else if (/\b(rates?|apr)\b.*\b(go|goes|going|rise|rises|increase|jump|climb|up|down|drop|fall|cut)\b|\binterest rates?\b/.test(lower) && !/(buy|purchase)/.test(lower)) kind = 'rate_change';
   else if (/\b(lose[sd]?|lost|laid off|layoff|job loss|raise|promotion|pay cut|salary|income|paycheck|revenue|sales|bonus|quit|retire|part[- ]time|hours cut)\b/.test(lower) && !/\b(buy|purchase)\b/.test(lower)) kind = 'income_change';
-  else if (/\b(take (?:out )?an? |new loan|borrow|sba loan|line of credit|personal loan|loan for)\b/.test(lower) && !/\b(buy|purchase|afford)\b/.test(lower)) kind = 'new_loan';
+  else if (borrowed !== null || (/\b(take (?:out )?an? |new loan|borrow|sba loan|line of credit|personal loan|loan for)\b/.test(lower) && !/\b(buy|purchase|afford)\b/.test(lower))) kind = 'new_loan';
 
   const scn: Scenario = { kind, label };
   const apr = pct.find((x) => x.isRate);
@@ -325,15 +412,21 @@ export function parseScenarioPrompt(prompt: string): Scenario {
     const downMoney = money.find((m) => /down/.test(lower.slice(m.index, m.index + m.raw.length + 12)) && m.value !== first);
     if (downPct && first) scn.down_payment = Math.round((first * downPct.v) / 100);
     else if (downMoney) scn.down_payment = downMoney.value;
-    scn.financed = /financ|loan|monthly payment|mortgage|lease|payments?\b|down\b/.test(lower) || undefined;
+    scn.financed = (!/\b(?:with|in|all) cash\b|\bpay(?:ing)? cash\b/.test(lower) && /financ|loan|monthly payment|mortgage|lease|payments?\b|down\b/.test(lower)) || undefined;
     if (apr) scn.apr_pct = apr.v;
     if (termMonths && termMonths >= 6) scn.term_months = termMonths;
     if (scn.financed || scn.term_months) scn.months = 24;
   } else if (kind === 'new_loan') {
-    if (first !== undefined) scn.amount = first;
+    const amount = borrowed ?? first;
+    if (amount !== undefined) scn.amount = amount;
     if (apr) scn.apr_pct = apr.v;
     if (termMonths && termMonths >= 6) scn.term_months = termMonths;
+    scn.proceeds_to_cash = keepsLoanInCash(p);
     scn.months = 24;
+  } else if (kind === 'spending_change') {
+    scn.spending_change_monthly = cut!;
+    if (months && months[2]!.toLowerCase().startsWith('m')) scn.duration_months = Number(months[1]);
+    scn.months = 12;
   } else if (kind === 'income_change') {
     const down = /\b(lose[sd]?|lost|laid off|layoff|drop|drops|dropped|cut|cuts|lower|less|decrease|fall|falls|reduced?|quit|slow|slump)\b/.test(lower);
     const up = /\b(raise|promotion|bonus|increase|more|higher|grows?)\b/.test(lower) && !down;
@@ -348,7 +441,7 @@ export function parseScenarioPrompt(prompt: string): Scenario {
     scn.months = 12;
   } else if (kind === 'payoff') {
     if (first !== undefined) scn.amount = first;
-    scn.account_hint = /car|auto|truck|vehicle/.test(lower) ? 'auto_loan' : /card/.test(lower) ? 'credit_card' : /mortgage|house|home/.test(lower) ? 'mortgage' : /personal|student/.test(lower) ? 'personal_loan' : undefined;
+    scn.account_hint = scope ?? (/car|auto|truck|vehicle/.test(lower) ? 'auto_loan' : /\bvisa\b/.test(lower) ? 'visa' : /master ?card/.test(lower) ? 'mastercard' : /card/.test(lower) ? 'credit_card' : /mortgage|house|home/.test(lower) ? 'mortgage' : /personal|student/.test(lower) ? 'personal_loan' : undefined);
     if (!scn.account_hint) delete scn.account_hint;
     scn.months = 12;
   } else if (kind === 'rate_change') {
@@ -358,6 +451,13 @@ export function parseScenarioPrompt(prompt: string): Scenario {
     scn.months = 12;
     if (/mortgage/.test(lower)) scn.account_hint = 'mortgage';
   }
+  // the month the question names ("in January"): honored for a purchase, payoff or loan, and as the start of a later change
+  const at = asOf ? statedMonthOffset(p, asOf) : null;
+  if (at !== null && (kind === 'purchase' || kind === 'payoff' || kind === 'new_loan' || at > 0)) {
+    scn.start_month = at;
+    scn.months = Math.min(24, Math.max(scn.months ?? 12, at + 12));
+  }
+  if (scn.duration_months !== undefined) scn.duration_months = Math.max(1, Math.min(24, scn.duration_months)); // the schema's bounds
   return scn;
 }
 

@@ -9,7 +9,7 @@ import type { RunContext } from '../agent/run.js';
 import { meta } from '../agent/run.js';
 import { monthlyCapacity } from '../tools/feasibility.js';
 import { savingsBalance } from '../tools/finance.js';
-import { fitJson, round2, truncate } from '../util.js';
+import { fitJson, plural, round2, truncate } from '../util.js';
 import { unbackedFigures } from './grounding.js';
 
 // ---- deterministic rules ------------------------------------------------------------------------------------------------
@@ -71,10 +71,13 @@ export function adviceViolations(text: string): string[] {
 export function adviceFacts(run: RunContext) {
   const d = run.data;
   const lows = d.forecast.map((f) => f.balance);
+  const cap = monthlyCapacity(d);
   return {
     as_of: d.asOf,
     savings_balance: savingsBalance(d),
-    monthly_surplus: monthlyCapacity(d).surplus,
+    // the dashboard's Cash flow figure: monthly_cash_flow keeps the sign, monthly_surplus is what can go toward goals (never below 0)
+    monthly_cash_flow: cap.net,
+    monthly_surplus: cap.surplus,
     forecast_low: lows.length ? round2(Math.min(...lows)) : null,
     monthly_bills: round2(d.obligations.reduce((s, o) => s + o.amount, 0)),
     goals: d.goals.slice(0, 8).map((g) => ({ title: g.title, target_amount: g.target_amount, target_date: g.target_date, feasibility: g.feasibility })),
@@ -162,7 +165,7 @@ export async function adviceGuard(
   }
   if (review && !review.ok) problems.push(...(review.problems.length ? review.problems : ['the reviewer judged it unsafe or not feasible']).map((p) => `reviewer: ${p}`));
   const verdictNote = review ? 'passed rules and the feasibility review' : `reviewer unavailable (${failure}), rule check only`;
-  run.emit(o.agent, 'message', `Advice check (${o.kind}): ${problems.length ? `${problems.length} issue(s) found` : verdictNote}`, { problems, reviewed: !!review }, trace);
+  run.emit(o.agent, 'message', `Advice check (${o.kind}): ${problems.length ? `${plural(problems.length, 'issue')} found` : verdictNote}`, { problems, reviewed: !!review }, trace);
   if (!problems.length) return o.text;
 
   const usable = (t: string): boolean => t.length >= 20 && t !== o.text.trim() && !check(t, true).length;

@@ -217,14 +217,33 @@ export class FixedExternalApis implements ExternalApis {
   }
 }
 
+/** What a FRED series is, in words a family reads in the trace ("Looking up today's credit card interest rates"). */
+const FRED_WORDS: Record<string, string> = {
+  MORTGAGE30US: "today's 30-year mortgage rate",
+  MORTGAGE15US: "today's 15-year mortgage rate",
+  DPRIME: 'the bank prime rate (what business loans are priced from)',
+  FEDFUNDS: 'the federal funds rate',
+  DGS10: 'the 10-year Treasury yield',
+  TERMCBCCALLNS: "today's credit card interest rates",
+  TERMCBPER24NS: "today's personal loan rates",
+};
+
+/** "fred_live" -> "live", "fixed_table" -> "reference value, not live": where a figure came from, in plain words. */
+export function sourceWords(source: string): string {
+  if (/_live$/.test(source)) return 'live';
+  if (/_cache$/.test(source)) return 'saved copy of live data';
+  if (source === 'fixed_table') return 'reference value, not live';
+  return source.replace(/_/g, ' ');
+}
+
 export const fredSeries = defineTool({
   name: 'fred_series',
   description:
     'Latest value of a FRED economic series, e.g. MORTGAGE30US (30-year mortgage rate), MORTGAGE15US, DPRIME (bank prime rate), FEDFUNDS, DGS10, TERMCBCCALLNS (credit card APR), TERMCBPER24NS (personal loan rate). The result says whether it is live or a fixed fallback.',
   schema: z.object({ series_id: z.string().describe('FRED series id, e.g. MORTGAGE30US') }),
-  describe: (a) => `Looking up FRED series ${a.series_id.toUpperCase()}`,
+  describe: (a) => `Looking up ${FRED_WORDS[a.series_id.toUpperCase()] ?? `the ${a.series_id.toUpperCase()} series`} (Federal Reserve data)`,
   run: (a, { external }) => external.fred(a.series_id),
-  summarize: (r: FredResult) => `${r.title}: ${r.latest.value}${r.unit === 'percent' ? '%' : ''} on ${r.latest.date} (${r.source.replace('_', ' ')})`,
+  summarize: (r: FredResult) => `${r.title}: ${r.latest.value}${r.unit === 'percent' ? '%' : ''} on ${r.latest.date} (${sourceWords(r.source)})`,
 });
 
 export const collegeScorecard = defineTool({
@@ -232,10 +251,10 @@ export const collegeScorecard = defineTool({
   description:
     'U.S. College Scorecard data for a school: cost of attendance, in-state and out-of-state tuition, average net price. Works by name (e.g. "UT Dallas", "UT Austin") or school_id.',
   schema: z.object({ school_name: z.string().optional(), school_id: z.number().int().optional() }),
-  describe: (a) => `Looking up College Scorecard for ${a.school_name ?? `school ${a.school_id}`}`,
+  describe: (a) => `Looking up college costs for ${a.school_name ?? `school ${a.school_id}`} (U.S. College Scorecard)`,
   run: (a, { external }) => external.scorecard(a),
   summarize: (r: ScorecardResult) =>
-    `${r.name}: cost of attendance ${r.cost_of_attendance ? usd(r.cost_of_attendance) : 'n/a'}/yr, net price ${r.avg_net_price ? usd(r.avg_net_price) : 'n/a'} (${r.source.replace('_', ' ')})`,
+    `${r.name}: cost of attendance ${r.cost_of_attendance ? usd(r.cost_of_attendance) : 'not listed'} a year, average net price ${r.avg_net_price ? usd(r.avg_net_price) : 'not listed'} (${sourceWords(r.source)})`,
 });
 
 export const externalTools = [fredSeries, collegeScorecard];

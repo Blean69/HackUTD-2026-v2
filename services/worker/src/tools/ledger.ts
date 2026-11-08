@@ -1,18 +1,49 @@
 // Read-only ledger tools: accounts, transactions, obligations, credit, health indicators and the forecast.
 import { z } from 'zod';
-import { formatDay, parseDay, round2, usd } from '../util.js';
-import { DEBT_TYPES, cashFlow, liquidBalance, totalAssets, totalDebt, usableTxns } from './finance.js';
+import type { HouseholdData } from '../types.js';
+import { formatDay, parseDay, plural, round2, usd } from '../util.js';
+import { alignCreditIndicator, memberCreditViews, CREDIT_NOTE } from './credit.js';
+import { DEBT_TYPES, LIQUID_TYPES, cashFlow, liquidBalance, totalAssets, totalDebt, usableTxns } from './finance.js';
 import { defineTool } from './registry.js';
+
+const ACCOUNT_TYPES = ['checking', 'savings', 'cd', 'ira', 'auto_loan', 'personal_loan', 'credit_card', 'mortgage'];
+/** Words a model uses for "no filter". */
+const NO_FILTER = /^(?:|all|any|every|everything|none|null|undefined|\*)$/;
+
+/**
+ * The account types a `type` argument means: "all" / "" / "any" = no filter (null); plurals, spaces and a few everyday words
+ * ("credit cards", "car loan", "loans", "cash") map to the stored types. An unknown word matches nothing rather than everything.
+ */
+export function accountTypesFor(raw: string | undefined): Set<string> | null {
+  const t = (raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (NO_FILTER.test(t)) return null;
+  if (/^(?:debts?|loans?|liabilit(?:y|ies)|borrowing)$/.test(t)) return new Set(DEBT_TYPES);
+  if (/^(?:cash|liquid|bank|deposits?|checking_and_savings)$/.test(t)) return new Set(LIQUID_TYPES);
+  if (/^(?:cards?|credit_cards?|visa|mastercard)$/.test(t)) return new Set(['credit_card']);
+  if (/^(?:car|auto|vehicle|truck)(?:_loans?)?$|^auto_loans?$/.test(t)) return new Set(['auto_loan']);
+  if (/^(?:house|home|home_loans?|mortgages?)$/.test(t)) return new Set(['mortgage']);
+  if (/^(?:student_loans?|personal_loans?)$/.test(t)) return new Set(['personal_loan']);
+  if (/^(?:retirement|iras?|401k)$/.test(t)) return new Set(['ira']);
+  if (/^(?:cds?|certificates?(?:_of_deposit)?)$/.test(t)) return new Set(['cd']);
+  const single = t.replace(/s$/, '');
+  return new Set([ACCOUNT_TYPES.includes(t) ? t : single]);
+}
+
+const typeWords = (types: Set<string> | null): string => (types ? [...types].map((t) => t.replace(/_/g, ' ')).join(' and ') : 'all');
 
 export const getAccounts = defineTool({
   name: 'get_accounts',
   description:
     'List the household accounts with balances (debts are positive amounts owed), rates and payments, plus totals: liquid cash, assets, debt, net worth.',
-  schema: z.object({ type: z.string().optional().describe('Filter by account type, e.g. checking, savings, credit_card, mortgage') }),
-  describe: (a) => (a.type ? `Reading ${a.type} accounts` : 'Reading all accounts'),
+  schema: z.object({ type: z.string().optional().describe('Filter by account type: checking, savings, cd, ira, auto_loan, personal_loan, credit_card or mortgage. Omit it for every account') }),
+  describe: (a) => {
+    const types = accountTypesFor(a.type);
+    return types ? `Reading ${typeWords(types)} accounts` : 'Reading all accounts';
+  },
   run: (args, { data }) => {
+    const types = accountTypesFor(args.type);
     const rows = data.accounts
-      .filter((a) => !args.type || a.type === args.type)
+      .filter((a) => !types || types.has(a.type))
       .map((a) => ({
         id: a.id,
         type: a.type,
@@ -40,7 +71,7 @@ export const getAccounts = defineTool({
       },
     };
   },
-  summarize: (r) => `${r.count} accounts, liquid cash ${usd(r.totals.liquid_cash)}, debt ${usd(r.totals.debt)}, net worth ${usd(r.totals.net_worth)}`,
+  summarize: (r) => `${plural(r.count, 'account')}, liquid cash ${usd(r.totals.liquid_cash)}, debt ${usd(r.totals.debt)}, net worth ${usd(r.totals.net_worth)}`,
 });
 
 const TxnArgs = z.object({
@@ -65,7 +96,7 @@ export const getTransactions = defineTool({
     'Search transactions (negative amount = money out). Returns the newest matching rows, or totals grouped by category, merchant or month.',
   schema: TxnArgs,
   describe: (a) => {
-    const bits = [a.category && `category ${a.category}`, a.merchant && `merchant "${a.merchant}"`, a.since && `since ${a.since}`, a.until && `until ${a.until}`, a.direction && a.direction === 'out' ? 'spending' : a.direction === 'in' ? 'deposits' : '', a.group_by && `grouped by ${a.group_by}`].filter(Boolean);
+    const bits = [a.category && `category ${a.category.replace(/_/g, " ")}`, a.merchant && `merchant "${a.merchant}"`, a.since && `since ${a.since}`, a.until && `until ${a.until}`, a.direction && a.direction === 'out' ? 'spending' : a.direction === 'in' ? 'deposits' : '', a.group_by && `grouped by ${a.group_by}`].filter(Boolean);
     return `Searching transactions${bits.length ? ` (${bits.join(', ')})` : ''}`;
   },
   run: (a, { data }) => {
@@ -126,44 +157,86 @@ export const getTransactions = defineTool({
       })),
     };
   },
-  summarize: (r) => `${r.matched} matching transactions, ${usd(r.total_out)} out, ${usd(r.total_in)} in`,
+  summarize: (r) => `${plural(r.matched, 'matching transaction')}, ${usd(r.total_out)} out, ${usd(r.total_in)} in`,
 });
+
+const OBLIGATION_KINDS = ['bill', 'loan', 'subscription', 'tuition', 'insurance', 'tax'];
+/** "all" / "" / "any" = every obligation; plurals are accepted ("bills", "subscriptions"). */
+export function obligationKindFor(raw: string | undefined): string | null {
+  const k = (raw ?? '').trim().toLowerCase();
+  if (NO_FILTER.test(k)) return null;
+  if (OBLIGATION_KINDS.includes(k)) return k;
+  const single = k.replace(/(?:es|s)$/, '');
+  return OBLIGATION_KINDS.find((o) => o === single || `${o}s` === k || o === k.replace(/ies$/, 'y')) ?? k;
+}
 
 export const getObligations = defineTool({
   name: 'get_obligations',
   description: 'List recurring obligations (bills, loans, subscriptions, tuition, insurance, taxes) with amount and due day, plus the monthly total.',
-  schema: z.object({ kind: z.string().optional().describe('bill | loan | subscription | tuition | insurance | tax') }),
-  describe: (a) => (a.kind ? `Reading ${a.kind} obligations` : 'Reading monthly obligations'),
+  schema: z.object({ kind: z.string().optional().describe('bill | loan | subscription | tuition | insurance | tax. Omit it for every obligation') }),
+  describe: (a) => {
+    const kind = obligationKindFor(a.kind);
+    return kind ? `Reading ${kind} payments` : 'Reading monthly bills and payments';
+  },
   run: (a, { data }) => {
-    const rows = data.obligations.filter((o) => !a.kind || o.kind === a.kind);
+    const kind = obligationKindFor(a.kind);
+    const rows = data.obligations.filter((o) => !kind || o.kind === kind);
     return {
       count: rows.length,
       monthly_total: round2(rows.reduce((s, o) => s + o.amount, 0)),
       obligations: rows.map((o) => ({ id: o.id, name: o.name, amount: o.amount, due_day: o.due_day, kind: o.kind })),
     };
   },
-  summarize: (r) => `${r.count} obligations totalling ${usd(r.monthly_total)} per month`,
+  summarize: (r) => `${plural(r.count, 'bill or payment', 'bills and payments')} totalling ${usd(r.monthly_total)} a month`,
 });
+
+/**
+ * Per-member credit details, consistent with the Credit page: the score is the SIMULATED score (credit_score table), and the raw
+ * bureau-profile fields appear only as clearly labelled factors. The raw profile `score` is never returned, so no agent can quote it.
+ */
+export function creditProfiles(data: HouseholdData) {
+  const names = new Map(data.members.map((m) => [m.id, m.name]));
+  const simulated = new Map(memberCreditViews(data).map((m) => [m.member_id, m]));
+  const ids = [...new Set([...data.credit.map((c) => c.member_id), ...simulated.keys()])];
+  const profiles = ids.map((id) => {
+    const c = data.credit.find((x) => x.member_id === id);
+    const s = simulated.get(id);
+    return {
+      member: names.get(id) ?? id,
+      ...(s ? { simulated_score: s.score, band: s.band, what_matters_most: s.top_factors } : {}),
+      ...(c
+        ? {
+            profile_factors: {
+              card_utilization_pct: c.utilization_pct,
+              hard_inquiries_last_12_months: c.hard_inquiries_12m,
+              late_payments_last_24_months: c.late_payments_24m,
+              oldest_account_years: c.oldest_account_years,
+            },
+          }
+        : {}),
+    };
+  });
+  const card = data.accounts.filter((a) => a.type === 'credit_card');
+  return {
+    count: profiles.length,
+    simulated: true,
+    note: simulated.size ? `${CREDIT_NOTE} The score is the one on the Credit page; profile_factors are inputs to it, per member.` : 'No simulated score has been computed yet; only the profile factors are known.',
+    profiles,
+    card_balance_total: round2(card.reduce((s, a) => s + a.balance, 0)),
+  };
+}
 
 export const getCreditProfiles = defineTool({
   name: 'get_credit_profiles',
-  description: 'Credit score, utilization, hard inquiries and late payments for each household member who has a profile.',
+  description:
+    'Credit details per household member, matching the Credit page: the simulated score and band, plus profile factors (card utilization, hard inquiries in 12 months, late payments in 24 months, oldest account age). For the score itself prefer get_credit_score.',
   schema: z.object({}),
-  describe: () => 'Reading credit profiles',
-  run: (_a, { data }) => {
-    const names = new Map(data.members.map((m) => [m.id, m.name]));
-    const profiles = data.credit.map((c) => ({
-      member: names.get(c.member_id) ?? c.member_id,
-      score: c.score,
-      utilization_pct: c.utilization_pct,
-      hard_inquiries_12m: c.hard_inquiries_12m,
-      late_payments_24m: c.late_payments_24m,
-      oldest_account_years: c.oldest_account_years,
-    }));
-    const card = data.accounts.filter((a) => a.type === 'credit_card');
-    return { count: profiles.length, profiles, card_balance_total: round2(card.reduce((s, a) => s + a.balance, 0)) };
+  describe: () => 'Reading credit details',
+  run: (_a, { data }) => creditProfiles(data),
+  summarize: (r) => {
+    const scored = (r.profiles as { member: string; simulated_score?: number }[]).filter((p) => p.simulated_score !== undefined);
+    return scored.length ? `Simulated scores: ${scored.map((p) => `${p.member.split(' ')[0]} ${p.simulated_score}`).join(', ')}` : `${plural(r.count, 'credit profile')}, no simulated score yet`;
   },
-  summarize: (r) => `${r.count} credit profiles${r.count ? `, scores ${r.profiles.map((p: { score: number }) => p.score).join('/')}` : ''}`,
 });
 
 export const getHealthIndicators = defineTool({
@@ -171,9 +244,9 @@ export const getHealthIndicators = defineTool({
   description:
     'The household financial health indicators already computed in the database: liquidity runway, debt-to-income, credit utilization, savings rate, net worth trend, emergency fund, forecast low point, credit score.',
   schema: z.object({ key: z.string().optional().describe('Return only this indicator key') }),
-  describe: (a) => (a.key ? `Reading health indicator ${a.key}` : 'Reading health indicators'),
+  describe: (a) => (a.key ? `Reading the ${a.key.replace(/_/g, ' ')} indicator` : 'Reading health indicators'),
   run: (a, { data }) => {
-    const rows = data.health.filter((h) => !a.key || h.key === a.key);
+    const rows = alignCreditIndicator(data.health, data.credit_scores, data.members).filter((h) => !a.key || h.key === a.key);
     return {
       count: rows.length,
       indicators: rows.map((h) => ({ key: h.key, label: h.label, value: h.value, unit: h.unit, status: h.status, explanation: h.explanation })),
@@ -182,7 +255,7 @@ export const getHealthIndicators = defineTool({
   summarize: (r) => {
     const risk = r.indicators.filter((i: { status: string }) => i.status === 'risk').length;
     const watch = r.indicators.filter((i: { status: string }) => i.status === 'watch').length;
-    return `${r.count} indicators: ${risk} at risk, ${watch} to watch`;
+    return `${plural(r.count, 'indicator')}: ${risk} at risk, ${watch} to watch`;
   },
 });
 
@@ -221,7 +294,7 @@ export const getForecast = defineTool({
     };
   },
   summarize: (r) =>
-    r.available ? `Lowest balance ${usd(r.lowest.balance)} on ${r.lowest.date}; ends at ${usd(r.end.balance)}; ${r.days_below_zero} days below zero` : 'No forecast available',
+    r.available ? `Lowest balance ${usd(r.lowest.balance)} on ${r.lowest.date}; ends at ${usd(r.end.balance)}; ${plural(r.days_below_zero, 'day')} below zero` : 'No forecast available',
 });
 
 export const ledgerTools = [getAccounts, getTransactions, getObligations, getCreditProfiles, getHealthIndicators, getForecast];

@@ -50,8 +50,63 @@ export function defineTool<S extends z.ZodType>(def: ToolDef<S>): ToolDef<S> {
 }
 
 export type ToolOutcome =
-  | { ok: true; result: unknown; summary: string; durationMs: number }
+  | { ok: true; result: unknown; summary: string; durationMs: number; /** Arguments that were out of range and were fixed up (see parseToolArgs). */ adjusted?: string[] }
   | { ok: false; error: string; summary: string; durationMs: number };
+
+type Path = readonly PropertyKey[];
+const getAt = (v: unknown, path: Path): unknown => path.reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<PropertyKey, unknown>)[k] : undefined), v);
+function setAt(root: unknown, path: Path, value: unknown): boolean {
+  if (!path.length) return false;
+  const parent = getAt(root, path.slice(0, -1));
+  if (!parent || typeof parent !== 'object') return false;
+  (parent as Record<PropertyKey, unknown>)[path[path.length - 1]!] = value;
+  return true;
+}
+
+/**
+ * Parse a model's tool arguments, fixing what a model commonly gets slightly wrong instead of failing the whole call:
+ * an out-of-range number is clamped to the schema's bound ("limit: 100" with max 40 becomes 40), a number sent as a string
+ * becomes a number, a float where an integer is required is rounded, and a too-long string or list is cut to the maximum.
+ * Anything else (a missing required field, a wrong enum value) still fails with the schema's message.
+ */
+export function parseToolArgs<S extends z.ZodType>(schema: S, raw: unknown): { success: true; data: z.infer<S>; adjusted: string[] } | { success: false; error: z.ZodError } {
+  let value: unknown = raw ?? {};
+  try {
+    value = structuredClone(value);
+  } catch {
+    /* parse as is */
+  }
+  const adjusted: string[] = [];
+  for (let attempt = 0; ; attempt++) {
+    const r = schema.safeParse(value);
+    if (r.success) return { success: true, data: r.data, adjusted };
+    if (attempt >= 4) return { success: false, error: r.error };
+    let changed = false;
+    for (const issue of r.error.issues as unknown as { code: string; origin?: string; expected?: string; maximum?: number | bigint; minimum?: number | bigint; inclusive?: boolean; path: Path }[]) {
+      const cur = getAt(value, issue.path);
+      let next: unknown = undefined;
+      if ((issue.code === 'too_big' || issue.code === 'too_small') && cur !== undefined) {
+        const big = issue.code === 'too_big';
+        const bound = Number(big ? issue.maximum : issue.minimum);
+        if (!Number.isFinite(bound)) continue;
+        if (issue.origin === 'number' && typeof cur === 'number') {
+          const step = issue.inclusive === false ? (Number.isInteger(cur) && Number.isInteger(bound) ? 1 : 0.01) : 0;
+          next = big ? bound - step : bound + step;
+        } else if (big && issue.origin === 'string' && typeof cur === 'string') next = cur.slice(0, bound);
+        else if (big && issue.origin === 'array' && Array.isArray(cur)) next = cur.slice(0, bound);
+      } else if (issue.code === 'invalid_type') {
+        if ((issue.expected === 'number' || issue.expected === 'int') && typeof cur === 'string' && cur.trim() !== '' && Number.isFinite(Number(cur.replace(/[$,]/g, '')))) next = Number(cur.replace(/[$,]/g, ''));
+        else if (issue.expected === 'int' && typeof cur === 'number' && Number.isFinite(cur)) next = Math.round(cur);
+        else if (issue.expected === 'boolean' && (cur === 'true' || cur === 'false')) next = cur === 'true';
+      }
+      if (next !== undefined && next !== cur && setAt(value, issue.path, next)) {
+        adjusted.push(`${issue.path.map(String).join('.')}: ${JSON.stringify(cur).slice(0, 40)} -> ${JSON.stringify(next).slice(0, 40)}`);
+        changed = true;
+      }
+    }
+    if (!changed) return { success: false, error: r.error };
+  }
+}
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDef>();
@@ -82,16 +137,22 @@ export class ToolRegistry {
 
   describeCall(name: string, rawArgs: unknown): string {
     const t = this.tools.get(name);
-    const parsed = t?.schema.safeParse(rawArgs ?? {});
-    if (t?.describe && parsed?.success) return t.describe(parsed.data);
-    return `${name}(${formatArgs(rawArgs)})`;
+    const parsed = t ? parseToolArgs(t.schema, rawArgs) : undefined;
+    if (t?.describe && parsed?.success) {
+      try {
+        return t.describe(parsed.data);
+      } catch {
+        /* fall through */
+      }
+    }
+    return `${name.replace(/_/g, ' ')}${formatArgs(rawArgs) ? ` (${formatArgs(rawArgs)})` : ''}`;
   }
 
   async execute(name: string, rawArgs: unknown, ctx: ToolContext): Promise<ToolOutcome> {
     const t0 = Date.now();
     const t = this.tools.get(name);
     if (!t) return { ok: false, error: `unknown tool "${name}"`, summary: `Unknown tool ${name}`, durationMs: 0 };
-    const parsed = t.schema.safeParse(rawArgs ?? {});
+    const parsed = parseToolArgs(t.schema, rawArgs);
     if (!parsed.success) {
       const error = `invalid arguments for ${name}: ${z.prettifyError(parsed.error).slice(0, 400)}`;
       return { ok: false, error, summary: `${name} rejected its arguments`, durationMs: Date.now() - t0 };
@@ -104,7 +165,7 @@ export class ToolRegistry {
       } catch {
         /* keep default */
       }
-      return { ok: true, result, summary, durationMs: Date.now() - t0 };
+      return { ok: true, result, summary, durationMs: Date.now() - t0, ...(parsed.adjusted.length ? { adjusted: parsed.adjusted } : {}) };
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       return { ok: false, error, summary: `${name} failed: ${error.slice(0, 120)}`, durationMs: Date.now() - t0 };

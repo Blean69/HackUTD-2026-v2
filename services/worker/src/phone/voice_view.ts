@@ -142,6 +142,10 @@ export function voiceView(tool: string, result: unknown, asOf = ''): unknown {
         },
         months_of_spending_covered_at_low: humanMonths(r.months_of_spending_covered_at_low),
         assumptions: arr(r.assumptions).slice(0, 2).map((a) => truncate(String(a), 200)),
+        // cash that runs out / keeps falling is said as such, never as a "low point" at the last month; a gambling plan says why not
+        ...(r.runs_out ? { runs_out_month: r.runs_out.month } : {}),
+        ...(r.keeps_falling && r.verdict !== 'comfortable' ? { keeps_falling: true } : {}),
+        ...(r.caution ? { caution: truncate(String(r.caution), 160) } : {}),
       };
       break;
     }
