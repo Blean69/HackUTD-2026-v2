@@ -234,3 +234,44 @@ and answers even without Plaid keys. `POST /plaid/sandbox_connect` takes an opti
 if Plaid rejects it); a PNC id never falls back to another sandbox user; unknown id = 404 `{error:"unknown_profile", profiles:[...]}`; `profile_id` together with `username` = 400; the response
 echoes `profile_id`. A second connect with the same profile on the same household reuses its item (matched by account masks); a different profile creates a second item on that household, so
 call it once per household (there is no reducer to remove a `plaid_item`; `delete_sandbox` clears everything). Profile data and license: `data/pnc/README.md`.
+
+## 9. Credit score monitoring (synthetic)
+
+A transparent, synthetic 300–850 score per member, driven mainly by the household's overall financial health, so the
+product can show "monitoring" without pulling real credit. Always labelled "Simulated score for this demo".
+
+Formula (pure function in `spacetime/src/credit.ts`, unit-tested, explained in the UI):
+- `household_health` = the 0–100 Household Health score the dashboard already shows (blend of the health indicators).
+- Member factors from `credit_profile` (0–1 each, higher is better): payment history (late_payments_24m),
+  utilization (utilization_pct, card balances / limits), history length (oldest_account_years), new credit (hard_inquiries_12m),
+  credit mix (number of distinct debt account types in the household).
+- `raw = 0.45*household_health/100 + 0.20*payment + 0.15*utilization + 0.08*history + 0.06*new_credit + 0.06*mix`
+- `score = round(300 + 550*raw)`, clamped to 300–850. Band: <580 poor, 580–669 fair, 670–739 good, 740–799 very good, ≥800 exceptional.
+
+| Table | Columns |
+|---|---|
+| `credit_score` | id pk (`{member_id}`), household_id, member_id, score, band, factors_json (each factor's value, weight, points and a one-line plain explanation), updated_at |
+| `credit_score_history` | id pk (`{member_id}:{yyyy-mm-dd}`), household_id, member_id, date, score |
+
+`recompute_household` updates `credit_score` and appends today's history point. A backfill (seed and `create_sandbox`/onboarding)
+writes ~6 monthly points by recomputing household health from each past month's transactions. A change of ≥15 points creates an
+`alert` (kind `credit`, warn on drops, info on rises) with the main reason. Brian and the coach get a `get_credit_score` tool.
+
+## 10. Phone callback with a critical alert (demo)
+
+About 15 s after a phone call with Brian ends (`VOICE_CALLBACK_SECS`, default 15; `VOICE_CALLBACK_ENABLED`, default 1), Brian
+calls the same number back from the SignalWire number and says there is a critical alert, then stays on the line for questions.
+- Only the number that just called, once per call, only after a successful PIN unlock. The raw number is held in memory
+  for the callback only, never stored or logged (logs use the salted hash).
+- Before hanging up, Brian says he may ring back if something urgent comes up.
+- Outbound call: SignalWire Compatibility API `POST /api/laml/2010-04-01/Accounts/{project}/Calls.json` with `From` = our number,
+  `To` = caller, `Url` = `https://<host>/voice/twiml?cb=<signed token>`. `/twiml` sees the token and streams a callback session:
+  household already unlocked, opening line "Hi, it's Brian again, sorry to call right back. I've got a critical alert on your account…".
+- The alert is generated from the household's real signals when possible (a rule `alert` or anomaly: card testing, a large
+  overnight transfer to a new payee, overdraft risk on a date, a credit score drop, a scam-pattern payment), otherwise drawn
+  from a set list of templates filled with plausible amounts and merchants. It's written as a critical `alert` row
+  (via the worker), so it appears on the dashboard while the caller is listening. Every callback is a traced `phone` run.
+
+## 11. Product scope change
+The Advisor Console is removed: the product is entirely end-user facing. Advisor UI, routes and copy are gone; the
+`advisor_note` table and reducer stay in the module (removing a table is a breaking change) but nothing uses them.
