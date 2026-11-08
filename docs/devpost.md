@@ -114,6 +114,16 @@ We built it as a team working alongside Claude Code and Codex, against one bindi
 - A warm handoff from Brian to a human advisor.
 - Goals that update themselves as new transactions arrive.
 
+## Tech stack
+
+- **Frontend:** Next.js 16 (App Router), React, TypeScript, Tailwind CSS. Mobile-first, with a drag-and-drop dashboard on desktop.
+- **Backend and data:** SpacetimeDB 2.14.1, self-hosted. One TypeScript module holds every table, reducers are the API, scheduled reducers compute health, forecast, cash flow and bills, and subscriptions push every change to every phone.
+- **AI agents:** NVIDIA Nemotron 3 Ultra (550B) plans and calls tools; Nemotron 3.5 Lightning (30B-A3B) handles fast steps and extraction, both through the NVIDIA API. A Node.js worker runs a hand-rolled tool loop over 26 tools, with a grounding check and an advice reviewer. Qwen on tenvor.io is a labelled fallback.
+- **Voice:** Python and Pipecat, with Silero VAD, Smart Turn and barge-in. Nemotron streaming ASR for speech, Nemotron 3.5 Lightning self-hosted on an NVIDIA L40S through Brev (vLLM, NVFP4), ElevenLabs for Brian's voice, SignalWire for the phone line and callbacks, and WebRTC for the in-app Talk button. NVIDIA Parakeet transcribes Table Mode.
+- **Integrations:** Plaid Sandbox (Link and one-tap sample customers), FRED interest rates, College Scorecard tuition data.
+- **Infrastructure:** AWS EC2 (t3.medium), Docker Compose, Caddy with Let's Encrypt, and pull-based auto-deploy with health checks and rollback.
+- **Quality and tooling:** 1,000+ tests (Vitest, pytest), ESLint, Claude Code and Codex for agentic coding, Remotion for the demo video.
+
 ---
 
 ## Built with
