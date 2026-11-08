@@ -89,7 +89,7 @@ def test_brief_is_humanized_before_the_model_reads_it():
 
 
 def test_prompt_size_stays_modest():
-    assert len(prompt().split()) < 1450  # a 3B-active model follows a short prompt better (raised for humor, grounding, kid tools, find_savings)
+    assert len(prompt().split()) < 1500  # a 3B-active model follows a short prompt better (raised for humor, grounding, kid tools, find_savings, the app-changing tools: 1448 -> 1477 words)
 
 
 def test_disclosure_is_brief_natural_and_complete():
@@ -183,6 +183,18 @@ def test_prompt_grounds_every_figure_and_never_moves_money():
     for line in (prompts.CALLBACK_OPENING, prompts.CALLBACK_VOICEMAIL):
         assert "Brianotron" in line and "on your account" not in line  # the family's own app, not "your account"
     assert "call me back" not in prompts.CALLBACK_VOICEMAIL.lower()  # a voicemail that asks for a callback is the scam pattern
+
+
+def test_every_app_changing_tool_shares_one_confirm_rule():
+    """Goals, what-ifs, family votes, alerts and the kid tools: one general rule (the first call returns a question in "ask", wait for a yes,
+    call again with confirmed true), not a paragraph per tool, and voting stays in the app."""
+    p = prompt()
+    for tool in ("approve_kid_chore", "set_kid_goal", "change_goal", "save_what_if", "create_proposal", "mark_alert_handled", "get_goals", "get_alerts", "get_proposals"):
+        assert tool in p, tool
+    assert p.count("wait for a yes, then call again with confirmed true") == 1
+    assert "only when asked" in p and "start over" in p
+    assert "Votes happen in the app" in p and "YYYY-MM-DD" in p
+    assert "The one exception is the kids' allowance jars in the app" in p  # still the only place Brian touches "money"
 
 
 def test_kid_tools_need_a_spoken_yes():

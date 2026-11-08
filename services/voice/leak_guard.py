@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import re
 
-TOOL_NAMES = ("get_forecast", "get_obligations", "get_health_indicators", "get_accounts", "get_credit_score", "simulate_scenario", "goal_feasibility", "detect_scam_signals")
+TOOL_NAMES = (
+    "get_forecast", "get_obligations", "get_health_indicators", "get_accounts", "get_credit_score", "simulate_scenario", "goal_feasibility", "detect_scam_signals",
+    "find_savings", "get_kids", "add_kid_chore", "add_to_kid_jar", "approve_kid_chore", "set_kid_goal",
+    "get_goals", "change_goal", "save_what_if", "get_alerts", "mark_alert_handled", "get_proposals", "create_proposal",
+)
 
 _RULES: list[tuple[str, re.Pattern[str]]] = [
     ("internal_id", re.compile(r"\b(?:hh|mem|acct|txn|obl|goal|run|job|prop|kt|scn|call)_[a-z0-9][a-z0-9_]{2,}\b", re.I)),

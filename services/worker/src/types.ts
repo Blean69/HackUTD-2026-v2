@@ -80,6 +80,36 @@ export interface GoalRow {
   target_date: string;
   priority: number;
   feasibility: string;
+  /** Kept so an edit through `agent_upsert_goal` does not blank them. Optional: absent in fixtures. */
+  evidence_quote?: string;
+  source?: string;
+}
+
+/** An alert as Brian reads it (`alert` table). `acknowledged_by` is "" while it is open. */
+export interface AlertItem {
+  id: string;
+  severity: string; // info | warn | critical
+  kind: string;
+  title: string;
+  detail: string;
+  acknowledged_by: string;
+  created_at: string;
+}
+
+/** A Family-voting proposal and its tally (`proposal` + `vote` tables). */
+export interface ProposalItem {
+  id: string;
+  title: string;
+  amount: number;
+  status: string; // open | closed
+  verdict: string; // "" | fine | tight | risky
+  closes_at: string;
+  created_by_name: string;
+  created_at: string;
+}
+export interface VoteItem {
+  proposal_id: string;
+  choice: string; // yes | no | abstain
 }
 
 /** One line of a member's simulated credit score breakdown (the module's `credit_score.factors_json`). */
@@ -156,6 +186,10 @@ export interface HouseholdData {
   /** Kids and teens (contracts.md section 12): chores and allowance jars. Optional like the credit rows. */
   kid_tasks?: KidTaskRow[];
   kid_jars?: KidJarRow[];
+  /** Alerts and Family-voting proposals with their votes, for Brian's read tools. Optional like the rows above. */
+  alerts?: AlertItem[];
+  proposals?: ProposalItem[];
+  votes?: VoteItem[];
   /** "Today" for this household's data (YYYY-MM-DD). */
   asOf: string;
 }

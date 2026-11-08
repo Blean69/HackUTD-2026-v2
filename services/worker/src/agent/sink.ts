@@ -64,6 +64,13 @@ export interface WorkerSink {
   /** Kids and teens, called as the worker when a parent asks Brian: the client reducers add_kid_task and deposit_kid_jar. */
   addKidTask(t: { household_id: string; member_id: string; title: string; reward: number; author_name: string }): Promise<void>;
   depositKidJar(d: { household_id: string; member_id: string; amount: number }): Promise<void>;
+  /** More of what a family member does by hand, called as the worker when a caller asks Brian and says yes (tools/goals.ts, family.ts, studio.ts, kids.ts). */
+  deleteGoal(goalId: string): Promise<void>; // client reducer delete_goal
+  ackAlert(alertId: string, displayName: string): Promise<void>; // client reducer ack_alert ("Mark handled")
+  approveKidTask(taskId: string): Promise<void>; // client reducer approve_kid_task (pays the chore's reward into the jar once)
+  setKidGoal(g: { household_id: string; member_id: string; title: string; target: number }): Promise<void>; // client reducer set_kid_goal
+  /** Saves a what-if to the What-If Studio: the worker-only twin of request_simulation (scenario row + queued what_if job), named for Brian. */
+  requestSimulation(r: { household_id: string; prompt: string; requested_by_name: string }): Promise<void>;
   setHuddleStatus(huddleId: string, status: 'live' | 'analyzing' | 'done'): Promise<void>;
   purgeTranscript(huddleId: string): Promise<void>;
   finishRun(runId: string, status: 'done' | 'error', providersJson: string, resultJson: string): Promise<void>;
@@ -88,6 +95,11 @@ export class MemorySink implements WorkerSink {
   updateProposal = (id: string, verdict: string, analysisJson: string, runId: string) => this.rec('updateProposal', id, verdict, analysisJson, runId);
   addKidTask = (t: { household_id: string; member_id: string; title: string; reward: number; author_name: string }) => this.rec('addKidTask', t);
   depositKidJar = (d: { household_id: string; member_id: string; amount: number }) => this.rec('depositKidJar', d);
+  deleteGoal = (id: string) => this.rec('deleteGoal', id);
+  ackAlert = (id: string, name: string) => this.rec('ackAlert', id, name);
+  approveKidTask = (id: string) => this.rec('approveKidTask', id);
+  setKidGoal = (g: { household_id: string; member_id: string; title: string; target: number }) => this.rec('setKidGoal', g);
+  requestSimulation = (r: { household_id: string; prompt: string; requested_by_name: string }) => this.rec('requestSimulation', r);
   setHuddleStatus = (id: string, status: string) => this.rec('setHuddleStatus', id, status);
   purgeTranscript = (id: string) => this.rec('purgeTranscript', id);
   finishRun = (runId: string, status: string, p: string, r: string) => this.rec('finishRun', runId, status, p, r);

@@ -371,6 +371,30 @@ describe('huddle flow + job queue', () => {
     expect([...test.db.alert.iter()].filter((a) => a.kind === 'advisor')).toHaveLength(1);
   });
 
+  it('agent_request_simulation: the worker saves a what-if for Brian, same rows as request_simulation but with a real name', () => {
+    const test = seeded();
+    const ask = { household_id: 'hh_demo', prompt: 'What if we buy a $18,000 truck?', requested_by_name: 'Brian (AI)' };
+    expect(() => test.withReducerTx(alice, (ctx) => m.agent_request_simulation(ctx, ask))).toThrow('worker only');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_request_simulation(ctx, { ...ask, household_id: 'hh_nope' }))).toThrow('unknown household');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_request_simulation(ctx, { ...ask, prompt: '   ' }))).toThrow('prompt must not be empty');
+    expect(() => test.withReducerTx(worker, (ctx) => m.agent_request_simulation(ctx, { ...ask, prompt: 'x'.repeat(1001) }))).toThrow('too long');
+    expect(test.db.scenario.count()).toBe(0n);
+    expect(test.db.agent_job.count()).toBe(0n);
+
+    test.withReducerTx(worker, (ctx) => m.agent_request_simulation(ctx, ask));
+    const scn = [...test.db.scenario.iter()][0]!;
+    expect([scn.status, scn.prompt, scn.requested_by_name, scn.household_id]).toEqual(['queued', 'What if we buy a $18,000 truck?', 'Brian (AI)', 'hh_demo']);
+    const job = [...test.db.agent_job.iter()][0]!;
+    expect([job.workflow, job.subject_id, job.status]).toEqual(['what_if', scn.id, 'queued']);
+    expect(JSON.parse(job.input_json)).toMatchObject({ scenario_id: scn.id, prompt: scn.prompt, requested_by: 'Brian (AI)' });
+
+    // a blank name falls back to Brian (AI); the worker can then finish the scenario like any other
+    test.withReducerTx(worker, (ctx) => m.agent_request_simulation(ctx, { ...ask, requested_by_name: ' ' }));
+    expect([...test.db.scenario.iter()].map((s) => s.requested_by_name)).toEqual(['Brian (AI)', 'Brian (AI)']);
+    test.withReducerTx(worker, (ctx) => m.agent_update_scenario(ctx, { id: scn.id, status: 'done', result_json: '{"summary":"ok"}' }));
+    expect(test.db.scenario.id.find(scn.id)!.status).toBe('done');
+  });
+
   it('agent alerts cannot impersonate rule alerts', () => {
     const test = seeded();
     expect(() =>

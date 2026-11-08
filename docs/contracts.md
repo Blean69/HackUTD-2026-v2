@@ -98,6 +98,7 @@ Worker-only (reject unless `ctx.sender` is in `worker`):
 |---|---|
 | `register_worker(secret, label)` | adds caller to `worker` if secret matches the module constant `WORKER_SECRET_SHA256` (set before publish) |
 | `claim_job(job_id)` | queued → claimed (atomic; second claimer fails) |
+| `agent_request_simulation(household_id, prompt, requested_by_name)` | `request_simulation` on the worker's behalf (Brian saving a what-if to the What-If Studio): the same `scenario` row and queued `what_if` job, shown under `requested_by_name` ("Brian (AI)") instead of "Someone" (the worker has no presence row) |
 | `agent_enqueue_job(workflow, household_id, subject_id, input_json)` | queues a job on the worker's behalf (workflow must be one of the allowed ones, incl. `phone`; refuses a second queued job for the same workflow + subject). A live call is enqueued, claimed and run by the worker itself: no `WorkflowDef` exists for `phone`, so the `JobQueue` ignores those jobs |
 | `start_run(run_id, job_id)` / `finish_run(run_id, status, providers_json, result_json)` | run lifecycle; also marks job done/error |
 | `emit_trace(run_id, seq, workflow, agent, type, title, data_json, model, provider, latency_ms, tokens_in, tokens_out)` | inserts `trace_event` |
@@ -210,7 +211,8 @@ synthetic data only; the first thing spoken is a disclosure that it is an AI ass
   households keep theirs there; the UI says "Demo code: ask the team"). A worker log line records only the outcome of each attempt, never the digits. Caller numbers are only ever stored as a salted hash.
 - **Worker routes** (internal, `x-voice-secret` = `VOICE_SHARED_SECRET`; Caddy answers 404 for `/worker/phone/*`): `POST /phone/identify`,
   `POST /phone/start`, `GET /phone/tools`, `POST /phone/tool`, `POST /phone/trace`, `POST /phone/end`. Tools are `get_health_indicators, get_forecast,
-  get_obligations, get_accounts, simulate_scenario, goal_feasibility, detect_scam_signals`; the model gets a trimmed `voiceView` of each result.
+  get_obligations, get_accounts, simulate_scenario, goal_feasibility, detect_scam_signals` (the list in `PHONE_TOOLS` also has `get_credit_score`, `find_savings`, the kids' tools and the
+  confirm-first tools of section 8a); the model gets a trimmed `voiceView` of each result.
 - **Trace of a call:** `run_started` "Voice call connected (Rivera family)" -> `plan` -> briefing `tool_call`/`tool_result` ->
   per turn `message` "Heard: ..." (model `nemotron-asr-streaming`) and "Said: ..." (Lightning; data has LLM first-token, TTS first-audio and voice-to-voice ms)
   with `tool_call`/`tool_result` between them -> `final` (turns, tool calls, p50/p95 voice-to-voice).
@@ -235,6 +237,35 @@ synthetic data only; the first thing spoken is a disclosure that it is an AI ass
   sends, so those two events must keep being emitted around every spoken answer. Not implemented in `services/voice` yet: until it
   is, hold-to-talk still works (the mic is silent between presses and the VAD ends the turn on its own timers), just without the
   instant end-of-turn.
+
+### 8a. What Brian can change (confirm-first tools; `services/worker/src/tools/`)
+
+Besides the kids' jars, Brian does most of what a family member does by hand in the app, only when the caller asks and says yes.
+Brian never moves real money: these are app records. The one place his words touch "money" stays the kids' allowance jars.
+
+- **The confirm rule is enforced by the worker, not the prompt** (`tools/confirm.ts`, the call session's `act`). Every write tool takes `confirmed: boolean`.
+  The first call for an action only returns `{done: false, ask, note}` (`ask` = the question to say back) and records the action's key (its essentials: what,
+  which one, how much; never free text). A call with `confirmed: true` writes only if that key was proposed earlier in the same call at least 2.5 s before;
+  the write uses the yes up, so the same call twice cannot write twice. A different amount, date or target needs its own yes.
+- **Scope:** `act` exists only in Brian's call session. Writes go to the call's household as the worker, named "Brian (AI)" where a reducer takes a name. Ids are resolved
+  from that household's own rows by a few spoken words (case, plural and spelling tolerant); no match or two equally good matches returns an error that lists the choices.
+- **Not offered to the Ask coach, Table Mode or what-ifs:** every tool with a `confirmed` flag is in `WRITE_TOOLS` (a test enforces it).
+
+| Tool | Kind | Caps and guards | What it writes |
+|---|---|---|---|
+| `get_goals` | read | 6 goals, priority order | none |
+| `change_goal {action: add \| update \| delete, goal, target_amount?, target_date?}` | write | amount $1 to $1,000,000; a real future day within 50 years; no duplicate title; gambling and speculation are `not_advised` | add/update: `agent_upsert_goal` (source `manual`, id `goal_brian_…`, priority 2, and the same `goal_feasibility` verdict Table Mode saves; the Goals page's own `upsert_goal` leaves a hand-made goal unchecked); an update keeps the goal's id, title, priority, quote and source. delete: `delete_goal` |
+| `save_what_if {question}` | write | 6 to 300 characters; any dollar figure at most $10,000,000 | `agent_request_simulation` (scenario row + queued `what_if` job, shown in the What-If Studio under "Brian (AI)") |
+| `get_alerts` | read | open alerts only, worst first, 4 shown | none |
+| `mark_alert_handled {alert}` | write | open alerts only; a critical one is asked about more firmly | `ack_alert` ("Mark handled") |
+| `get_proposals` | read | 3 shown, open votes first, with the yes / no / not sure tally and the affordability check | none |
+| `create_proposal {title, amount, days_open?}` | write | amount $1 to $1,000,000; 1 to 14 days (default 5); no duplicate open vote | `create_proposal` (the module queues the affordability check) |
+| `approve_kid_chore {kid_name, chore?}` | write | only a chore the kid marked done; reward at most $100 | `approve_kid_task` (pays the reward into the jar once) |
+| `set_kid_goal {kid_name, goal, target}` | write | target $1 to $5,000; says which goal it replaces | `set_kid_goal` |
+
+Brian has **no voting tool**: `cast_vote` keys a vote by the caller's own SpacetimeDB identity, and the worker is one identity for every family, so Brian could only
+fake a voter (and each new caller would overwrite the last). Family members vote in the app.
+Skipped on purpose: deleting households, phone codes, Plaid/bank connections, onboarding, and Table Mode recording (consent has to be given in person).
 
 ## 7b. Sandbox bank profiles (PNC dataset → Plaid Sandbox custom users)
 

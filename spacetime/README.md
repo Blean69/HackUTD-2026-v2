@@ -88,6 +88,7 @@ Scheduled (private, fired by SpacetimeDB): `tick_recompute`, every 60 s (recompu
 
 Worker-only (rejected with `worker only` unless the sender is in `worker`):
 `backfill_credit_history`, `claim_job`, `start_run`, `finish_run`, `emit_trace`, `agent_upsert_goal`, `agent_create_alert`,
+`agent_request_simulation` (`request_simulation` on the worker's behalf, so Brian can save a what-if to the Studio under his own name),
 `agent_update_scenario`, `agent_update_proposal`, `agent_set_account_options`, `agent_coach_reply`, `set_huddle_status`, `purge_transcript`,
 `seed_households`, `seed_members`, `seed_accounts`, `seed_credit`, `seed_txns`, `seed_obligations`,
 `seed_conversations`, `seed_proposals`, `seed_votes`, and the Plaid set `agent_save_plaid_item`, `agent_set_bank_connection`,

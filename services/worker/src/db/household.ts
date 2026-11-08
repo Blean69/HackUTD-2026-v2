@@ -8,7 +8,7 @@ import { subscribeAndWait } from './connection.js';
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
-const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'coach_message', 'credit_score', 'credit_score_history', 'kid_task', 'kid_jar'];
+const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'coach_message', 'credit_score', 'credit_score_history', 'kid_task', 'kid_jar', 'alert', 'proposal', 'vote'];
 
 export class HouseholdLoader {
   private subs = new Map<string, Promise<unknown>>();
@@ -73,7 +73,7 @@ export class HouseholdLoader {
       obligations: mine(db.obligation.iter()).map((o) => ({ id: o.id, household_id: o.householdId, name: o.name, amount: o.amount, due_day: o.dueDay, account_id: o.accountId, kind: o.kind })),
       health: mine(db.healthIndicator.iter()).map((h) => ({ key: h.key, label: h.label, value: h.value, unit: h.unit, status: h.status, explanation: h.explanation })),
       forecast: forecast.map((f) => ({ date: f.date, balance: f.balance, obligations_due: f.obligationsDue })),
-      goals: mine(db.goal.iter()).map((g) => ({ id: g.id, title: g.title, target_amount: g.targetAmount, target_date: g.targetDate, priority: g.priority, feasibility: g.feasibility })),
+      goals: mine(db.goal.iter()).map((g) => ({ id: g.id, title: g.title, target_amount: g.targetAmount, target_date: g.targetDate, priority: g.priority, feasibility: g.feasibility, evidence_quote: g.evidenceQuote, source: g.source })),
       chat: mine(db.coachMessage.iter())
         .sort((a, b) => Number(a.id - b.id))
         .slice(-12)
@@ -84,6 +84,9 @@ export class HouseholdLoader {
         .sort((a, b) => (a.member_id < b.member_id ? -1 : a.member_id > b.member_id ? 1 : a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
       kid_tasks: mine(db.kidTask.iter()).map((k) => ({ id: k.id, member_id: k.memberId, title: k.title, reward: k.reward, status: k.status })),
       kid_jars: mine(db.kidJar.iter()).map((j) => ({ member_id: j.memberId, balance: j.balance, earned_total: j.earnedTotal, goal_title: j.goalTitle, goal_target: j.goalTarget })),
+      alerts: mine(db.alert.iter()).map((a) => ({ id: a.id, severity: a.severity, kind: a.kind, title: a.title, detail: a.detail, acknowledged_by: a.acknowledgedBy, created_at: a.createdAt.toDate().toISOString() })),
+      proposals: mine(db.proposal.iter()).map((p) => ({ id: p.id, title: p.title, amount: p.amount, status: p.status, verdict: p.verdict, closes_at: p.closesAt.toDate().toISOString(), created_by_name: p.createdByName, created_at: p.createdAt.toDate().toISOString() })),
+      votes: mine(db.vote.iter()).map((v) => ({ proposal_id: v.proposalId, choice: v.choice })),
       asOf,
     };
   }

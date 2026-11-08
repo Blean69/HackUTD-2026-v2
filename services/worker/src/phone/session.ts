@@ -230,14 +230,24 @@ export class PhoneService {
       provider: clean(req.llm?.provider, 24) || this.d.llm.primary('fast').provider,
       model: clean(req.llm?.model, 80) || this.d.llm.primary('fast').model,
     };
-    // Brian may change the kids' chores and jars when a parent asks and confirms (tools/kids.ts); nobody else gets `act`.
+    // Brian may do most of what a family member does by hand in the app, when the caller asks and says yes: the kids' chores and jars
+    // (tools/kids.ts), goals (goals.ts), the What-If Studio (studio.ts), alerts and family votes (family.ts). Nobody else gets `act`.
+    // Every write goes to this call's household only; ids are resolved from that household's own data before they get here.
     const sink = this.d.sink;
     const proposed = new Map<string, number>(); // action key -> when Brian first asked to do it (ms)
     const act: NonNullable<ToolContext['act']> = {
-      propose: (key) => { if (!proposed.has(key)) proposed.set(key, Date.now()); },
-      confirmable: (key) => { const t = proposed.get(key); return t !== undefined && Date.now() - t >= 2500; },
+      propose: (key) => { if (!proposed.has(key)) proposed.set(key, this.now()); },
+      confirmable: (key) => { const t = proposed.get(key); return t !== undefined && this.now() - t >= 2500; },
+      consume: (key) => { proposed.delete(key); },
       addKidTask: (member_id, title, reward) => sink.addKidTask({ household_id: householdId, member_id, title, reward, author_name: 'Brian (AI)' }),
       depositKidJar: (member_id, amount) => sink.depositKidJar({ household_id: householdId, member_id, amount }),
+      approveKidTask: (task_id) => sink.approveKidTask(task_id),
+      setKidGoal: (member_id, title, target) => sink.setKidGoal({ household_id: householdId, member_id, title, target }),
+      saveGoal: (g) => sink.upsertGoal({ ...g, household_id: householdId }),
+      deleteGoal: (goal_id) => sink.deleteGoal(goal_id),
+      saveWhatIf: (prompt) => sink.requestSimulation({ household_id: householdId, prompt, requested_by_name: 'Brian (AI)' }),
+      createProposal: (p) => sink.createProposal({ household_id: householdId, ...p, author_name: 'Brian (AI)' }),
+      markAlertHandled: (alert_id) => sink.ackAlert(alert_id, 'Brian (AI)'),
     };
     const toolContext: ToolContext = { data, external: this.d.external, act };
     const run = new RunContext(

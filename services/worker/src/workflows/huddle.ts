@@ -8,23 +8,14 @@ import type { ScamResult } from '../tools/scam.js';
 import { monthlyCapacity, type FeasibilityResult } from '../tools/feasibility.js';
 import { groundAnswer } from './grounding.js';
 import { DEBT_TYPES } from '../tools/finance.js';
+import { riskyGoal } from '../tools/risky.js';
 import { savingsBalance } from '../tools/finance.js';
 import { addMonthsIso, round2, shortHash, truncate, usd } from '../util.js';
 import { adviceFacts, adviceGuard } from './advice_guard.js';
 import { householdBrief, textCacheKey } from './common.js';
 import type { WorkflowDef } from './types.js';
 
-/**
- * Goals we will not score as a plan, however affordable: gambling, and speculation sold as a way to multiply money. The card
- * says why in one line instead of "on track". Deterministic, so no model can talk itself into backing it.
- */
-const GAMBLING_RE = /\bgambl|\bcasino|\bbet(?:s|ting)?\b|\blotter(?:y|ies)\b|\bscratch.?offs?\b|\bsports ?book|\bpoker\b|\bslots?\b|\bparlay/i;
-const SPECULATION_RE = /\b(?:double|triple|10x|moon)\b.*\b(?:crypto|bitcoin|coin|money|it)\b|\b(?:crypto|bitcoin|meme ?coin|meme ?stock|day ?trad|options? trad)/i;
-export function riskyGoal(text: string): { why: string } | null {
-  if (GAMBLING_RE.test(text)) return { why: 'Gambling is not a plan: the odds are set so the house wins over time.' };
-  if (SPECULATION_RE.test(text)) return { why: 'Crypto and other speculative bets can lose value fast. Keep it to money you can afford to lose, after the emergency fund.' };
-  return null;
-}
+export { riskyGoal }; // the Table Mode guardrail now lives in tools/risky.ts so Brian's goal tool can share it
 
 const HUDDLE_TOOLS = ['detect_scam_signals', 'get_accounts', 'get_obligations', 'get_health_indicators', 'get_forecast', 'goal_feasibility', 'college_scorecard', 'fred_series'];
 

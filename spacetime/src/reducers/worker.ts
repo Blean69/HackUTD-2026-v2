@@ -249,6 +249,24 @@ export const agent_create_alert = spacetimedb.reducer(
   },
 );
 
+/**
+ * request_simulation on the worker's behalf (Brian saves a what-if to the What-If Studio after a spoken yes). Same rows as the
+ * client reducer: a `scenario` plus a queued `what_if` job. The only difference is the name the Studio shows, because the worker
+ * has no presence row and `request_simulation` would label it "Someone".
+ */
+export const agent_request_simulation = spacetimedb.reducer(
+  { household_id: t.string(), prompt: t.string(), requested_by_name: t.string() },
+  (ctx, { household_id, prompt, requested_by_name }) => {
+    requireWorker(ctx);
+    requireHousehold(ctx, household_id);
+    const text = cleanText(prompt, 'prompt', 1000);
+    const who = cleanText(requested_by_name, 'requested_by_name', 40, true) || 'Brian (AI)';
+    const id = newId(ctx, 'scn_', (x) => !!ctx.db.scenario.id.find(x));
+    ctx.db.scenario.insert({ id, household_id, prompt: text, status: 'queued', result_json: '', requested_by_name: who, created_at: ctx.timestamp });
+    enqueueJob(ctx, 'what_if', household_id, id, { scenario_id: id, prompt: text, requested_by: who });
+  },
+);
+
 export const agent_update_scenario = spacetimedb.reducer(
   { id: t.string(), status: t.string(), result_json: t.string() },
   (ctx, { id, status, result_json }) => {

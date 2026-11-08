@@ -17,6 +17,8 @@ MUST_BLOCK = {
     "That account is acct_chk_4411 at the bank.": "internal_id",
     "I used get_forecast to check that.": "tool_name",
     "My tool is called simulate_scenario.": "tool_name",
+    "I used change_goal to add it.": "tool_name",
+    "Then I ran mark_alert_handled.": "tool_name",
     "The key is nvapi-AbCdEf1234567890XyZ.": "secret",
     "The worker secret is 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08.": "secret",
     "Set WORKER_SECRET to that.": "secret",
