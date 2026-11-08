@@ -21,6 +21,8 @@ Words in quotes are what we say. Everything else is what we tap.
 > and gives you Brian, an AI you can just call."
 
 **0:25 The big picture (Driver)**
+- Top card, the brief's last line answered: "PNC asked how AI helps a family feel confident about their **next move**. Here it is: build a 6-month cushion, $2,750 a month, and their health goes from **79 to 84**." Tap **Simulate it** only if there is time (What-If is prefilled).
+- Under it, the six PNC products as six tiles: "Checking, savings, CDs and IRAs, loans, cards, mortgage, from six institutions, in one view."
 - Point at the top row: "The Riveras: **$344,800** net worth across six banks, **+$1,177** a month left over, a health score of **79 out of 100**. Their cash dips to about **$40k** on November 24 when bills stack up."
 - "Every number is computed once, inside SpacetimeDB, so the dashboard, the agents and Brian always say the same figure."
 - Hand a judge the QR card: "That's the same room on your phone. It's live."
