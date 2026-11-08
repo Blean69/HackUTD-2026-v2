@@ -89,7 +89,7 @@ def test_brief_is_humanized_before_the_model_reads_it():
 
 
 def test_prompt_size_stays_modest():
-    assert len(prompt().split()) < 1350  # a 3B-active model follows a short prompt better (raised for humor, grounding and the kid tools)
+    assert len(prompt().split()) < 1450  # a 3B-active model follows a short prompt better (raised for humor, grounding, kid tools, find_savings)
 
 
 def test_disclosure_is_brief_natural_and_complete():
@@ -188,5 +188,6 @@ def test_prompt_grounds_every_figure_and_never_moves_money():
 def test_kid_tools_need_a_spoken_yes():
     p = prompt()
     assert "get_kids" in p and "add_kid_chore" in p and "add_to_kid_jar" in p
-    assert "wait for a yes, then call it with confirmed true" in p
+    assert "wait for a yes, then call again with confirmed true" in p
+    assert "find_savings" in p and "Never suggest skipping a loan, card, mortgage, rent or insurance payment" in p
     assert "The one exception is the kids' allowance jars in the app" in p

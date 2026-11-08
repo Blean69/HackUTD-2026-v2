@@ -232,7 +232,10 @@ export class PhoneService {
     };
     // Brian may change the kids' chores and jars when a parent asks and confirms (tools/kids.ts); nobody else gets `act`.
     const sink = this.d.sink;
+    const proposed = new Map<string, number>(); // action key -> when Brian first asked to do it (ms)
     const act: NonNullable<ToolContext['act']> = {
+      propose: (key) => { if (!proposed.has(key)) proposed.set(key, Date.now()); },
+      confirmable: (key) => { const t = proposed.get(key); return t !== undefined && Date.now() - t >= 2500; },
       addKidTask: (member_id, title, reward) => sink.addKidTask({ household_id: householdId, member_id, title, reward, author_name: 'Brian (AI)' }),
       depositKidJar: (member_id, amount) => sink.depositKidJar({ household_id: householdId, member_id, amount }),
     };

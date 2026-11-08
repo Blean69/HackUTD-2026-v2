@@ -15,10 +15,21 @@ const data = {
 
 function ctx(withAct = true) {
   const calls: unknown[][] = [];
+  const proposed = new Set<string>();
   const c: ToolContext = {
     data,
     external: {} as ToolContext['external'],
-    ...(withAct ? { act: { addKidTask: async (...a: unknown[]) => void calls.push(['task', ...a]), depositKidJar: async (...a: unknown[]) => void calls.push(['jar', ...a]) } } : {}),
+    ...(withAct
+      ? {
+          act: {
+            addKidTask: async (member_id: string, title: string, reward: number) => void calls.push(['task', member_id, title, reward]),
+            depositKidJar: async (member_id: string, amount: number) => void calls.push(['jar', member_id, amount]),
+            // the real session also waits 2.5 s; here any earlier proposal counts
+            propose: (key: string) => void proposed.add(key),
+            confirmable: (key: string) => proposed.has(key),
+          },
+        }
+      : {}),
   };
   return { c, calls };
 }
@@ -45,11 +56,20 @@ describe('Brian controls Kids and Teens', () => {
     expect(calls).toEqual([]);
   });
 
-  it('adds a chore and a deposit once confirmed', async () => {
+  it('a first "confirmed" call only asks: the model cannot skip the spoken yes', async () => {
     const { c, calls } = ctx();
-    expect(await addKidChore.run({ kid_name: 'Sofia', chore: 'Clean your room', reward: 5, confirmed: true }, c)).toMatchObject({ done: true, kid: 'Sofia', reward: 5 });
+    expect(await addToKidJar.run({ kid_name: 'Mateo', amount: 20, confirmed: true }, c)).toMatchObject({ done: false, ask: "Add $20.00 to Mateo's jar?" });
+    expect(calls).toEqual([]);
+  });
+
+  it('adds a chore and a deposit once proposed and then confirmed', async () => {
+    const { c, calls } = ctx();
+    expect(await addKidChore.run({ kid_name: 'Sofia', chore: 'Clean your room', reward: 5, confirmed: false }, c)).toMatchObject({ done: false, ask: 'Add "Clean your room" for Sofia, $5.00?' });
+    expect(await addKidChore.run({ kid_name: 'Sofia', chore: 'Clean her room', reward: 5, confirmed: true }, c)).toMatchObject({ done: true, kid: 'Sofia', reward: 5 });
+    await addToKidJar.run({ kid_name: 'sofia', amount: 20, confirmed: false }, c);
     expect(await addToKidJar.run({ kid_name: 'sofia', amount: 20, confirmed: true }, c)).toMatchObject({ done: true, added: 20, new_balance: 62.5 });
-    expect(calls).toEqual([['task', 'mem_s', 'Clean your room', 5], ['jar', 'mem_s', 20]]);
+    expect(await addToKidJar.run({ kid_name: 'sofia', amount: 25, confirmed: true }, c)).toMatchObject({ done: false }); // a different amount needs its own yes
+    expect(calls).toEqual([['task', 'mem_s', 'Clean her room', 5], ['jar', 'mem_s', 20]]);
   });
 
   it('caps amounts by voice and refuses to write outside a call', async () => {

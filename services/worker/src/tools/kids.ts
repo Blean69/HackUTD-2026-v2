@@ -73,14 +73,18 @@ export const addKidChore = defineTool({
   }),
   describe: (a) => `Adding a chore for ${a.kid_name}: "${a.chore}" (${usd(a.reward)})`,
   run: async (a, ctx) => {
-    if (!a.confirmed) return { done: false, note: 'Not added: say the chore and reward back to the caller and wait for a yes first.' };
     needsAct(ctx);
     const kid = findKid(ctx.data, a.kid_name);
     if ('error' in kid) return { done: false, note: kid.error };
+    const key = `chore:${kid.id}:${round2(a.reward)}`;
+    if (!a.confirmed || !ctx.act.confirmable(key)) {
+      ctx.act.propose(key);
+      return { done: false, ask: `Add "${a.chore.trim()}" for ${first(kid)}, ${usd(a.reward)}?`, note: 'Not added yet: ask the caller exactly this and wait for a yes, then call again with confirmed true.' };
+    }
     await ctx.act.addKidTask(kid.id, a.chore.trim(), round2(a.reward));
     return { done: true, kid: first(kid), chore: a.chore.trim(), reward: round2(a.reward), note: 'It is on the Kids page now.' };
   },
-  summarize: (r) => (r.done ? `Added "${r.chore}" for ${r.kid} (${usd(r.reward)} when approved)` : `Not added: ${r.note}`),
+  summarize: (r) => (r.done ? `Added "${r.chore}" for ${r.kid} (${usd(r.reward)} when approved)` : r.ask ? `Asked first: ${r.ask}` : `Not added: ${r.note}`),
 });
 
 export const addToKidJar = defineTool({
@@ -93,16 +97,20 @@ export const addToKidJar = defineTool({
   }),
   describe: (a) => `Adding ${usd(a.amount)} to ${a.kid_name}'s jar`,
   run: async (a, ctx) => {
-    if (!a.confirmed) return { done: false, note: 'Not added: say the amount back to the caller and wait for a yes first.' };
     needsAct(ctx);
     const kid = findKid(ctx.data, a.kid_name);
     if ('error' in kid) return { done: false, note: kid.error };
     const amount = round2(a.amount);
+    const key = `jar:${kid.id}:${amount}`;
+    if (!a.confirmed || !ctx.act.confirmable(key)) {
+      ctx.act.propose(key);
+      return { done: false, ask: `Add ${usd(amount)} to ${first(kid)}'s jar?`, note: 'Not added yet: ask the caller exactly this and wait for a yes, then call again with confirmed true.' };
+    }
     await ctx.act.depositKidJar(kid.id, amount);
     const before = jarOf(ctx.data, kid.id)?.balance ?? 0;
     return { done: true, kid: first(kid), added: amount, new_balance: round2(before + amount) };
   },
-  summarize: (r) => (r.done ? `Added ${usd(r.added)} to ${r.kid}'s jar (now ${usd(r.new_balance)})` : `Not added: ${r.note}`),
+  summarize: (r) => (r.done ? `Added ${usd(r.added)} to ${r.kid}'s jar (now ${usd(r.new_balance)})` : r.ask ? `Asked first: ${r.ask}` : `Not added: ${r.note}`),
 });
 
 export const kidTools = [getKids, addKidChore, addToKidJar];

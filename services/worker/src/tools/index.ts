@@ -3,6 +3,7 @@ import { creditTools } from './credit.js';
 import { externalTools } from './external.js';
 import { goalFeasibilityTool } from './feasibility.js';
 import { kidTools } from './kids.js';
+import { findSavings } from './bills.js';
 import { ledgerTools } from './ledger.js';
 import { ToolRegistry } from './registry.js';
 import { detectScamSignalsTool } from './scam.js';
@@ -19,6 +20,7 @@ export function buildRegistry(): ToolRegistry {
     detectScamSignalsTool,
     ...externalTools,
     ...kidTools,
+    findSavings,
   );
 }
 

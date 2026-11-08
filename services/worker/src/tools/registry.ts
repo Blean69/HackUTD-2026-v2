@@ -13,6 +13,10 @@ export interface ToolContext {
   act?: {
     addKidTask(member_id: string, title: string, reward: number): Promise<void>;
     depositKidJar(member_id: string, amount: number): Promise<void>;
+    /** Two-step confirmation, enforced here rather than trusted to the prompt: propose(key) when the action is first asked
+     *  for; confirmable(key) is true only for a key proposed earlier in this call, with time for a spoken yes in between. */
+    propose(key: string): void;
+    confirmable(key: string): boolean;
   };
 }
 
