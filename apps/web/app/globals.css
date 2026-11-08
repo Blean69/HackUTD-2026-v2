@@ -540,6 +540,14 @@ summary {
 /* Phones: the bottom tab bar. Its own compositor layer, so Chromium on Android keeps it pinned to the bottom while the address bar
    slides (without one it waits for a relayout and floats up for a few frames, showing the page underneath). The skirt below it is
    off-screen normally and covers that gap if it still lags a frame. */
+/* Phones, signed-in app only: the app scrolls inside .app-shell instead of the page. The browser's address bar then never slides in and
+   out while scrolling, so the viewport keeps its size and the fixed tab bar cannot jump (it did on Android Chrome on every swipe).
+   Landing, login and onboarding (no .app-shell) and desktop keep normal page scrolling. */
+@media (width < 48rem) {
+  html:has(.app-shell),
+  body:has(.app-shell) { height: 100%; overflow: hidden; }
+  .app-shell { height: 100%; overflow-y: auto; overscroll-behavior-y: none; }
+}
 .tabbar { transform: translateZ(0); will-change: transform; backface-visibility: hidden; }
 .tabbar::after { content: ""; position: absolute; inset-inline: 0; top: 100%; height: 120px; background: var(--surface); pointer-events: none; }
 

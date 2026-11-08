@@ -2,7 +2,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { CoachPanel } from "@/components/coach/CoachPanel";
 import { BrandMark, IconActivity, IconClose, IconMenu, IconMore, IconSpark } from "@/components/icons";
 import { CallBrianButton } from "@/components/phone/CallBrianButton";
@@ -89,11 +89,14 @@ export function AppShell({ householdId, header, children }: { householdId: strin
     openCallSheet();
   }, []);
 
-  // Close the slide-over panels when navigating.
+  // Close the slide-over panels when navigating. On phones the app scrolls inside the shell (globals.css, .app-shell), which keeps
+  // its scroll position across pages, so a new page starts at the top. On desktop the shell is not a scroller and this does nothing.
+  const shell = useRef<HTMLDivElement>(null);
   useEffect(() => {
     closeCoach();
     closeTrace();
     closeCallBrian();
+    shell.current?.scrollTo({ top: 0 });
   }, [path]);
 
   const target = trace.runId ?? latest?.run_id ?? null;
@@ -102,7 +105,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
   if (!voiceUsed && (call.sheetOpen || call.phase !== "idle")) setVoiceUsed(true);
 
   return (
-    <div className="min-h-svh bg-bg text-ink">
+    <div ref={shell} className="app-shell min-h-svh bg-bg text-ink">
       <div className="fixed inset-y-0 left-0 z-30 hidden md:block" style={{ width: SIDEBAR_W }}>
         <Sidebar householdId={householdId} />
       </div>
