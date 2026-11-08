@@ -11,7 +11,7 @@
    ------------------------------------------------------------------------------------------------ */
 :root {
   color-scheme: light;
-  --bg: #f1f4f2;
+  --bg: #f4f5f6;
   --surface: #ffffff;
   --surface-2: #f6f8f7;
   --surface-3: #e9eeeb;
@@ -44,7 +44,7 @@
   --online: #1f9d5c;
 
   /* sidebar: flush with the canvas, separated by a hairline */
-  --side: #0f3d2e;
+  --side: var(--bg);
   --side-2: var(--surface);
   --side-ink: var(--ink-2);
   --side-ink-2: var(--ink-3);
@@ -86,19 +86,19 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #09100d;
-    --surface: #111a16;
-    --surface-2: #16211c;
-    --surface-3: #1d2a24;
-    --ink: #e8f0ec;
-    --ink-2: #a3b3aa;
-    --ink-3: #7a8b82;
-    --line: #1f2d26;
-    --line-strong: #2c3d34;
+    --bg: #0b0c0f;
+    --surface: #131519;
+    --surface-2: #1a1c21;
+    --surface-3: #22252a;
+    --ink: #eceef1;
+    --ink-2: #a7acb4;
+    --ink-3: #7f858e;
+    --line: #24272c;
+    --line-strong: #33363c;
     --brand: #2f9e6b;
     --brand-hover: #3bb37c;
     --brand-strong: #6fd3a0;
-    --brand-soft: #12261d;
+    --brand-soft: #14241c;
     --brand-ink: #ffffff;
     --dark: #e8f0ec;
     --dark-hover: #ffffff;
@@ -121,31 +121,30 @@
     --chart-5: #b8881a;
     --chart-6: #5b8fd9;
     --chart-muted: #4d525a;
-    --chart-grid: #1b2721;
-    --chart-axis: #2c3d34;
+    --chart-grid: #1f2226;
+    --chart-axis: #33363c;
     --chart-wash: color-mix(in srgb, var(--chart-1) 13%, transparent);
     --chart-band: color-mix(in srgb, var(--chart-1) 16%, transparent);
     --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.02), 0 18px 40px -16px rgb(0 0 0 / 0.7);
     --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.035);
-    --side: #07130e;
     --scrim: rgb(0 0 0 / 0.55);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #09100d;
-  --surface: #111a16;
-  --surface-2: #16211c;
-  --surface-3: #1d2a24;
-  --ink: #e8f0ec;
-  --ink-2: #a3b3aa;
-  --ink-3: #7a8b82;
-  --line: #1f2d26;
-  --line-strong: #2c3d34;
+  --bg: #0b0c0f;
+  --surface: #131519;
+  --surface-2: #1a1c21;
+  --surface-3: #22252a;
+  --ink: #eceef1;
+  --ink-2: #a7acb4;
+  --ink-3: #7f858e;
+  --line: #24272c;
+  --line-strong: #33363c;
   --brand: #2f9e6b;
   --brand-hover: #3bb37c;
   --brand-strong: #6fd3a0;
-  --brand-soft: #12261d;
+  --brand-soft: #14241c;
   --brand-ink: #ffffff;
   --dark: #e8f0ec;
   --dark-hover: #ffffff;
@@ -168,13 +167,12 @@
   --chart-5: #b8881a;
   --chart-6: #5b8fd9;
   --chart-muted: #4d525a;
-  --chart-grid: #1b2721;
-  --chart-axis: #2c3d34;
+  --chart-grid: #1f2226;
+  --chart-axis: #33363c;
   --chart-wash: color-mix(in srgb, var(--chart-1) 13%, transparent);
   --chart-band: color-mix(in srgb, var(--chart-1) 16%, transparent);
   --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.02), 0 18px 40px -16px rgb(0 0 0 / 0.7);
   --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.035);
-  --side: #07130e;
   --scrim: rgb(0 0 0 / 0.55);
 }
 
@@ -569,10 +567,3 @@ summary {
 .draw-dot { animation: pop 340ms var(--ease-out) 1s both; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 
-/* Deep-green sidebar in both themes: re-point the neutral tokens inside it to light-on-green. */
-.side-green {
-  --ink: #fff; --ink-2: #cfe3d8; --ink-3: #8fb09f;
-  --line: rgb(255 255 255 / 0.12); --line-strong: rgb(255 255 255 / 0.2);
-  --surface: rgb(255 255 255 / 0.13); --surface-2: rgb(255 255 255 / 0.08); --surface-3: rgb(255 255 255 / 0.1);
-  --brand-strong: #8ee0b4; --focus: #8ee0b4;
-}
