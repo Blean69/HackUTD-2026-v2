@@ -44,7 +44,7 @@ export function normalizeText(s: string): string {
  * Bump when the agents' behavior changes (prompts, tools, guardrails): a replay is only valid for the code that recorded it,
  * so older recordings stop being replayed and the next identical question runs live (and is recorded again).
  */
-export const CACHE_EPOCH = 'e4'; // e4: review fixes (one cash_flow surplus, loan/payoff/what-if verdicts, simulated credit scores, plain wording); e3: advice guard reviews against the tool results (e2: grounding, find_savings, kid tools, Table Mode guardrails)
+export const CACHE_EPOCH = 'e5'; // e5: credit lookup by first name, reviewer trusts grounded figures, no second per-month forecast figure; e4: review fixes (one cash_flow surplus, loan/payoff/what-if verdicts, simulated credit scores, plain wording); e3: advice guard reviews against the tool results (e2: grounding, find_savings, kid tools, Table Mode guardrails)
 
 export function makeCacheKey(workflow: string, templateId: string, normalizedInput: string): string {
   return `${workflow}@${CACHE_EPOCH}:${templateId}:${sha1(normalizedInput).slice(0, 20)}`;

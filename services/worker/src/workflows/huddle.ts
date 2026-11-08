@@ -260,7 +260,7 @@ export const huddleWorkflow: WorkflowDef = {
       if (res.content.trim()) {
         const data = { goals: posted, concerns: extracted.concerns.map((c) => c.text), scam: scam ? { risk: scam.risk, linked_total: scam.linked_total } : null };
         summary = truncate(await groundAnswer(run, { agent: 'reconciler', answer: res.content.trim(), results: [data], question: '', brief: '' }), 600);
-        summary = await adviceGuard(run, { agent: 'reconciler', kind: 'closing note', text: summary, sources: [data], fallback: fallbackSummary }); // figures were just grounded above
+        summary = await adviceGuard(run, { agent: 'reconciler', kind: 'closing note', text: summary, sources: [data], grounded: true, fallback: fallbackSummary }); // figures were just grounded above
       }
       run.emit('reconciler', 'message', `Summary: ${truncate(summary, 220)}`, { summary }, meta(res));
     } catch {

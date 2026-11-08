@@ -83,7 +83,6 @@ export function voiceView(tool: string, result: unknown, asOf = ''): unknown {
             lowest: { date: r.lowest?.date, balance: whole(r.lowest?.balance) },
             days_below_zero: r.days_below_zero ?? 0,
             bills_due_total: whole(r.obligations_due_total),
-            net_change_per_month: whole(r.net_change_per_month),
           }
         : { available: false, note: r.note ?? 'No forecast yet.' };
       break;

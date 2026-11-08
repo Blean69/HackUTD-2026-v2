@@ -119,15 +119,20 @@ export const getCreditScore = defineTool({
   schema: z.object({ member: z.string().optional().describe('A member name or id; omit for everyone') }),
   describe: (a) => (a.member ? `Reading ${a.member}'s simulated credit score` : 'Reading simulated credit scores'),
   run: (a, { data }) => {
-    const members = memberCreditViews(data, a.member);
-    if (!members.length) {
-      return {
-        available: false,
-        simulated: true,
-        note: a.member ? `No simulated credit score found for "${a.member}".` : 'No simulated credit score has been computed for this household yet.',
-      };
+    let members = memberCreditViews(data, a.member);
+    let note = CREDIT_NOTE;
+    // A guessed surname ("Elena Rivera" for Elena Morales) still finds her by first name; no match at all returns everyone,
+    // so the model never reports "no score" for someone who has one.
+    const first = a.member?.trim().split(/\s+/)[0];
+    if (!members.length && first) members = memberCreditViews(data).filter((m) => m.member.toLowerCase().split(/\s+/)[0] === first.toLowerCase());
+    if (!members.length && a.member) {
+      members = memberCreditViews(data);
+      note = `No member called "${a.member}"; these are everyone's scores. ${CREDIT_NOTE}`;
     }
-    return { available: true, simulated: true, note: CREDIT_NOTE, as_of: data.asOf, count: members.length, members };
+    if (!members.length) {
+      return { available: false, simulated: true, note: 'No simulated credit score has been computed for this household yet.' };
+    }
+    return { available: true, simulated: true, note, as_of: data.asOf, count: members.length, members };
   },
   summarize: (r) =>
     r.available

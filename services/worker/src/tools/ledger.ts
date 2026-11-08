@@ -261,7 +261,7 @@ export const getHealthIndicators = defineTool({
 
 export const getForecast = defineTool({
   name: 'get_forecast',
-  description: 'The 90-day cash forecast computed in the database: starting and ending balance, the lowest point and when, days below zero, obligations due.',
+  description: 'The 90-day cash forecast computed in the database: starting and ending balance, the lowest point and when, days below zero, obligations due. The monthly surplus is the savings rate indicator (get_health_indicators), not this.',
   schema: z.object({ horizon_days: z.number().int().min(7).max(90).optional() }),
   describe: (a) => `Reading the ${a.horizon_days ?? 90}-day cash forecast`,
   run: (a, { data }) => {
@@ -288,7 +288,6 @@ export const getForecast = defineTool({
       lowest: { date: low.date, balance: round2(low.balance) },
       days_below_zero: below,
       obligations_due_total: round2(due),
-      net_change_per_month: round2(((last.balance - within[0]!.balance) / Math.max(1, (parseDay(last.date) ?? 0) - startDay)) * 30.4375),
       points: sampled,
       as_of: formatDay(startDay),
     };

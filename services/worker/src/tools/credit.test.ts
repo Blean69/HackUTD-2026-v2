@@ -95,11 +95,14 @@ describe('get_credit_score', () => {
     expect(JSON.stringify(r).length).toBeLessThan(3500);
   });
 
-  it('filters by member name or id, and says so when nothing matches or nothing is computed yet', async () => {
+  it('filters by member name or id; a guessed surname still finds them; no match returns everyone; says so when nothing is computed', async () => {
     const one = await reg.execute('get_credit_score', { member: 'bea' }, ctx(withCredit()));
     expect(one.ok && (one.result as { count: number }).count).toBe(1);
+    const guessed = await reg.execute('get_credit_score', { member: 'Bea Rivera' }, ctx(withCredit())); // she is Bea Test
+    expect(guessed.ok && (guessed.result as { members: { member: string }[] }).members.map((m) => m.member)).toEqual(['Bea Test']);
     const none = await reg.execute('get_credit_score', { member: 'zed' }, ctx(withCredit()));
-    expect(none.ok && none.result).toMatchObject({ available: false, simulated: true });
+    expect(none.ok && none.result).toMatchObject({ available: true, simulated: true, count: 2 });
+    expect(none.ok && (none.result as { note: string }).note).toMatch(/No member called "zed"; these are everyone's scores/);
     const empty = await reg.execute('get_credit_score', {}, ctx(smallHousehold()));
     expect(empty.ok && empty.result).toMatchObject({ available: false });
     expect(empty.ok && (empty.result as { note: string }).note).toMatch(/has been computed/);
