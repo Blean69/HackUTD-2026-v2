@@ -7,6 +7,8 @@ import { fixedMonthly, upcomingObligations } from "@/lib/finance";
 import { cx, longDate, usd } from "@/lib/format";
 
 const sum = (rows: readonly { amount: number }[]) => rows.reduce((t, r) => t + r.amount, 0);
+/** A bill the module read from an imported household's own bank transactions (obligation id `auto:*`), not one entered by hand. */
+const detected = (id: string) => id.startsWith("auto:");
 
 /** The whole bill schedule, the cash low point, and three totals in one line. */
 export function BillsTab({ householdId }: { householdId: string }) {
@@ -23,7 +25,7 @@ export function BillsTab({ householdId }: { householdId: string }) {
   }, [obligations, accounts, today]);
 
   if (!ready) return <Skeleton className="h-72 !rounded-lg" />;
-  if (!obligations.length) return <Empty title="No bills on file">Loans, bills, subscriptions and insurance appear here once they are added.</Empty>;
+  if (!obligations.length) return <Empty title="No bills on file">Loans, bills, subscriptions and insurance appear here once they are added or show up as monthly payments in a linked bank account.</Empty>;
 
   const low = forecast.low_point;
   const due7 = sum(schedule.filter((s) => s.days <= 7));
@@ -32,7 +34,7 @@ export function BillsTab({ householdId }: { householdId: string }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Bills a month" value={usd(fixedMonthly(obligations))} sub={`${obligations.length} on file`} />
+        <StatCard label="Bills a month" value={usd(fixedMonthly(obligations))} sub={`${obligations.length} ${obligations.every((o) => detected(o.id)) ? "found in your transactions" : "on file"}`} />
         <StatCard label="Due this week" value={usd(due7)} tone={due7 > 0 ? "watch" : undefined} />
         <StatCard label="Next 30 days" value={usd(due30)} />
       </div>
@@ -55,7 +57,7 @@ export function BillsTab({ householdId }: { householdId: string }) {
             <tbody>
               {schedule.map((s) => (
                 <tr key={s.id}>
-                  <td className="!pl-4 font-medium">{s.name}<span className="block text-caption font-normal capitalize text-ink-3">{s.kind}</span></td>
+                  <td className="!pl-4 font-medium">{s.name}<span className="block text-caption font-normal text-ink-3"><span className="capitalize">{s.kind}</span>{detected(s.id) ? " · detected from your transactions" : null}</span></td>
                   <td className="r num whitespace-nowrap font-semibold">{usd(s.amount, { cents: s.amount % 1 !== 0 })}</td>
                   <td className="whitespace-nowrap">
                     <span className="num">{longDate(s.due)}</span>

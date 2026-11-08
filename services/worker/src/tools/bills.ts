@@ -9,7 +9,7 @@ import { defineTool } from './registry.js';
 const STREAMING = /netflix|hulu|disney|spotify|prime|youtube|hbo|\bmax\b|peacock|paramount|apple\s*(tv|music|one)|audible|sirius|xbox|playstation|nintendo/i;
 const EXTRAS = /club|dues|membership|gym|fitness|lessons?|subscription|box\b|delivery/i;
 const SHOP = /internet|wireless|mobile|cell|phone|cable|\btv\b|satellite|fiber/i;
-const UTILITY = /water|electric|energy|power|\bgas\b|sewer|trash/i;
+const UTILITY = /water|electric|energy|power|\bgas\b|sewer|trash|utilit/i; // "Utilities": a bill the module detected from several providers
 const SAVING = /college fund|savings|529|contribution|invest/i;
 const KIDS_COMMITTED = /tuition|after.?school|daycare|child ?care|braces|orthodont|medical|doctor|therapy/i;
 const DEBT = /mortgage|loan|\bcard\b|payment(?! plan)|\brent\b/i;

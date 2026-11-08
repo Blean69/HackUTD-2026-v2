@@ -1136,3 +1136,131 @@ describe('kids: chores and the savings jar', () => {
     expect([jar.balance, jar.goal_target]).toEqual([1, 0]);
   });
 });
+
+describe('bills detected for imported households (auto:* obligations)', () => {
+  const j = JSON.stringify;
+  const MONTHS = ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'];
+  /** hh_demo (seeded, with obligations) plus hh_imp: a Plaid import with no obligations and nothing marked recurring. */
+  function imported() {
+    const test = seeded();
+    test.withReducerTx(worker, (ctx) => m.seed_households(ctx, { rows_json: j([{ id: 'hh_imp', name: 'Imported family', city: 'Dallas', state: 'TX', persona: 'plaid import', home_value: 0, vehicle_value: 0 }]) }));
+    test.withReducerTx(worker, (ctx) =>
+      m.agent_upsert_accounts(ctx, {
+        rows_json: j([
+          { id: 'acct_plaid_chk', household_id: 'hh_imp', type: 'checking', institution: 'First Platypus Bank', nickname: 'Everyday Checking ••0001', balance: 5200, opened_date: '' },
+          { id: 'acct_plaid_card', household_id: 'hh_imp', type: 'credit_card', institution: 'First Platypus Bank', nickname: 'Rewards Visa ••4321', balance: 1200, credit_limit: 8000, opened_date: '' },
+        ]),
+      }),
+    );
+    const rows: Record<string, unknown>[] = [];
+    const add = (account_id: string, date: string, amount: number, merchant: string, category: string, description = merchant) => {
+      if (date <= '2026-11-07') rows.push({ id: `txn_plaid_${account_id.slice(11)}_${date}_${merchant.slice(0, 6).replace(/\W/g, '')}`, account_id, date, amount, merchant, category, description, is_recurring: false });
+    };
+    const cardPays = [812.4, 905.1, 1010.75, 870.2, 930.6, 1004.3];
+    MONTHS.forEach((mo, i) => {
+      add('acct_plaid_chk', `${mo}-01`, -1650, 'Oak Cliff Lofts', 'rent', 'RENT PAYMENT OAK CLIFF LOFTS');
+      add('acct_plaid_chk', `${mo}-02`, 2480, 'ACH CREDIT ACME ROBOTICS PAYROLL', 'income');
+      add('acct_plaid_chk', `${mo}-16`, 2480, 'ACH CREDIT ACME ROBOTICS PAYROLL', 'income');
+      add('acct_plaid_chk', `${mo}-10`, -(120 + i * 4), 'H-E-B', 'groceries');
+      add('acct_plaid_card', `${mo}-12`, -(140 + i * 11), 'Target', 'shopping');
+      add('acct_plaid_card', `${mo}-06`, -15.49, 'Netflix', 'entertainment');
+      if (i < 6) {
+        add('acct_plaid_chk', `${mo}-14`, -(118 + i * 9), 'TXU Energy', 'utilities', 'TXU ENERGY AUTOPAY');
+        add('acct_plaid_chk', `${mo}-22`, -cardPays[i]!, 'CREDIT CARD AUTOPAY PAYMENT XXXX4321', 'credit_card_payment');
+        add('acct_plaid_card', `${mo}-22`, cardPays[i]!, 'PAYMENT THANK YOU', 'credit_card_payment');
+      }
+    });
+    test.withReducerTx(worker, (ctx) => m.agent_upsert_txns(ctx, { rows_json: j(rows) }));
+    return { test, rows };
+  }
+  const recompute = (test: ReturnType<typeof fresh>, household_id: string) => test.withReducerTx(alice, (ctx) => m.recompute_household(ctx, { household_id }));
+  const bills = (test: ReturnType<typeof fresh>, household_id: string) =>
+    [...test.db.obligation.household_id.filter(household_id)].sort((a, b) => (a.id < b.id ? -1 : 1));
+  const tick = (test: ReturnType<typeof fresh>) =>
+    test.withReducerTx(TestAuth.internal(), (ctx) => m.tick_recompute(ctx, { arg: { scheduled_id: 1n, scheduled_at: ScheduleAt.interval(60_000_000n) } }));
+
+  it('recompute writes the bills it reads from the transactions, and the forecast schedules each one once', () => {
+    const { test } = imported();
+    recompute(test, 'hh_imp');
+    expect(bills(test, 'hh_imp').map(({ id, name, kind, amount, due_day, account_id }) => ({ id, name, kind, amount, due_day, account_id }))).toEqual([
+      { id: 'auto:hh_imp:credit-card-autopay-payment-xxxx', name: 'Rewards Visa payment', kind: 'loan', amount: 915.11, due_day: 22, account_id: 'acct_plaid_chk' },
+      { id: 'auto:hh_imp:netflix', name: 'Netflix', kind: 'subscription', amount: 15.49, due_day: 6, account_id: 'acct_plaid_card' },
+      { id: 'auto:hh_imp:oak-cliff-lofts', name: 'Rent (Oak Cliff Lofts)', kind: 'bill', amount: 1650, due_day: 1, account_id: 'acct_plaid_chk' },
+      { id: 'auto:hh_imp:txu-energy', name: 'TXU Energy', kind: 'bill', amount: 154, due_day: 14, account_id: 'acct_plaid_chk' },
+    ]);
+    const fc = [...test.db.forecast_point.household_id.filter('hh_imp')];
+    expect(fc).toHaveLength(90);
+    const due = (date: string) => fc.find((p) => p.date === date)!.obligations_due;
+    expect([due('2026-12-01'), due('2026-12-06'), due('2026-12-14'), due('2026-12-22'), due('2026-12-02')]).toEqual([1650, 15.49, 154, 915.11, 0]);
+    // the seeded family next door keeps exactly its own rows
+    recompute(test, 'hh_demo');
+    expect(bills(test, 'hh_demo').map((o) => o.id)).toEqual(['obl_ins', 'obl_rent']);
+  });
+
+  it('is idempotent: a second recompute with the same data changes nothing', () => {
+    const { test } = imported();
+    recompute(test, 'hh_imp');
+    const snapshot = () => ({
+      obl: bills(test, 'hh_imp'),
+      fc: [...test.db.forecast_point.household_id.filter('hh_imp')].sort((a, b) => (a.id < b.id ? -1 : 1)),
+      ind: [...test.db.health_indicator.household_id.filter('hh_imp')].map(({ updated_at: _u, ...r }) => r).sort((a, b) => (a.id < b.id ? -1 : 1)),
+    });
+    const before = snapshot();
+    test.clock.advance(TimeDuration.fromMillis(5_000));
+    recompute(test, 'hh_imp');
+    expect(snapshot()).toEqual(before);
+  });
+
+  it('a bill that stops (a cancelled subscription) is removed; the card payment is then no longer net of it', () => {
+    const { test, rows } = imported();
+    recompute(test, 'hh_imp');
+    const netflix = rows.filter((r) => r.merchant === 'Netflix' && String(r.date) >= '2026-09').map((r) => r.id);
+    test.withReducerTx(worker, (ctx) => m.agent_remove_txns(ctx, { ids_json: j(netflix) }));
+    recompute(test, 'hh_imp');
+    const left = bills(test, 'hh_imp');
+    expect(left.map((o) => o.name)).toEqual(['Rewards Visa payment', 'Rent (Oak Cliff Lofts)', 'TXU Energy']);
+    expect(left[0]!.amount).toBe(930.6);
+  });
+
+  it('a household with a seeded or hand-entered obligation gets no detected bills, and loses any it had', () => {
+    const { test } = imported();
+    recompute(test, 'hh_imp');
+    expect(bills(test, 'hh_imp')).toHaveLength(4);
+    test.withReducerTx(worker, (ctx) => m.seed_obligations(ctx, { rows_json: j([{ id: 'obl_imp_rent', household_id: 'hh_imp', name: 'Rent', amount: 1650, due_day: 1, account_id: 'acct_plaid_chk', kind: 'bill' }]) }));
+    recompute(test, 'hh_imp');
+    expect(bills(test, 'hh_imp').map((o) => o.id)).toEqual(['obl_imp_rent']);
+    // a seeded family that also links a bank keeps only its own obligations
+    test.withReducerTx(worker, (ctx) => m.agent_upsert_accounts(ctx, { rows_json: j([{ id: 'acct_plaid_demo', household_id: 'hh_demo', type: 'checking', balance: 10, opened_date: '' }]) }));
+    test.withReducerTx(worker, (ctx) =>
+      m.agent_upsert_txns(ctx, { rows_json: j(MONTHS.map((mo) => ({ id: `txn_plaid_demo_${mo}`, account_id: 'acct_plaid_demo', date: `${mo}-04`, amount: -9.99, merchant: 'Spotify', category: 'entertainment', description: '', is_recurring: false }))) }),
+    );
+    recompute(test, 'hh_demo');
+    expect(bills(test, 'hh_demo').map((o) => o.id)).toEqual(['obl_ins', 'obl_rent']);
+  });
+
+  it('tick_recompute fills the bills of an imported household recomputed before detection existed, and retries one with none at most hourly', () => {
+    const { test } = imported();
+    recompute(test, 'hh_imp');
+    recompute(test, 'hh_demo');
+    // the state after a module upgrade: indicators from today, no obligation rows at all
+    for (const o of bills(test, 'hh_imp')) test.db.obligation.id.delete(o.id);
+    tick(test);
+    expect(bills(test, 'hh_imp')).toHaveLength(0); // recomputed minutes ago: wait for the hourly retry
+    test.clock.advance(TimeDuration.fromMillis(61 * 60_000));
+    tick(test);
+    expect(bills(test, 'hh_imp').map((o) => o.name)).toEqual(['Rewards Visa payment', 'Netflix', 'Rent (Oak Cliff Lofts)', 'TXU Energy']);
+    // an imported household with nothing to detect is retried hourly, not on every tick
+    const marker = () => test.db.health_indicator.id.find('hh_imp:liquidity_runway')!.updated_at.microsSinceUnixEpoch;
+    for (const t of [...test.db.txn.household_id.filter('hh_imp')]) if (t.amount < 0) test.db.txn.id.delete(t.id);
+    recompute(test, 'hh_imp');
+    expect(bills(test, 'hh_imp')).toHaveLength(0); // the bills stopped with their charges
+    const recomputedAt = marker();
+    test.clock.advance(TimeDuration.fromMillis(60_000));
+    tick(test);
+    expect(marker()).toBe(recomputedAt);
+    test.clock.advance(TimeDuration.fromMillis(60 * 60_000));
+    tick(test);
+    expect(marker()).toBeGreaterThan(recomputedAt);
+    expect(bills(test, 'hh_imp')).toHaveLength(0);
+  });
+});

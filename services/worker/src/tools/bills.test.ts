@@ -28,6 +28,22 @@ describe('find_savings: which bills could the family cut', () => {
     expect(r.monthly_bills_total).toBe(7743.52);
   });
 
+  it('sorts the bills the module detects for an imported household (auto:* obligations) sensibly', () => {
+    const verdict = (name: string, kind: string) => sortBill({ name, kind });
+    expect(verdict('Netflix', 'subscription')).toEqual({ verdict: 'cut', why: 'a streaming subscription you could cancel or share' });
+    expect(verdict('YMCA', 'subscription').verdict).toBe('cut');
+    expect(verdict('Spectrum internet', 'bill').verdict).toBe('shop');
+    expect(verdict('Verizon wireless', 'bill').verdict).toBe('shop');
+    expect(verdict('Rewards Visa payment', 'loan').why).toMatch(/late fees/);
+    expect(verdict('Auto loan (Lonestar)', 'loan').verdict).toBe('keep');
+    expect(verdict('Mortgage (Prairie State)', 'loan').why).toBe('housing');
+    expect(verdict('Rent (Cedar Point Properties)', 'bill').why).toBe('housing');
+    expect(verdict('State Farm insurance', 'insurance').why).toBe('you need the cover');
+    expect(verdict('The City of Plano water', 'bill').why).toMatch(/essential/);
+    expect(verdict('Utilities', 'bill').why).toMatch(/essential/); // one bill paid to a different provider each month
+    expect(verdict('Property Tax and Homeowners Insurance', 'tax').verdict).toBe('keep');
+  });
+
   it('keeps rent, and does not read "rent" inside other words', () => {
     expect(sortBill({ name: 'Rent (Oakview Apartments)', kind: 'bill' }).verdict).toBe('keep');
     expect(sortBill({ name: 'Parenting club dues', kind: 'bill' }).verdict).toBe('cut');

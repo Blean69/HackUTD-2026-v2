@@ -30,6 +30,7 @@ Conventions (from the generator):
 - `obligations` is the complete schedule of recurring outflows, loan and card payments included (`kind: "loan"`), paid from checking.
   Forecast = checking + savings now, plus recurring **inflows** (`is_recurring` and amount > 0), minus obligations on their `due_day`,
   minus average daily discretionary spend (non-recurring outflows). Do not also subtract recurring outflow transactions, or bills count twice.
+  A Plaid household has no obligations on file: its bills are read from its transactions (`auto:*` obligation rows, section 15).
 - Net worth = checking + savings + cd + ira + `home_value` + `vehicle_value` − debt balances.
 - `anomaly` is omitted when empty. Duplicate and impossible-value rows are excluded from true balances.
 
@@ -47,7 +48,7 @@ Row ids are strings unless marked `u64 auto`. `ts`/`*_at` are SpacetimeDB `Times
 | `account` | id pk, household_id, type, institution, nickname, balance, rate_pct, credit_limit, monthly_payment, maturity_date, opened_date, owner_member_ids_json | seed, sandbox copy |
 | `txn` | id pk, household_id, account_id, date, amount, merchant, category, description, is_recurring, anomaly_truth ("" if none) | seed, sandbox copy |
 | `credit_profile` | member_id pk, household_id, score, utilization_pct, hard_inquiries_12m, oldest_account_years, late_payments_24m | seed |
-| `obligation` | id pk, household_id, name, amount, due_day, account_id, kind | seed |
+| `obligation` | id pk, household_id, name, amount, due_day, account_id, kind | seed, sandbox copy; `recompute_household` writes the `auto:*` rows (bills detected from an imported household's transactions, section 15) |
 | `conversation` | id pk, household_id, title, turns_json, expected_goals_json, scam_signals_json | seed (sample Huddles) |
 | `health_indicator` | id pk (`{household_id}:{key}`), household_id, key, label, value, unit, status, explanation, updated_at | reducer `recompute_household` (math runs in the DB) |
 | `forecast_point` | id pk (`{household_id}:{date}`), household_id, date, balance, obligations_due | reducer `recompute_household` |
@@ -390,3 +391,30 @@ Readers:
 
 Without these rows (mock mode, or an older module), the web falls back to its own derivation. `tick_recompute` backfills any
 household that has no `cash_flow` row yet, so a module upgrade fills them within a minute or two.
+
+## 15. Bills detected for imported households (`auto:*` obligations)
+
+A household imported through Plaid (every sign-up and every PNC sample customer) has no obligations on file and no
+transaction marked recurring. Its bills are read from its own transactions by the recompute, so the Bills tab, "Bills a month",
+the forecast, the health indicators, `get_obligations` / `find_savings`, Brian and Ask all see them with no change on their side.
+
+- **When:** the household has at least one `source = "plaid"` account and no obligation row from the seed or a person. A household
+  with any such row gets no detected bills (its `auto:*` rows are deleted on the next recompute). Seeded households never change.
+- **Rows:** ordinary `obligation` rows with id `auto:<household_id>:<payee-slug>` (no schema change). `recompute_household` upserts
+  them by id (untouched when unchanged) and deletes the ones whose bill stopped. They are output only: the math never reads them
+  back, it re-detects from the transactions each time.
+- **A bill:** outflows to one payee from one cash account or card about once a month (3+ charges in 3+ calendar months, median gap
+  25-36 days, the latest at most 45 days before the newest transaction). Bill-like categories (rent, mortgage, loans, card payments,
+  utilities, insurance, taxes, tuition) may vary in amount; subscription-like ones (streaming, memberships, personal care, services,
+  health) must hold their price. Never: groceries, dining, shopping, fuel, travel, transfers between own accounts, income, interest,
+  fees, savings or retirement contributions. Leftover bill-like charges of one kind on one account form one series (e.g. "Utilities"
+  when the provider changes every month); a payee renamed or re-filed between syncs stays one bill.
+- **Fields:** `amount` = median of the latest three charges; `due_day` = their usual day of the month; `account_id` = the account
+  charged; `kind` = `loan` (card, loan and mortgage payments), `insurance`, `tax`, `tuition`, `subscription`, else `bill`; `name`
+  e.g. "Rent (Cedar Point Properties)", "Mortgage (Prairie State)", "Spectrum internet", "Rewards Visa payment", "Netflix".
+- **Counted once:** a subscription charged to a card is inside that card's payment, so the card payment is listed net of the
+  subscriptions detected on that card. In the forecast the charges behind a detected bill are not discretionary spend (the same rule
+  as recurring outflows for seeded obligations), and a bill already charged this month is not due again before next month.
+- **Backfill:** `tick_recompute` also recomputes an imported household with no obligation rows at all whose last recompute is over an
+  hour old, so households imported before this existed get their bills after the module upgrade (at most hourly per household).
+- **Web:** the Bills tab marks these rows "detected from your transactions" (`id` starts with `auto:`).

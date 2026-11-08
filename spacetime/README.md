@@ -42,7 +42,7 @@ Only the schema and reducers are exported from `index.ts` (SpacetimeDB treats ev
 
 | Table | Public | Written by |
 |---|---|---|
-| `household` (+ `home_value`, `vehicle_value`), `member`, `account`, `txn`, `credit_profile`, `obligation`, `conversation` | yes | `seed_*`, `create_sandbox`, Plaid reducers |
+| `household` (+ `home_value`, `vehicle_value`), `member`, `account`, `txn`, `credit_profile`, `obligation`, `conversation` | yes | `seed_*`, `create_sandbox`, Plaid reducers; `recompute_household` writes the `auto:*` obligation rows (bills detected for imported households) |
 | `health_indicator`, `forecast_point`, `alert` (rule rows have ids `rule:...`) | yes | `recompute_household`, `tick_recompute`; worker adds alerts |
 | `credit_score`, `credit_score_history` (docs/contracts.md section 9) | yes | `recompute_household` (and so `tick_recompute`, `create_sandbox`, `finish_onboarding`), `backfill_credit_history`; `credit` alerts too |
 | `goal`, `presence`, `huddle`, `transcript_line`, `scenario`, `coach_message`, `advisor_note` | yes | family reducers, worker |
@@ -152,6 +152,20 @@ semi-monthly, monthly, ...), minus obligations on their `due_day`, minus average
 outflow transactions are not subtracted again. One addition: non-recurring deposits (owner draws) are averaged in too;
 set `FORECAST_INCLUDE_IRREGULAR_INCOME = false` in `finance.ts` for the strict formula. The forecast starts the day after
 the newest trustworthy transaction ("as of"), not the wall clock.
+
+**Bills detected for imported households** (docs/contracts.md section 15). A Plaid household has no obligation rows and no
+transaction marked recurring. `loadHouseholdInput` sets `derive_obligations` when the household has a Plaid account and no
+seeded or hand-entered obligation; `analyzeHousehold` then reads the bill schedule from the transactions first and builds the
+forecast on it, and `recompute_household` keeps the household's `auto:<household>:<payee>` obligation rows equal to it
+(upsert by id, untouched when unchanged, deleted when the bill stops). Rules: one payee and account about once a month
+(3+ charges in 3+ months, median gap 25-36 days, latest within 45 days); bill-like categories (rent, mortgage, loans, card
+payments, utilities, insurance, taxes, tuition) may vary in amount, subscription-like ones must hold their price; groceries,
+shopping, dining, fuel, travel, transfers, income, interest and fees never count. Leftover bill-like charges of one kind on
+one account form one series ("Utilities" when the provider changes every month). A payee renamed or re-filed between syncs is
+merged; a card payment is listed net of the subscriptions detected on that card. The charges behind a detected bill are left
+out of the discretionary spend, so each payment is subtracted once. `auto:*` rows are output only: the loader never feeds them
+back in, and a household with any other obligation row gets none. `tick_recompute` also picks up an imported household with
+no obligation rows whose last recompute is over an hour old (fills households imported before this existed).
 
 **Rule alerts** use visible columns only. `anomaly_truth` is never copied into the math (`FinTxn` has no such field) and
 `module.test.ts` proves that flipping every label changes nothing.
