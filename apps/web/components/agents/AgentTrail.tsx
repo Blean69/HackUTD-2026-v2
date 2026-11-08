@@ -79,7 +79,7 @@ const RunRow = memo(function RunRow({
           </span>
           <span className="num mt-1 block font-mono text-caption text-ink-3">
             {events.length
-              ? `${events.length} steps · ${toolCalls} tool calls${totals.latency ? ` · ${duration(totals.latency)} model time` : ""}${tokens ? ` · ${tokens.toLocaleString()} tokens` : ""}`
+              ? `${events.length} ${events.length === 1 ? "step" : "steps"} · ${toolCalls} ${toolCalls === 1 ? "tool call" : "tool calls"}${totals.latency ? ` · ${duration(totals.latency)} model time` : ""}${tokens ? ` · ${tokens.toLocaleString()} tokens` : ""}`
               : run.status === "running" ? "Waiting for the first step…" : "Loading steps…"}
           </span>
           {providers.length ? (

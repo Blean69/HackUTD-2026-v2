@@ -72,7 +72,7 @@ export function AgentActivityPanel({ open, runId, onClose }: { open: boolean; ru
             <dl className="mt-2 grid grid-cols-3 gap-2 text-caption">
               <div>
                 <dt className="text-ink-3">Steps</dt>
-                <dd className="num mt-0.5 text-lead font-semibold">{events.length}<span className="ml-1 text-caption font-normal text-ink-3">{toolCalls} tool calls</span></dd>
+                <dd className="num mt-0.5 text-lead font-semibold">{events.length}<span className="ml-1 text-caption font-normal text-ink-3"> · {toolCalls} {toolCalls === 1 ? "tool call" : "tool calls"}</span></dd>
               </div>
               <div>
                 <dt className="text-ink-3">Model time</dt>

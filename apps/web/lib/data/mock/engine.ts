@@ -225,7 +225,7 @@ class MockEngine {
     const fx = this.effects(p.household_id, {
       setScenario: (result) =>
         this.store.patch("proposal", p.id, {
-          verdict: result.verdict ?? "fine",
+          verdict: result.verdict === "unclear" ? "" : (result.verdict ?? "fine"), // a vote never shows "unclear"
           analysis: { summary: result.summary, suggestion: result.suggestion, metrics: result.metrics, low_point: result.low_point },
         }),
     });

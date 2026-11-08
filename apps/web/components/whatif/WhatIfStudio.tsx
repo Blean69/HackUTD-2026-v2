@@ -20,10 +20,15 @@ const HIT = "relative before:absolute before:-inset-y-1 before:inset-x-0";
 /** Months of spending covered: below zero means the cash runs out, which reads better in words than as "-2.1 mo". */
 const show = (v: number, unit: Parameters<typeof metric>[1]) => (unit === "months" && v < 0 ? "Runs out" : metric(v, unit));
 
+/** The verdict's chip/banner; gambling or speculation (advice not_advised) reads "Not advised", whatever the numbers say. */
+const verdictOf = (r: Scenario["result"] | undefined) =>
+  r?.verdict ? (r.advice === "not_advised" ? { ...VERDICT.risky, label: "Not advised" } : VERDICT[r.verdict]) : null;
+
 const VERDICT: Record<NonNullable<NonNullable<Scenario["result"]>["verdict"]>, { tone: Tone; label: string; banner: string }> = {
   fine: { tone: "good", label: "Works comfortably", banner: "border-transparent bg-good-soft text-good" },
   tight: { tone: "watch", label: "Tight", banner: "border-transparent bg-watch-soft text-watch" },
   risky: { tone: "risk", label: "Risky", banner: "border-transparent bg-risk-soft text-risk" },
+  unclear: { tone: "neutral", label: "Needs rephrasing", banner: "border-line bg-surface-2 text-ink-2" },
 };
 
 const isPending = (s: Scenario) => s.status === "queued" || s.status === "running";
@@ -46,7 +51,7 @@ function runFor(s: Scenario, runs: readonly AgentRun[]): AgentRun | undefined {
 function StatusChip({ s }: { s: Scenario }) {
   if (isPending(s)) return <Chip tone="brand"><Spinner size={11} />{s.status === "queued" ? "Queued" : "Agents simulating…"}</Chip>;
   if (s.status === "error") return <Chip tone="risk">Failed</Chip>;
-  const v = s.result?.verdict ? VERDICT[s.result.verdict] : null;
+  const v = verdictOf(s.result);
   return v ? <Chip tone={v.tone}>{v.label}</Chip> : <Chip tone="good">Done</Chip>;
 }
 
@@ -54,7 +59,7 @@ function StatusChip({ s }: { s: Scenario }) {
 function StatusText({ s }: { s: Scenario }) {
   if (isPending(s)) return <span className="inline-flex items-center gap-1 text-brand-strong"><Spinner size={10} />{s.status === "queued" ? "Queued" : "Simulating"}</span>;
   if (s.status === "error") return <span className="text-risk">Failed</span>;
-  const v = s.result?.verdict ? VERDICT[s.result.verdict] : null;
+  const v = verdictOf(s.result);
   return <span className={v ? (v.tone === "good" ? "text-good" : v.tone === "watch" ? "text-watch" : "text-risk") : "text-good"}>{v ? v.label : "Done"}</span>;
 }
 
@@ -72,7 +77,7 @@ function ResultSkeleton({ status }: { status: Scenario["status"] }) {
 
 function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
   const r = s.result;
-  const v = r?.verdict ? VERDICT[r.verdict] : null;
+  const v = verdictOf(r);
   const pending = isPending(s);
   return (
     <div>

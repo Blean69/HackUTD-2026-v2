@@ -258,7 +258,10 @@ export interface TranscriptLine {
  */
 export interface ScenarioResult {
   summary?: string;
-  verdict?: "fine" | "tight" | "risky";
+  /** unclear: the question could not be modelled (the worker asks to rephrase). */
+  verdict?: "fine" | "tight" | "risky" | "unclear";
+  /** "not_advised": gambling or speculation (the verdict is then risky). */
+  advice?: string;
   metrics?: { label: string; before?: number; after: number; unit: "usd" | "months" | "pct" }[];
   /** Baseline vs scenario daily balance, for the overlay chart. */
   series?: { date: string; baseline: number; scenario: number; obligations_due?: number }[];
