@@ -10,6 +10,7 @@ export * from './reducers/huddle';
 export * from './reducers/family';
 export * from './reducers/proposal';
 export * from './reducers/kids';
+export * from './reducers/calls';
 export * from './reducers/recompute';
 export * from './reducers/credit';
 export * from './reducers/plaid';

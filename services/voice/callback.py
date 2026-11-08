@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import html
 import hmac
 import json
 import random
@@ -252,6 +253,38 @@ class SignalWireDialer:
             data["MachineDetection"] = "DetectMessageEnd"
         return data
 
+    async def call_twiml(self, to: str, twiml: str, *, ring_secs: int = 25) -> DialResult:
+        """Place ONE call that plays inline cXML (no webhook, so it works from a laptop). Never retried."""
+        if not self.configured:
+            raise DialError(0, "not_configured", "SIGNALWIRE_* is incomplete")
+        data = {"From": self.from_number, "To": to, "Twiml": twiml}
+        if ring_secs > 0:
+            data["Timeout"] = str(ring_secs)
+        try:
+            async with httpx.AsyncClient(transport=self._transport, timeout=self._timeout) as http:
+                r = await http.post(self.endpoint, data=data, auth=(self.project_id, self.api_token))
+        except httpx.HTTPError as e:
+            raise DialError(0, type(e).__name__) from None
+        try:
+            body = r.json()
+        except ValueError:
+            body = {}
+        body = body if isinstance(body, dict) else {}
+        if r.status_code >= 400:
+            raise DialError(r.status_code, str(body.get("code") or "http_error"), redact(str(body.get("message") or ""))[:160])
+        return DialResult(sid=str(body.get("sid") or ""), status=str(body.get("status") or "queued"))
+
+    async def status(self, sid: str) -> str:
+        """The call's current status from SignalWire (queued, ringing, in-progress, completed, failed, busy, no-answer, canceled); "" if unknown."""
+        if not (self.configured and sid):
+            return ""
+        try:
+            async with httpx.AsyncClient(transport=self._transport, timeout=self._timeout) as http:
+                r = await http.get(self.endpoint.removesuffix(".json") + f"/{quote(sid, safe='')}.json", auth=(self.project_id, self.api_token))
+            return str((r.json() or {}).get("status") or "") if r.status_code < 400 else ""
+        except Exception:
+            return ""
+
     async def call(self, to: str, url: str, *, ring_secs: int = 0, amd: str = "off") -> DialResult:
         """Place ONE call. Never retried (a retry after a timeout could ring the person twice)."""
         if not self.configured:
@@ -425,17 +458,57 @@ class CallbackManager:
         self._recent[household_id] = keys
         return set(keys)
 
-    async def pick_alert(self, household_id: str) -> alerts.CallbackAlert:
-        """Real signals first, a template otherwise. Never raises."""
+    async def pick_alert(self, household_id: str, prefer_alert_id: str = "") -> alerts.CallbackAlert:
+        """Real signals first, a template otherwise. Never raises. `prefer_alert_id`: the alert an in-app ring was about, used when it is still
+        one of the household's candidates (so the call is about what the screen said)."""
         payload = None
         if self.worker is not None:
             try:
                 payload = await asyncio.wait_for(self.worker.alert_candidates(household_id), timeout=8.0)
             except Exception as e:
                 logger.warning(f"alert candidates unavailable ({type(e).__name__}); using a template")
-        alert = alerts.select_alert(payload, rng=self._rng, exclude=self._recent_keys(household_id))
+        exclude: set[str] = self._recent_keys(household_id)
+        if prefer_alert_id and isinstance(payload, dict):
+            mine = [c for c in (payload.get("candidates") or []) if isinstance(c, dict) and c.get("alert_id") == prefer_alert_id]
+            if mine:
+                payload, exclude = {**payload, "candidates": mine}, set()
+        alert = alerts.select_alert(payload, rng=self._rng, exclude=exclude)
         self._recent.setdefault(household_id, {})[alert.key] = self._now()
         return alert
+
+    def demo_ready(self) -> bool:
+        """Is the demo call usable: a number is set and valid, and SignalWire is configured."""
+        return bool(E164.match(self.s.demo_phone or "") and self.dialer.configured)
+
+    async def demo_call(self, household_id: str, prefer_alert_id: str = "") -> str:
+        """Ring the configured demo number once and read the alert aloud (one way: no webhook needed). Returns the SignalWire status.
+        The number comes only from DEMO_PHONE; a caller of the API can never choose it."""
+        if not self.demo_ready():
+            raise DialError(0, "demo_call_off", "DEMO_PHONE is not set")
+        alert = await self.pick_alert(household_id, prefer_alert_id)
+        say = " ".join(
+            x.strip() for x in ("Hi, it's Brian from your Brianotron app. Just so you know, I'm an AI.", alert.statement, alert.action, "Open the app to see the details. Goodbye.") if x and x.strip()
+        )
+        twiml = f'<Response><Pause length="1"/><Say>{html.escape(say, quote=False)}</Say><Pause length="1"/><Hangup/></Response>'
+        res = await self.dialer.call_twiml(self.s.demo_phone, twiml)
+        # "queued" only means SignalWire took the request. A carrier can still refuse it at once (repeated calls to one number within minutes
+        # look like spam), so wait briefly for the real outcome and report that.
+        status = res.status
+        for _ in range(8):
+            if status not in ("queued", "initiated", ""):
+                break
+            await self._sleep(1.0)
+            status = await self.dialer.status(res.sid) or status
+        logger.info(f"demo call: {status} (call {res.sid[-6:] or '?'}), alert {alert.source}:{alert.origin}")
+        return status
+
+    async def web_plan(self, household_id: str, display_name: str, prefer_alert_id: str = "") -> CallbackPlan:
+        """The plan for a callback that is answered IN THE APP: same alert choice and the same opening as the phone callback, no number anywhere."""
+        first = (display_name or "").strip().split(" ")[0]
+        if first.lower() == "guest":
+            first = ""
+        alert = await self.pick_alert(household_id, prefer_alert_id)
+        return CallbackPlan(nonce=secrets.token_urlsafe(9), household_id=household_id, first_name=first[:30], caller_hash="web", alert=alert, expires_at=0.0)
 
     async def _run(self, number: str, job: _Job) -> None:
         plan: CallbackPlan | None = None

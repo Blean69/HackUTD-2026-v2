@@ -39,7 +39,7 @@ from llm import build_providers
 from noise import available as noise_available, build_noise_filter, noise_filter_mode
 from tts import choose_tts, resolve_elevenlabs_voice
 from worker_client import WorkerClient
-from callback import CallbackManager, install_log_redaction
+from callback import CallbackManager, DialError, install_log_redaction
 from twiml import build_twiml, caller_hash, hangup_only, make_stream_token, say_and_hangup, url_variants, valid_stream_token, verify_webhook
 
 SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
@@ -169,7 +169,37 @@ def create_app(settings: Settings | None = None, *, callbacks: CallbackManager |
             "noise_filter": {"webrtc": noise_filter_mode(s.noise_filter, phone=False), "phone": noise_filter_mode(s.noise_filter, phone=True), "installed": noise_available()},
             "barge_in_words": {"webrtc": s.barge_in_words_webrtc, "phone": s.barge_in_words},
             "callback": callbacks.enabled,  # whether Brian rings back after a phone call (no numbers, no secrets)
+            "callback_web": s.callback_web,
+            "demo_call": callbacks.demo_ready(),  # a boolean only: whether "try a call" can ring the demo phone (never the number)  # whether Brian rings back inside the app (docs/contracts.md section 13)
         }
+
+    # ---- demo: ring the configured demo phone ---------------------------------------------------------------------------------
+    demo_last = {"at": 0.0}
+
+    @app.post("/api/demo_call")
+    async def demo_call(request: Request) -> dict[str, Any]:
+        """Demo only. Rings DEMO_PHONE (set on this service, never sent by the browser) and reads one alert aloud. Off unless DEMO_PHONE is set."""
+        if not callbacks.demo_ready():
+            raise HTTPException(404, "not found")
+        now = time.monotonic()
+        if now - demo_last["at"] < 120:  # carriers refuse repeated calls to one number within a couple of minutes
+            raise HTTPException(429, "a demo call was just placed; wait a moment")
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        household_id = str((body or {}).get("household_id") or "").strip()[:80]
+        if not household_id:
+            raise HTTPException(400, "household_id is required")
+        demo_last["at"] = now
+        try:
+            status = await callbacks.demo_call(household_id, str((body or {}).get("alert_id") or "")[:120])
+        except DialError as e:
+            demo_last["at"] = 0.0
+            logger.warning(f"demo call not placed: {e.status} {e.code}")
+            raise HTTPException(502, "the phone provider refused the call") from None
+        refused = status in ("failed", "canceled")
+        return {"ok": not refused, "status": status}
 
     # ---- browser: SmallWebRTC ----------------------------------------------------------------------------------------------
     @app.post("/api/offer")
@@ -191,12 +221,29 @@ def create_app(settings: Settings | None = None, *, callbacks: CallbackManager |
             if len(active) >= s.max_sessions:
                 raise HTTPException(429, "all voice lines are busy, try again in a minute")
 
+        plan: asyncio.Task | None = None
+        if not reconnect and s.callback_web and data.get("callback"):
+            # Answering Brian's in-app ring opens the call in callback mode (no PIN, about the alert on screen). Only for a ring a phone in this
+            # household REALLY answered, once: otherwise anyone could make Brian write a made-up critical alert onto any household's dashboard.
+            try:
+                verdict = await cb_worker.ring_check(household_id, str(data.get("call_id") or "")[:120])
+            except Exception as e:
+                verdict = {"ok": False, "reason": f"worker: {type(e).__name__}"}
+            if verdict.get("ok"):
+                # built while the call connects (an alert lookup can take seconds); the bot waits for it after the opening line
+                plan = asyncio.create_task(callbacks.web_plan(household_id, display_name, str(data.get("alert_id") or "")[:120]), name="web-callback-plan")
+            else:
+                logger.warning(f"callback mode refused for {household_id}: {verdict.get('reason', 'no answered ring')}; opening a normal call")
+
         async def on_connection(connection: SmallWebRTCConnection) -> None:
             call_id = _safe_id(f"web-{connection.pc_id}", "web")
             noise, noise_label = build_noise_filter(s.noise_filter, phone=False)  # a fresh RNNoise per call (it keeps state)
             extra = {"audio_in_filter": noise} if noise else {}
             transport = SmallWebRTCTransport(webrtc_connection=connection, params=TransportParams(audio_in_enabled=True, audio_out_enabled=True, **extra))
-            init = CallInit(call_id=call_id, kind="webrtc", transport_label="webrtc", household_id=household_id, display_name=display_name, noise_filter=noise_label)
+            init = CallInit(
+                call_id=call_id, kind="webrtc", transport_label="webrtc", household_id=household_id, display_name=display_name, noise_filter=noise_label,
+                caller="callback" if plan else "new", callback=plan, may_ring_back=bool(s.callback_web and not plan),  # a normal app call may be followed by Brian's in-app ring
+            )
             spawn(VoiceCall(s, init, transport))
 
         return await handler_holder["h"].handle_web_request(request=req, webrtc_connection_callback=on_connection)

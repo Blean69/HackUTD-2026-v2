@@ -64,6 +64,10 @@ class WorkerClient:
         """Real signals for the callback's alert + the household's account context (GET /phone/alert_candidates)."""
         return await self._call("GET", f"/phone/alert_candidates?household_id={quote(household_id, safe='')}")
 
+    async def ring_check(self, household_id: str, call_id: str) -> dict:
+        """Did a phone in this household really answer this in-app ring? Single use (POST /phone/ring_check). Never retried."""
+        return await self._call("POST", "/phone/ring_check", {"household_id": household_id, "call_id": call_id}, retries=0)
+
     async def callback_alert(self, run_id: str, alert: dict) -> dict:
         """Write the callback's alert as a critical `alert` row and trace it on the run (POST /phone/callback_alert)."""
         return await self._call("POST", "/phone/callback_alert", {"run_id": run_id, "alert": alert}, retries=0)

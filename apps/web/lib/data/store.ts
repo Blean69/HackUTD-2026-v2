@@ -1,7 +1,7 @@
 import type {
   Account, AdvisorNote, AgentRun, Alert, BankConnection, CoachMessage, Conversation, CreditProfile, CreditScore, CreditScoreHistory, ForecastPoint, Goal,
   HealthIndicator, Household, Huddle, Member, Obligation, Presence, Proposal, Scenario, TraceEvent, Transaction,
-  TranscriptLine, Vote, KidTask, KidJar, CashFlow, CashMonthRow,
+  TranscriptLine, Vote, KidTask, KidJar, IncomingCall, CashFlow, CashMonthRow,
 } from "@/lib/types";
 
 /** One entry per SpacetimeDB table the UI reads. Rows are UI-shaped (see lib/types.ts). */
@@ -30,6 +30,7 @@ export interface TableRows {
   vote: Vote;
   kid_task: KidTask;
   kid_jar: KidJar;
+  incoming_call: IncomingCall;
   credit_score: CreditScore;
   credit_score_history: CreditScoreHistory;
   cash_flow: CashFlow;
@@ -40,7 +41,7 @@ export type TableName = keyof TableRows;
 export const TABLES: TableName[] = [
   "household", "member", "account", "txn", "credit_profile", "obligation", "conversation", "health_indicator",
   "forecast_point", "alert", "goal", "presence", "huddle", "transcript_line", "scenario", "coach_message",
-  "advisor_note", "agent_run", "trace_event", "bank_connection", "proposal", "vote", "credit_score", "credit_score_history", "kid_task", "kid_jar", "cash_flow", "cash_month",
+  "advisor_note", "agent_run", "trace_event", "bank_connection", "proposal", "vote", "credit_score", "credit_score_history", "kid_task", "kid_jar", "incoming_call", "cash_flow", "cash_month",
 ];
 
 /** Primary key of each table, as a string. */
@@ -69,6 +70,7 @@ const PK: { [K in TableName]: (r: TableRows[K]) => string } = {
   vote: (r) => r.id,
   kid_task: (r) => r.id,
   kid_jar: (r) => r.member_id,
+  incoming_call: (r) => r.id,
   credit_score: (r) => r.id,
   credit_score_history: (r) => r.id,
   cash_flow: (r) => r.household_id,

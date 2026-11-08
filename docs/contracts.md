@@ -418,3 +418,27 @@ the forecast, the health indicators, `get_obligations` / `find_savings`, Brian a
 - **Backfill:** `tick_recompute` also recomputes an imported household with no obligation rows at all whose last recompute is over an
   hour old, so households imported before this existed get their bills after the module upgrade (at most hourly per household).
 - **Web:** the Bills tab marks these rows "detected from your transactions" (`id` starts with `auto:`).
+
+## 16. In-app calls from Brian (replaces the phone callback in the demo)
+
+Brian can "call" the household inside the app. No phone number is shown or dialed: calls to Brian start from the Talk button, and Brian's
+callback is an incoming-call screen with Accept and Decline. The SignalWire phone line (sections 8 and 10) is optional and off unless a number is configured.
+
+| Table (public) | Key | Columns |
+|---|---|---|
+| `incoming_call` | `id` | `household_id`, `alert_id` ("" = Brian picks one when answered), `title`, `source` (`alert` / `callback` / `demo`), `status` (`ringing` -> `answered` / `declined` / `missed`), `created_at`, `expires_at` (45 s), `answered_by` |
+
+Client reducers: `request_brian_call(household_id, alert_id, title, source)` (a no-op while a ring is going or within 20 s of the last one for that
+household), `answer_brian_call(call_id, display_name)` (only while ringing: a second phone is told "already answered"), `decline_brian_call(call_id)` (ends the ring
+for everyone), `expire_brian_call(call_id)` (only works after the deadline).
+
+What rings the household:
+- a NEW critical `scam` or `fraud` alert from the agents (`agent_create_alert`), except the callback's own alert (id starting `callback:`);
+- about 15 s after an in-app Brian call that lasted at least 8 s (`source: callback`, no alert yet);
+- the "Have Brian call me" button in the call sheet (`source: demo`).
+
+Every phone in the room shows the full-screen incoming call; the first Accept or Decline closes it for all. Accept starts the normal in-app call with
+`request_data: { household_id, display_name, callback: true, alert_id, call_id }` on `POST /api/offer`. The voice service (`VOICE_CALLBACK_WEB`, default 1) then
+runs the call in callback mode: no PIN, the phone callback's alert choice (`CallbackManager.web_plan`, preferring `alert_id`) and opening line, the alert written
+through `/phone/callback_alert` as before, a traced `phone` run titled "Voice callback connected".
+The web app falls back to an in-browser stand-in (`lib/data/mock/calls.ts`) when the published module has no `incoming_call` table.

@@ -84,7 +84,6 @@ export function TalkButton({ variant, className }: { variant: "header" | "card" 
         aria-label={aria}
         aria-disabled={down || undefined}
         aria-describedby={down ? tipId : undefined}
-        title={down ? VOICE_OFFLINE_TEXT : undefined}
         className={cx(base, tone, size, down && "cursor-not-allowed")}
       >
         {active ? <IconPhone size={16} /> : <IconMic size={16} />}

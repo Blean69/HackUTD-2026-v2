@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { IconBell, IconCheck } from "@/components/icons";
+import { IconBell, IconCheck, IconPhone } from "@/components/icons";
 import { Button, StatusDot } from "@/components/ui";
 import { ackAlert } from "@/lib/data/actions";
 import { useAlerts } from "@/lib/data/hooks";
 import { cx, relTime } from "@/lib/format";
+import { callAboutAlert } from "@/lib/voiceCall/demoCall";
 
 /** Bell with a count badge and a popover of open alerts (fraud, scam, data quality, upcoming bills, credit). `compact` drops the border (phone top bar). */
 export function NotificationsBell({ householdId, me, compact }: { householdId: string; me: string; dark?: boolean; compact?: boolean }) {
@@ -12,6 +13,7 @@ export function NotificationsBell({ householdId, me, compact }: { householdId: s
   const open = alerts.filter((a) => !a.acknowledged_by);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [said, setSaid] = useState<Record<string, string>>({});
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,15 +65,33 @@ export function NotificationsBell({ householdId, me, compact }: { householdId: s
                   <div className="min-w-0 flex-1">
                     <p className="text-label font-medium">{a.title}</p>
                     <p className="mt-0.5 text-caption text-ink-2">{a.detail}</p>
+                    {said[a.id] ? <p role="status" className="mt-1 text-caption font-medium text-brand-strong">{said[a.id]}</p> : null}
                     <div className="mt-1.5 flex items-center gap-2 text-caption text-ink-3">
                       <span>{relTime(a.created_at)}</span>
                       {a.acknowledged_by ? (
                         <span className="inline-flex items-center gap-1"><IconCheck size={12} className="text-good" /> Handled by {a.acknowledged_by}</span>
                       ) : (
+                        <>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="ml-auto h-7"
+                          disabled={busy === a.id}
+                          aria-label={`Have Brian call me about: ${a.title}`}
+                          onClick={async () => {
+                            setBusy(a.id);
+                            const r = await callAboutAlert(householdId, a.id, a.title);
+                            setBusy(null);
+                            setSaid((m) => ({ ...m, [a.id]: r.message }));
+                            if (r.inApp && r.ok) setShow(false); // the incoming-call screen takes over
+                          }}
+                        >
+                          <IconPhone size={13} /> Call me
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="ml-auto h-7"
+                          className="h-7"
                           disabled={busy === a.id}
                           onClick={async () => {
                             setBusy(a.id);
@@ -84,6 +104,7 @@ export function NotificationsBell({ householdId, me, compact }: { householdId: s
                         >
                           Mark handled
                         </Button>
+                        </>
                       )}
                     </div>
                   </div>

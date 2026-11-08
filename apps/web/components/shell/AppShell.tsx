@@ -7,6 +7,7 @@ import { CoachPanel } from "@/components/coach/CoachPanel";
 import { BrandMark, IconActivity, IconClose, IconMenu, IconMore, IconSpark } from "@/components/icons";
 import { CallBrianButton } from "@/components/phone/CallBrianButton";
 import { AgentActivityPanel } from "@/components/trace/AgentActivityPanel";
+import { IncomingCall } from "@/components/voice/IncomingCall";
 import { TalkButton } from "@/components/voice/TalkButton";
 import { openCallSheet, useCall } from "@/lib/voiceCall/session";
 import { IconButton } from "@/components/ui";
@@ -173,6 +174,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
       </SlideOver>
       <AgentActivityPanel open={trace.open} runId={target} onClose={closeTrace} />
       {callBrianOpen ? <CallBrianPanel householdId={householdId} /> : null}
+      <IncomingCall householdId={householdId} me={me} />
       {/* Voice call: the call lives in lib/voiceCall, so it survives leaving this page. */}
       {voiceUsed ? (
         <>

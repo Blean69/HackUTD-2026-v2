@@ -17,6 +17,8 @@ const POLL_MS = 15_000;
 const FRESH_MS = 4_000;
 
 let status: VoiceStatus = "checking";
+let demoCall = false; // whether the voice service can ring the demo phone (/health says; never the number)
+let callbackWeb = true; // the voice service's VOICE_CALLBACK_WEB flag, learned from /health (true until it says otherwise)
 let checkedAt = 0;
 let inflight: Promise<VoiceStatus> | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -35,6 +37,11 @@ async function probe(timeoutMs: number): Promise<VoiceStatus> {
   const t = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { signal: ctl.signal, cache: "no-store" });
+    if (res.ok) {
+      const body = (await res.json().catch(() => null)) as { callback_web?: boolean; demo_call?: boolean } | null;
+      callbackWeb = body?.callback_web !== false;
+      demoCall = body?.demo_call === true;
+    }
     return res.ok ? "up" : "down";
   } catch {
     if (ctl.signal.aborted) return "down";
@@ -64,6 +71,16 @@ export function checkVoice(force = false, timeoutMs = 2500): Promise<VoiceStatus
       inflight = null;
     });
   return inflight;
+}
+
+/** Whether "try a call" rings the demo phone (DEMO_PHONE set on the voice service). */
+export function getDemoCall(): boolean {
+  return demoCall;
+}
+
+/** Whether Brian rings back inside the app after a call (the voice service decides). */
+export function getCallbackWeb(): boolean {
+  return callbackWeb;
 }
 
 export function getVoiceStatus(): VoiceStatus {

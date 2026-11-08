@@ -259,6 +259,19 @@ export const Huddle = __t.object("Huddle", {
 });
 export type Huddle = __Infer<typeof Huddle>;
 
+export const IncomingCall = __t.object("IncomingCall", {
+  id: __t.string(),
+  householdId: __t.string(),
+  alertId: __t.string(),
+  title: __t.string(),
+  source: __t.string(),
+  status: __t.string(),
+  createdAt: __t.timestamp(),
+  expiresAt: __t.timestamp(),
+  answeredBy: __t.string(),
+});
+export type IncomingCall = __Infer<typeof IncomingCall>;
+
 export const KidJar = __t.object("KidJar", {
   memberId: __t.string(),
   householdId: __t.string(),

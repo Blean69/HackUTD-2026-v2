@@ -1,6 +1,7 @@
 // Live phone/voice calls: internal /phone/* routes for the Pipecat voice service (services/voice), see docs/voice-agent.md.
 // Importing this module registers the routes on the shared router; attachPhone(conn, deps) turns them on once the worker
 // is connected. They answer 503 until then, and always require the x-voice-secret header (VOICE_SHARED_SECRET).
+import { SpacetimeRingSource } from './ring.js';
 import type { WorkerSink } from '../agent/sink.js';
 import type { LLMClient } from '../llm/client.js';
 import type { DbConnection } from '../module_bindings/index.js';
@@ -48,6 +49,7 @@ export function attachPhone(conn: DbConnection, deps: AttachPhoneDeps): PhoneSer
   const service = new PhoneService({
     codes,
     alerts: new SpacetimeAlertSource(conn),
+    rings: new SpacetimeRingSource(conn),
     sink: deps.sink,
     registry: deps.registry,
     external: deps.external,

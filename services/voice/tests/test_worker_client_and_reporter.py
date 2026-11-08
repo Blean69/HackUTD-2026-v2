@@ -83,3 +83,16 @@ async def test_reporter_swallows_worker_errors():
     rep.set_run("run_1")
     rep.heard("hello")
     await rep.flush()  # must not raise
+
+
+async def test_ring_check_posts_household_and_call_once_and_never_retries():
+    seen = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append((req.url.path, json.loads(req.content)))
+        return httpx.Response(500, json={"error": "boom"})
+
+    c = client_for(handler)
+    with pytest.raises(WorkerError):
+        await c.ring_check("hh_rivera", "call_1")
+    assert seen == [("/phone/ring_check", {"household_id": "hh_rivera", "call_id": "call_1"})]  # one attempt: a ring is single use

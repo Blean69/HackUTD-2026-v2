@@ -73,6 +73,8 @@ const VOTING_TABLES = ["proposal", "vote"];
 const CREDIT_TABLES = ["credit_score", "credit_score_history"];
 /** Kids and teens (section 12). Same story: a module published before it has no such tables. */
 const KID_TABLES = ["kid_task", "kid_jar"];
+/** In-app calls from Brian (section 13). */
+const CALL_TABLES = ["incoming_call"];
 /** Shared cash numbers. A module published before them has no such tables: the UI then derives cash flow itself. */
 const CASH_TABLES = ["cash_flow", "cash_month"];
 
@@ -129,6 +131,10 @@ function supportsCash(conn: DbConnection): boolean {
   const db = conn.db as unknown as Record<string, unknown>;
   return !!db.cashFlow && !!db.cashMonth;
 }
+/** True when the module this browser is connected to has the call table. */
+function supportsCalls(conn: DbConnection): boolean {
+  return !!(conn.db as unknown as Record<string, unknown>).incomingCall;
+}
 /** Whether the live connection reads the module's credit tables (false in mock mode or against an older module). */
 export const liveCreditTables = (): boolean => !!liveConn && supportsCredit(liveConn);
 
@@ -180,6 +186,7 @@ function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () 
     wire(any.cashFlow, "cash_flow", M.mapCashFlow);
     wire(any.cashMonth, "cash_month", M.mapCashMonth);
   }
+  if (supportsCalls(conn)) wire((db as unknown as Record<string, unknown>).incomingCall, "incoming_call", M.mapIncomingCall);
   if (supportsCredit(conn)) {
     const any = db as unknown as Record<string, unknown>;
     wire(any.creditScore, "credit_score", M.mapCreditScore);
@@ -322,6 +329,8 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
   const voting = supportsVoting(conn);
   const credit = supportsCredit(conn);
   const kids = supportsKids(conn);
+  const calls = supportsCalls(conn);
+  const localCalls = calls ? null : (await import("./mock/calls")).createLocalCallActions(store);
   const cash = supportsCash(conn);
   const localKids = kids ? null : (await import("./mock/kids")).createLocalKidActions(store);
   // The stand-in is only loaded for a module without the voting tables, so the normal path does not ship it.
@@ -449,6 +458,11 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
     deleteKidTask: async (taskId) => (localKids ? localKids.deleteKidTask(taskId) : void (await r.deleteKidTask({ taskId }))),
     setKidGoal: async (householdId, memberId, title, target) => (localKids ? localKids.setKidGoal(householdId, memberId, title, target) : void (await r.setKidGoal({ householdId, memberId, title, target }))),
     redeemKidGoal: async (memberId) => (localKids ? localKids.redeemKidGoal(memberId) : void (await r.redeemKidGoal({ memberId }))),
+
+    requestBrianCall: async (householdId, alertId, title, source) => (localCalls ? localCalls.requestBrianCall(householdId, alertId, title, source) : void (await r.requestBrianCall({ householdId, alertId, title, source }))),
+    answerBrianCall: async (callId, displayName) => (localCalls ? localCalls.answerBrianCall(callId, displayName) : void (await r.answerBrianCall({ callId, displayName }))),
+    declineBrianCall: async (callId) => (localCalls ? localCalls.declineBrianCall(callId) : void (await r.declineBrianCall({ callId }))),
+    expireBrianCall: async (callId) => (localCalls ? localCalls.expireBrianCall(callId) : void (await r.expireBrianCall({ callId }))),
   };
 
   return {
@@ -462,7 +476,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       },
       subscribeRoomTables: (householdId, tables, onApplied) => {
         const id = safeId(householdId);
-        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)) && (kids || !KID_TABLES.includes(t)) && (cash || !CASH_TABLES.includes(t)));
+        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)) && (kids || !KID_TABLES.includes(t)) && (calls || !CALL_TABLES.includes(t)) && (cash || !CASH_TABLES.includes(t)));
         if (!wanted.length) {
           queueMicrotask(onApplied);
           return () => undefined;

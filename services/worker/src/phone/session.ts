@@ -16,6 +16,7 @@ import { buildBrief, familyLabel } from './brief.js';
 import { buildAlertCandidates, CALLBACK_ALERT_KINDS, CALLBACK_ALERT_PREFIX, type AlertSource, type AnomalyFinding, type CallbackAlertKind } from './callback.js';
 import type { PhoneConfig } from './config.js';
 import { PinChecker, type PinResult } from './identity.js';
+import { RingGate, type RingSource } from './ring.js';
 import { isPhoneTool, PHONE_TOOLS, voiceView } from './voice_view.js';
 
 export class PhoneError extends Error {
@@ -41,6 +42,8 @@ export interface PhoneDeps {
   codes?: PhoneCodeSource;
   /** The household's alert rows (for the callback's real signals). Optional: without it the callback uses rule hits and templates only. */
   alerts?: AlertSource;
+  /** The in-app ring rows (docs/contracts.md section 13), to verify a browser callback call. Optional: without it callback mode is refused. */
+  rings?: RingSource;
   now?: () => number;
   log?: (msg: string) => void;
 }
@@ -283,6 +286,13 @@ export class PhoneService {
     this.byCall.set(callId, runId);
     this.log(`[phone] call ${callId} started: run ${runId} (${family}, ${transport}); ${this.byRun.size} live`);
     return response;
+  }
+
+  // ---- in-app callback (docs/contracts.md section 13) ----------------------------------------------------------------------
+  private ringGate?: RingGate;
+  /** Did a phone in this household really answer this ring? Single use. The voice service asks before opening a browser call in callback mode. */
+  async ringCheck(householdId: string, callId: string): Promise<{ ok: boolean; reason?: string }> {
+    return (this.ringGate ??= new RingGate(this.d.rings)).check(clean(householdId, 80), clean(callId, 80));
   }
 
   // ---- callback (docs/contracts.md section 10) ---------------------------------------------------------------------------

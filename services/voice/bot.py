@@ -299,7 +299,7 @@ class VoiceCall:
             ),
         )
 
-        callback = init.callback if phone else None
+        callback = init.callback  # a callback is answered on the phone or in the app (docs/contracts.md sections 10 and 13)
         gate = None
         if phone and not callback:  # a callback is already unlocked: the signed token that brought it here is the proof
             gate = PinGate(verify=self._verify_pin, on_unlocked=self._on_pin_ok, on_locked=self._on_pin_locked, pin_length=s.pin_length)
@@ -646,6 +646,8 @@ class VoiceCall:
         """The opening line is already playing. Start the (traced) run, put the alert on the dashboard, then say it. The model only takes
         over for the caller's questions, so the alert is spoken even if the LLM is down."""
         plan = self.init.callback
+        if isinstance(plan, asyncio.Future):  # an in-app callback: the plan (the alert lookup) was started with the offer and finishes while the opening line plays
+            plan = await plan
         alert: alerts.CallbackAlert = plan.alert
         self.household_id, self.first_name, self.unlocked = plan.household_id, plan.first_name, True
         try:

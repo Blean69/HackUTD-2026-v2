@@ -70,3 +70,16 @@ export async function setKidGoal(householdId: string, memberId: string, title: s
 export async function redeemKidGoal(memberId: string) {
   return (await ensureBackend()).actions.redeemKidGoal(memberId);
 }
+
+export async function requestBrianCall(householdId: string, alertId: string, title: string, source: "alert" | "callback" | "demo") {
+  return (await ensureBackend()).actions.requestBrianCall(householdId, alertId, title, source);
+}
+export async function answerBrianCall(callId: string, displayName: string) {
+  return (await ensureBackend()).actions.answerBrianCall(callId, displayName);
+}
+export async function declineBrianCall(callId: string) {
+  return (await ensureBackend()).actions.declineBrianCall(callId);
+}
+export async function expireBrianCall(callId: string) {
+  return (await ensureBackend()).actions.expireBrianCall(callId);
+}

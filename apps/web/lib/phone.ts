@@ -8,7 +8,8 @@
  * team's SignalWire line, and an explicitly empty value hides every phone surface.
  */
 const RAW_NUMBER = process.env.NEXT_PUBLIC_PHONE_NUMBER;
-export const PHONE_NUMBER: string = normalizePhone(RAW_NUMBER === undefined ? "+18444681795" : RAW_NUMBER);
+// Calls to Brian start in the app (the Talk button, or an incoming call from him). A phone number only shows if the deployment sets one.
+export const PHONE_NUMBER: string = normalizePhone(RAW_NUMBER === undefined ? "" : RAW_NUMBER);
 
 /** Keep a leading + and the digits: "+1 (844) 468-1795" -> "+18444681795". "" when there is nothing usable. */
 export function normalizePhone(raw: string): string {

@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { dedupeGoals } from "@/lib/finance";
 import type {
-  AgentRun, Alert, CashFlow, CashMonthRow, HealthIndicator, KidJar, KidTask, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
+  AgentRun, Alert, CashFlow, CashMonthRow, HealthIndicator, IncomingCall, KidJar, KidTask, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
 import type { DataScope, RoomTable } from "./backend";
 import { useConnection } from "./connection";
@@ -202,6 +202,14 @@ export function useKidTasks(householdId: string): KidTask[] {
 export function useKidJars(householdId: string): Map<string, KidJar> {
   const rows = useRows("kid_jar");
   return useMemo(() => new Map(rows.filter((j) => j.household_id === householdId).map((j) => [j.member_id, j])), [rows, householdId]);
+}
+
+// ------------------------------------------------------------------ in-app calls
+
+/** This household's calls, newest first (register `useRoomTables(id, ["incoming_call"])` where you read them). */
+export function useIncomingCalls(householdId: string): IncomingCall[] {
+  const rows = useRows("incoming_call");
+  return useMemo(() => rows.filter((c) => c.household_id === householdId).sort((a, b) => b.created_at.localeCompare(a.created_at)), [rows, householdId]);
 }
 
 // ------------------------------------------------------------------ multiplayer

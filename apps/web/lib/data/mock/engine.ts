@@ -12,6 +12,7 @@ import type {
   Alert, Goal, Huddle, Presence, PresenceRole, Proposal, TraceEvent, TranscriptLine, Workflow,
 } from "@/lib/types";
 import { computeForecast, computeHealth, type MathCtx } from "./math";
+import { createLocalCallActions } from "./calls";
 import { createLocalKidActions } from "./kids";
 import { createLocalProposalActions, seedProposals } from "./proposals";
 import { buildSeed, type SeedHousehold } from "./seed";
@@ -170,6 +171,7 @@ class MockEngine {
       addAlert: (a) => {
         const alert: Alert = { id: rid("alert"), household_id: hid, severity: a.severity, kind: a.kind, title: a.title, detail: a.detail, related_ids: [], created_at: iso(), acknowledged_by: "" };
         st.upsert("alert", alert);
+        if (a.severity === "critical" && (a.kind === "scam" || a.kind === "fraud")) void createLocalCallActions(st).requestBrianCall(hid, alert.id, alert.title, "alert"); // what the module's alert hook does
       },
       purgeAndFinish: () => {},
       setScenario: () => {},
@@ -375,6 +377,7 @@ class MockEngine {
     castVote: (proposalId, choice, voterName) => this.proposals().castVote(proposalId, choice, voterName),
     closeProposal: (proposalId) => this.proposals().closeProposal(proposalId),
     ...createLocalKidActions(this.store),
+    ...createLocalCallActions(this.store),
 
     requestBankSync: async (hid) => {
       const conns = this.store.rows("bank_connection").filter((b) => b.household_id === hid);

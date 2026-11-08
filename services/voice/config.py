@@ -160,6 +160,8 @@ class Settings:
     signalwire_project_id: str = ""
     signalwire_api_token: str = ""
     callback_enabled: bool = True  # VOICE_CALLBACK_ENABLED (default 1)
+    demo_phone: str = ""  # DEMO_PHONE (E.164): the one number the in-app "try a call" buttons may ring for a demo. Local use only: leave unset in production
+    callback_web: bool = True  # VOICE_CALLBACK_WEB (default 1): Brian rings back inside the app (incoming call + browser call in callback mode); needs no phone line
     callback_secs: float = 15.0  # VOICE_CALLBACK_SECS: wait after the first call ends before dialling
     callback_ring_secs: int = 20  # VOICE_CALLBACK_RING_SECS: give up ringing after this long (also keeps most calls out of voicemail)
     callback_amd: str = "off"  # VOICE_CALLBACK_AMD: off | enable | detect_message_end (SignalWire answering-machine detection)
@@ -259,6 +261,8 @@ def load_settings() -> Settings:
         signalwire_project_id=_s("SIGNALWIRE_PROJECT_ID"),
         signalwire_api_token=_s("SIGNALWIRE_API_TOKEN"),
         callback_enabled=_s("VOICE_CALLBACK_ENABLED", "1") != "0",
+        demo_phone=_s("DEMO_PHONE"),
+        callback_web=_s("VOICE_CALLBACK_WEB", "1") != "0",
         callback_secs=max(0.0, _f("VOICE_CALLBACK_SECS", 15.0)),
         callback_ring_secs=max(0, _i("VOICE_CALLBACK_RING_SECS", 20)),
         callback_amd=_s("VOICE_CALLBACK_AMD", "off").lower() if _s("VOICE_CALLBACK_AMD", "off").lower() in ("off", "enable", "detect_message_end") else "off",

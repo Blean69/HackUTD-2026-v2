@@ -8,7 +8,7 @@ import type {
   Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, CreditProfile, CreditScore, CreditScoreHistory,
   Feasibility, ForecastPoint, Goal, GoalPriority, HealthIndicator, Household, Huddle, Member, Obligation, Presence, PresenceRole,
   Proposal, ProposalAnalysis, ProposalDetails, ProposalVerdict, Provider, Scenario, ScenarioResult, TraceEvent, TraceType,
-  Transaction, TranscriptLine, Vote, VoteChoice, Workflow, KidTask, KidJar, CashFlow, CashMonthRow,
+  Transaction, TranscriptLine, Vote, VoteChoice, Workflow, KidTask, KidJar, IncomingCall, CashFlow, CashMonthRow,
 } from "@/lib/types";
 
 interface TimestampLike {
@@ -166,6 +166,15 @@ export const mapKidTask = (r: B.KidTask): KidTask => ({
 export const mapKidJar = (r: B.KidJar): KidJar => ({
   member_id: r.memberId, household_id: r.householdId, balance: Number(r.balance), earned_total: Number(r.earnedTotal),
   goal_title: r.goalTitle, goal_target: Number(r.goalTarget), updated_at: iso(r.updatedAt),
+});
+
+// ---------------------------------------------------------------- in-app calls (contracts.md section 13)
+
+export const mapIncomingCall = (r: B.IncomingCall): IncomingCall => ({
+  id: r.id, household_id: r.householdId, alert_id: r.alertId, title: r.title,
+  source: (["alert", "callback", "demo"].includes(r.source) ? r.source : "demo") as IncomingCall["source"],
+  status: (["ringing", "answered", "declined", "missed"].includes(r.status) ? r.status : "missed") as IncomingCall["status"],
+  created_at: iso(r.createdAt), expires_at: iso(r.expiresAt), answered_by: r.answeredBy, seen_ms: Date.now(),
 });
 
 // ---------------------------------------------------------------- credit monitoring (contracts.md section 9)

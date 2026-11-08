@@ -104,6 +104,14 @@ export function registerPhoneRoutes(router: Router, getRuntime: () => PhoneRunti
   );
   router.add(
     'POST',
+    '/phone/ring_check',
+    guarded(async (svc, req) => {
+      const b = await readJson(req);
+      return json(200, await svc.ringCheck(str(b.household_id), str(b.call_id)));
+    }),
+  );
+  router.add(
+    'POST',
     '/phone/callback_alert',
     guarded(async (svc, req) => {
       const b = await readJson(req);

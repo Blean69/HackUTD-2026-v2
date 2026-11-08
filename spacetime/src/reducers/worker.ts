@@ -3,6 +3,7 @@ import { t } from 'spacetimedb/server';
 import spacetimedb from '../schema';
 import { effectiveWorkerHash, sameHex } from '../config';
 import { sha256Hex } from '../sha256';
+import { ring } from '../calls';
 import { cleanText, enqueueJob, fail, newId, requireHousehold, WORKFLOWS, type Ctx } from '../util';
 
 const ALERT_SEVERITIES = ['info', 'warn', 'critical'];
@@ -246,6 +247,8 @@ export const agent_create_alert = spacetimedb.reducer(
     }
     const id = a.id || newId(ctx, 'alt_', (x) => !!ctx.db.alert.id.find(x));
     ctx.db.alert.insert({ id, ...row, created_at: ctx.timestamp, acknowledged_by: '' });
+    // A brand-new critical scam or fraud alert from the agents rings the household in the app. Not the callback's own alert (the user is already on that call).
+    if (row.severity === 'critical' && (row.kind === 'scam' || row.kind === 'fraud') && !id.startsWith('callback:')) ring(ctx, row.household_id, id, row.title, 'alert');
   },
 );
 

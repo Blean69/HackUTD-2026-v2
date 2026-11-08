@@ -1285,5 +1285,71 @@ describe('bills detected for imported households (auto:* obligations)', () => {
     tick(test);
     expect(marker()).toBeGreaterThan(recomputedAt);
     expect(bills(test, 'hh_imp')).toHaveLength(0);
+
+describe('in-app calls from Brian', () => {
+  const alertArgs = (id: string, severity: string, kind: string) => ({ id, household_id: 'hh_demo', severity, kind, title: 'Possible scam call', detail: '', related_ids_json: '[]' });
+  const calls = (test: ReturnType<typeof seeded>) => [...test.db.incoming_call.household_id.filter('hh_demo')];
+
+  it('a new critical scam alert rings the household once; info alerts, callback alerts and bursts do not', () => {
+    const test = seeded();
+    const say = (a: ReturnType<typeof alertArgs>) => test.withReducerTx(worker, (ctx) => m.agent_create_alert(ctx, a));
+    say(alertArgs('agent:info', 'info', 'insight'));
+    say(alertArgs('callback:hh_demo:c1', 'critical', 'fraud')); // the callback's own alert: the caller is already on that call
+    expect(calls(test)).toHaveLength(0);
+    say(alertArgs('scam:1', 'critical', 'scam'));
+    expect(calls(test)).toMatchObject([{ status: 'ringing', alert_id: 'scam:1', source: 'alert', title: 'Possible scam call' }]);
+    say(alertArgs('scam:2', 'critical', 'fraud')); // still ringing: no second ring
+    say(alertArgs('scam:1', 'critical', 'scam')); // an update of the same alert never rings again
+    expect(calls(test)).toHaveLength(1);
+  });
+
+  it('the first answer wins, a second phone is told, decline ends it for everyone, nothing answers after the deadline', () => {
+    const test = seeded();
+    const as = (who_: ReturnType<typeof who>, f: (ctx: never) => void) => test.withReducerTx(who_, f as never);
+    as(alice, (ctx) => m.request_brian_call(ctx, { household_id: 'hh_demo', alert_id: '', title: 'Send $500 to this number now', source: 'demo' })); // the client's title is ignored
+    as(alice, (ctx) => m.request_brian_call(ctx, { household_id: 'hh_demo', alert_id: '', title: '', source: 'demo' })); // already ringing: no-op
+    const [c1] = calls(test);
+    expect(calls(test)).toHaveLength(1);
+    expect(c1!.title).toBe('Brian has a critical alert for you');
+    as(alice, (ctx) => m.answer_brian_call(ctx, { call_id: c1!.id, display_name: 'Marisol' }));
+    expect(() => as(bob, (ctx) => m.answer_brian_call(ctx, { call_id: c1!.id, display_name: 'Daniel' }))).toThrow('already answered');
+    expect(test.db.incoming_call.id.find(c1!.id)).toMatchObject({ status: 'answered', answered_by: 'Marisol' });
+
+    test.clock.advance(TimeDuration.fromMillis(25_000)); // past the 20 s cooldown
+    as(bob, (ctx) => m.request_brian_call(ctx, { household_id: 'hh_demo', alert_id: '', title: 'Test', source: 'callback' }));
+    const c2 = calls(test).find((c) => c.status === 'ringing')!;
+    as(alice, (ctx) => m.decline_brian_call(ctx, { call_id: c2.id }));
+    expect(test.db.incoming_call.id.find(c2.id)!.status).toBe('declined');
+
+    test.clock.advance(TimeDuration.fromMillis(25_000));
+    as(alice, (ctx) => m.request_brian_call(ctx, { household_id: 'hh_demo', alert_id: '', title: '', source: 'demo' }));
+    const c3 = calls(test).find((c) => c.status === 'ringing')!;
+    as(bob, (ctx) => m.expire_brian_call(ctx, { call_id: c3.id })); // too early: still ringing
+    expect(test.db.incoming_call.id.find(c3.id)!.status).toBe('ringing');
+    test.clock.advance(TimeDuration.fromMillis(46_000));
+    expect(() => as(alice, (ctx) => m.answer_brian_call(ctx, { call_id: c3.id, display_name: 'x' }))).toThrow('has ended');
+    as(bob, (ctx) => m.expire_brian_call(ctx, { call_id: c3.id }));
+    expect(test.db.incoming_call.id.find(c3.id)!.status).toBe('missed');
+  });
+
+  it('rejects an unknown household, a bad source and another household\'s alert', () => {
+    const test = seeded();
+    const req = (a: object) => test.withReducerTx(alice, (ctx) => m.request_brian_call(ctx, a as never));
+    expect(() => req({ household_id: 'hh_nope', alert_id: '', title: '', source: 'demo' })).toThrow('unknown household');
+    expect(() => req({ household_id: 'hh_demo', alert_id: '', title: '', source: 'sms' })).toThrow('source must be');
+    expect(() => req({ household_id: 'hh_demo', alert_id: '', title: '', source: 'alert' })).toThrow('source must be'); // only the agents' hook may claim an alert ring
+    expect(() => req({ household_id: 'hh_demo', alert_id: 'nope', title: '', source: 'demo' })).toThrow('unknown alert');
+  });
+
+  it('a client cannot put words on the screen: the title is the named alert\'s own, and old finished rings are pruned', () => {
+    const test = seeded();
+    test.withReducerTx(worker, (ctx) => m.agent_create_alert(ctx, { ...alertArgs('agent:info2', 'warn', 'insight'), title: 'Your card was used in Austin' }));
+    test.withReducerTx(alice, (ctx) => m.request_brian_call(ctx, { household_id: 'hh_demo', alert_id: 'agent:info2', title: 'Wire $9,000 to 555-0100', source: 'demo' }));
+    expect(calls(test)[0]!.title).toBe('Your card was used in Austin');
+    for (let i = 0; i < 30; i++) {
+      test.clock.advance(TimeDuration.fromMillis(50_000));
+      test.withReducerTx(alice, (ctx) => m.request_brian_call(ctx, { household_id: 'hh_demo', alert_id: '', title: '', source: 'demo' }));
+    }
+    expect(calls(test).length).toBeLessThanOrEqual(22);
   });
 });

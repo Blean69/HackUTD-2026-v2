@@ -1,8 +1,10 @@
 "use client";
+import { requestBrianCall } from "@/lib/data/actions";
 import { useSyncExternalStore } from "react";
 import type { BotOutputData, DeviceError, Participant, PipecatClient, RTVIEventCallbacks, RTVIMessage, TranscriptData, TransportState, UserInputData } from "@pipecat-ai/client-js";
 import { PRODUCT_NAME, VOICE_URL } from "@/lib/constants";
-import { checkVoice } from "./health";
+import { checkVoice, getCallbackWeb } from "./health";
+import { isNewSegment } from "./segments";
 import { exposeForDevTools, type MicProcessing } from "./audio";
 import { BOT_TAIL_MS, botStuckAfterMs, HOLD_FAILSAFE_MS, INTERRUPT_WINDOW_MS, micGateOpen, RELEASE_TAIL_MS } from "./gate";
 import { ConstrainedMicManager } from "./mediaManager";
@@ -190,6 +192,7 @@ let globalListeners = false;
 let captionSeq = 0;
 let sawUserInput = false;
 let sawBotOutput = false;
+const seenSegments = new Set<number | string>(); // spoken sentences already shown (the server repeats each one for every word spoken)
 let sawBotSentence = false;
 
 const flags = { userSpeaking: false, botSpeaking: false, thinking: false, thinkingAt: 0, userLoudAt: 0, botLoudAt: 0 };
@@ -251,6 +254,8 @@ async function refreshMic() {
 export interface StartArgs {
   householdId: string;
   displayName: string;
+  /** Set when this call answers an incoming call from Brian: the voice service opens in callback mode about this alert ("" = he picks one). */
+  callback?: { alertId: string; callId: string };
 }
 
 function envProblem(): CallErrorKind | null {
@@ -271,6 +276,7 @@ function fail(kind: CallErrorKind, detail?: string) {
  */
 export function startCall(args: StartArgs, opts?: { skipExplainer?: boolean }) {
   if (isCallActive()) return;
+  cancelRingBack();
   lastArgs = args;
   unlockAudio();
   const problem = envProblem();
@@ -297,6 +303,7 @@ async function connect(args: StartArgs) {
   transportStarted = false;
   deviceError = null;
   sawUserInput = sawBotOutput = sawBotSentence = false;
+  seenSegments.clear();
   Object.assign(flags, { userSpeaking: false, botSpeaking: false, thinking: false, thinkingAt: 0, userLoudAt: 0, botLoudAt: 0 });
   cbLevels.user = cbLevels.bot = levels.user = levels.bot = 0;
   resetGateTimers();
@@ -363,7 +370,7 @@ async function connect(args: StartArgs) {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
-      c.connect({ webrtcRequestParams: { endpoint: `${VOICE_URL}/api/offer`, requestData: { household_id: args.householdId, display_name: args.displayName } } }),
+      c.connect({ webrtcRequestParams: { endpoint: `${VOICE_URL}/api/offer`, requestData: { household_id: args.householdId, display_name: args.displayName, ...(args.callback ? { callback: true, alert_id: args.callback.alertId, call_id: args.callback.callId } : {}) } } }),
       new Promise<never>((_, reject) => {
         abortConnect = reject;
         timeout = setTimeout(() => reject(new ConnectTimeout(connected)), CONNECT_TIMEOUT_MS);
@@ -593,7 +600,7 @@ function callbacks(mine: number): RTVIEventCallbacks {
       const kind = d.output_type ?? d.aggregated_by ?? "sentence";
       if (kind === "sentence" || kind === "backchannel") {
         sawBotSentence = true;
-        pushBot(d.text, false);
+        if (isNewSegment(seenSegments, d as { segment_id?: number | string })) pushBot(d.text, false);
       } else if (kind === "word" && !sawBotSentence) {
         pushBot(d.text, true); // bots that only send word-level output
       }
@@ -648,6 +655,11 @@ function pushBot(raw: string, wordLevel: boolean) {
 const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 
 /** Must run inside the tap. Creates the one `<audio playsinline>` element and the AudioContext, and "plays" silence. */
+/** Unlock audio playback from inside a tap (browsers only allow it from a gesture). Call before any await. */
+export function unlockCallAudio() {
+  unlockAudio();
+}
+
 function unlockAudio() {
   try {
     if (!audioEl) {
@@ -809,6 +821,24 @@ export function toggleMute() {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ ring back
+// About 15 s after a real call ends, Brian "rings back" in the app with a critical alert (the app's version of the phone callback,
+// docs/contracts.md section 13). Not after a call that itself answered a ring, and not after a call that barely started.
+const RING_BACK_MS = 15_000;
+let ringBackTimer: ReturnType<typeof setTimeout> | undefined;
+
+function cancelRingBack() {
+  clearTimeout(ringBackTimer);
+  ringBackTimer = undefined;
+}
+
+function scheduleRingBack() {
+  cancelRingBack();
+  const args = lastArgs;
+  if (!args || args.callback || !getCallbackWeb() || !state.startedAt || Date.now() - state.startedAt < 8000) return;
+  ringBackTimer = setTimeout(() => void requestBrianCall(args.householdId, "", "", "callback").catch(() => undefined), RING_BACK_MS);
+}
+
 export function hangUp() {
   if (!isCallActive()) return;
   userHungUp = true;
@@ -825,6 +855,7 @@ async function endCall(reason: EndReason) {
   if (state.phase !== "live") return;
   const mine = attempt;
   set({ phase: "ended", endReason: reason, endedAt: Date.now(), activity: "idle", muted: false, soundBlocked: false, ...CALL_CONTROLS });
+  scheduleRingBack();
   await cleanup(mine);
 }
 

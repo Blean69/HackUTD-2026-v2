@@ -14,6 +14,8 @@ export type RoomTable =
   | "credit_score" | "credit_score_history"
   /** Kids and teens (contracts.md section 12). */
   | "kid_task" | "kid_jar"
+  /** In-app calls from Brian (contracts.md section 13). */
+  | "incoming_call"
   /** Shared cash numbers (cash_flow, cash_month): same rules as the savings-rate indicator. */
   | "cash_flow" | "cash_month"
   /** The steps of one agent run only: `trace_event@<run_id>`. Cheaper than the whole household's trace. */
@@ -68,6 +70,14 @@ export interface Actions {
   setKidGoal(householdId: string, memberId: string, title: string, target: number): Promise<void>;
   /** `redeem_kid_goal` — spend the jar on the goal once it is covered. */
   redeemKidGoal(memberId: string): Promise<void>;
+  /** `request_brian_call` — Brian "calls" the household in the app. alertId may be "" (he picks one when answered). A no-op while a ring is going. */
+  requestBrianCall(householdId: string, alertId: string, title: string, source: "alert" | "callback" | "demo"): Promise<void>;
+  /** `answer_brian_call` — rejects if someone else already answered or the ring ended. */
+  answerBrianCall(callId: string, displayName: string): Promise<void>;
+  /** `decline_brian_call` — ends the ring for everyone. */
+  declineBrianCall(callId: string): Promise<void>;
+  /** `expire_brian_call` — nobody answered in time. */
+  expireBrianCall(callId: string): Promise<void>;
 }
 
 export interface Backend {

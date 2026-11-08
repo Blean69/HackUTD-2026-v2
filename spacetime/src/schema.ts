@@ -379,6 +379,24 @@ const kid_jar = table(
   },
 );
 
+// --- In-app calls from Brian (docs/contracts.md section 13) -----------------------------------------------------------
+
+/** One ring: Brian is "calling" the household in the app. Every phone in the room shows it; the first answer or decline closes it for all. */
+const incoming_call = table(
+  { name: 'incoming_call', public: true },
+  {
+    id: t.string().primaryKey(),
+    household_id: t.string().index('btree'),
+    alert_id: t.string(), // the alert Brian is calling about ("" = he will pick one when answered)
+    title: t.string(), // one line shown on the incoming-call screen
+    source: t.string(), // alert (a new critical alert rang it) | callback (after an app call ended) | demo (someone pressed the button)
+    status: t.string(), // ringing | answered | declined | missed
+    created_at: t.timestamp(),
+    expires_at: t.timestamp(),
+    answered_by: t.string(), // display name of whoever answered, "" otherwise
+  },
+);
+
 // --- Plaid Sandbox (docs/contracts.md section 5) ------------------------------------------------------------------
 
 /** What the UI shows about a linked bank. Safe for clients: no tokens. */
@@ -599,6 +617,7 @@ const spacetimedb = schema({
   vote,
   kid_task,
   kid_jar,
+  incoming_call,
   agent_job,
   agent_run,
   trace_event,

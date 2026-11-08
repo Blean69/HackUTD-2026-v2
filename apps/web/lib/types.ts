@@ -468,3 +468,22 @@ export interface CashMonthRow {
   net: number;
   partial: boolean;
 }
+
+// ---------------------------------------------------------------- in-app calls from Brian (contracts.md section 13)
+
+export type CallStatus = "ringing" | "answered" | "declined" | "missed";
+/** Brian "calling" the household in the app. Every phone in the room rings; the first answer or decline closes it for all. */
+export interface IncomingCall {
+  id: string;
+  household_id: string;
+  /** The alert Brian is calling about ("" = he picks one when the call is answered). */
+  alert_id: string;
+  title: string;
+  source: "alert" | "callback" | "demo";
+  status: CallStatus;
+  created_at: string;
+  expires_at: string;
+  answered_by: string;
+  /** When THIS browser first saw the row (client-only). Ring time is measured from it, so a phone with a wrong clock still rings for the full length. */
+  seen_ms?: number;
+}

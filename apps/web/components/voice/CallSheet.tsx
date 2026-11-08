@@ -1,13 +1,15 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { callAboutAlert, placeDemoCall } from "@/lib/voiceCall/demoCall";
+import { useAlerts } from "@/lib/data/hooks";
 import { IconAlert, IconArrowRight, IconCheck, IconChevronDown, IconClose, IconLock, IconMic, IconMicOff, IconPhone, IconSpark } from "@/components/icons";
-import { Button, IconTile, LivePill, Spinner } from "@/components/ui";
+import { Avatar, Button, Disclosure as Details, IconTile, LivePill, Spinner, StatusDot } from "@/components/ui";
 import { VOICE_NAME } from "@/lib/constants";
 import { useLocalIdentity } from "@/lib/data/identity";
 import { cx } from "@/lib/format";
 import { openCoach } from "@/lib/traceUi";
-import { checkVoice, useVoiceStatus } from "@/lib/voiceCall/health";
+import { checkVoice, getDemoCall, useVoiceStatus } from "@/lib/voiceCall/health";
 import {
   closeCallSheet, enableSound, hangUp, interrupt, isCallActive, openCallSheet, pressTalk, releaseTalk, resetCall, retryCall, setHint, setPushToTalk,
   startCall, SUGGESTIONS, toggleMute, useCall,
@@ -324,32 +326,85 @@ function Captions({ captions, live }: { captions: Caption[]; live: boolean }) {
 
 // ------------------------------------------------------------------------------------------------ phases
 
+/**
+ * Try a call from Brian about one of the household's real open critical alerts (or one he finds). When the voice service has a demo phone
+ * configured, it rings that phone; otherwise (or with "Ring in the app instead") the whole room gets the in-app incoming call.
+ */
+function CallMe({ householdId }: { householdId: string }) {
+  // the household's open alerts, the same list as the bell: critical first, then warnings
+  const open = useAlerts(householdId).filter((a) => !a.acknowledged_by && (a.severity === "critical" || a.severity === "warn")).slice(0, 4);
+  const phone = getDemoCall();
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ring = (alertId: string, title: string) => {
+    void callAboutAlert(householdId, alertId, title);
+    closeCallSheet(); // the incoming-call screen takes over on every device in the room
+  };
+  const callPhone = async () => {
+    setBusy(true);
+    const r = await placeDemoCall(householdId, open[0]?.id ?? "");
+    setBusy(false);
+    setMsg(r.message);
+  };
+  return (
+    <div className="rounded-lg border border-line p-3">
+      <p className="text-label font-medium text-ink">Try a call from {VOICE_NAME}</p>
+      <p className="mt-0.5 text-caption text-ink-3">Pick an alert. He rings every phone and laptop in the room, inside the app.</p>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {open.map((a) => (
+          <Button key={a.id} variant="secondary" className="!h-auto min-h-9 justify-start !whitespace-normal py-2 text-left" onClick={() => ring(a.id, a.title)}>
+            <StatusDot tone={a.severity === "critical" ? "risk" : "watch"} /> <span className="min-w-0">{a.title}</span>
+          </Button>
+        ))}
+        {!open.length ? <p className="py-1 text-caption text-ink-3">No open alerts for this household right now.</p> : null}
+        <Button variant="ghost" className="justify-start" onClick={() => ring("", "")}>
+          <IconPhone size={16} /> An alert {VOICE_NAME} finds
+        </Button>
+      </div>
+      {phone ? (
+        <button type="button" disabled={busy} className="mt-2 text-caption font-medium text-brand-strong hover:underline disabled:opacity-50" onClick={() => void callPhone()}>
+          Call my phone number instead
+        </button>
+      ) : null}
+      {msg ? <p role="status" className="mt-2 text-caption text-ink-2">{msg}</p> : null}
+    </div>
+  );
+}
+
 function IdleView({ householdId, name }: { householdId: string; name: string }) {
   const call = useCall();
   const voice = useVoiceStatus();
-  if (voice === "down") return <ErrorView kind="offline" />;
+  if (voice === "down") return <><ErrorView kind="offline" /><div className="px-4 pb-4"><CallMe householdId={householdId} /></div></>; // the ring can still be previewed
   const start = () => startCall({ householdId, displayName: name });
   return (
-    <div className="space-y-4 p-4">
-      <p className="text-lead leading-snug text-ink">
-        Ask {VOICE_NAME} about your accounts, bills and big purchases. He answers out loud, and every step he takes shows up in the Agent Trail.
-      </p>
-      <div className="space-y-2.5">
-        <Button size="lg" className="w-full" onClick={start} data-autofocus><IconMic size={18} /> Start call</Button>
-        <Disclosure />
+    <div className="flex flex-col items-center px-5 pb-5 pt-6 text-center">
+      <Avatar name={VOICE_NAME} size={64} dot={voice === "up" ? "online" : undefined} />
+      <h3 className="display mt-3 text-h3">Ask {VOICE_NAME} about your money</h3>
+      <p className="mt-1 max-w-xs text-label text-ink-2">Accounts, bills and big purchases. He answers out loud.</p>
+      <Button size="lg" className="mt-5 w-full" onClick={start} data-autofocus><IconMic size={18} /> Start call</Button>
+
+      <div className="mt-5 w-full text-left">
+        <Prompts
+          label="Or start with"
+          active={call.hint}
+          onPick={(p) => {
+            setHint(p);
+            start();
+          }}
+        />
       </div>
-      <HoldToTalkToggle call={call} className="rounded-lg border border-line px-3.5 py-3" />
-      <Prompts
-        label="Or tap a question to start with"
-        active={call.hint}
-        onPick={(p) => {
-          setHint(p);
-          start();
-        }}
-      />
-      <p className="flex items-center gap-1.5 text-caption text-ink-3">
-        <span className={cx("h-2 w-2 rounded-full", voice === "up" ? "bg-good" : "bg-ink-3")} aria-hidden="true" />
-        {voice === "up" ? "Voice line is online" : "Checking the voice line…"}
+
+      <div className="mt-5 w-full border-t border-line pt-4 text-left">
+        <Details summary="More options">
+          <div className="space-y-3">
+            <HoldToTalkToggle call={call} className="rounded-lg border border-line px-3.5 py-3" />
+            <CallMe householdId={householdId} />
+          </div>
+        </Details>
+      </div>
+
+      <p className="mt-4 flex items-center gap-1.5 text-caption text-ink-3">
+        <IconLock size={13} className="shrink-0" /> AI assistant. Audio is processed live and not stored.
       </p>
     </div>
   );
@@ -421,13 +476,17 @@ function MicIndicator({ call }: { call: CallState }) {
 }
 
 /** "Noisy room? Hold to talk": a switch row. The preference is remembered (lib/voiceCall/prefs). */
-function HoldToTalkToggle({ call, className }: { call: CallState; className?: string }) {
+function HoldToTalkToggle({ call, className, compact }: { call: CallState; className?: string; compact?: boolean }) {
   const id = useId();
   return (
-    <div className={cx("flex items-center justify-between gap-3", className)}>
+    <div className={cx("flex items-center justify-between gap-3", compact && "justify-start gap-2", className)}>
       <label htmlFor={id} className="min-w-0 cursor-pointer">
-        <span className="block text-label font-medium text-ink">Noisy room? Hold to talk</span>
-        <span className="block text-caption text-ink-3">The mic only listens while you hold the button.</span>
+        {compact ? <span className="block text-caption font-medium text-ink-2">Hold to talk</span> : (
+          <>
+            <span className="block text-label font-medium text-ink">Noisy room? Hold to talk</span>
+            <span className="block text-caption text-ink-3">The mic only listens while you hold the button.</span>
+          </>
+        )}
       </label>
       <button
         id={id}
@@ -501,7 +560,7 @@ function LiveView({ call }: { call: CallState }) {
 
       <Captions captions={call.captions} live />
 
-      <div className="space-y-2.5 px-4 pb-1 pt-2">
+      <div className="hidden space-y-2.5 px-4 pb-1 pt-2 md:block">
         <Prompts label="Try saying" onPick={setHint} active={call.hint} row />
       </div>
     </div>
@@ -510,8 +569,7 @@ function LiveView({ call }: { call: CallState }) {
 
 function LiveFooter({ call }: { call: CallState }) {
   return (
-    <div className="space-y-3">
-      <HoldToTalkToggle call={call} />
+    <div className="space-y-2.5">
       {call.pushToTalk ? <HoldButton call={call} /> : null}
       <div className={cx("grid gap-2.5", call.pushToTalk ? "grid-cols-1" : "grid-cols-2")}>
         {call.pushToTalk ? null : (
@@ -523,11 +581,10 @@ function LiveFooter({ call }: { call: CallState }) {
           <IconPhone size={18} className="rotate-[135deg]" /> Hang up
         </Button>
       </div>
-      {call.runId ? (
-        <p className="text-center">
-          <RunLink runId={call.runId} onGo={closeCallSheet}>See what the agent is doing</RunLink>
-        </p>
-      ) : null}
+      <div className="flex items-center justify-between gap-3 text-caption">
+        <HoldToTalkToggle call={call} compact />
+        {call.runId ? <RunLink runId={call.runId} onGo={closeCallSheet}>Agent trail</RunLink> : null}
+      </div>
     </div>
   );
 }
