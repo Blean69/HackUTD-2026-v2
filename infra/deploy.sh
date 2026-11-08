@@ -157,8 +157,14 @@ db_name() { local n; n="$(envval SPACETIME_DB)"; printf '%s' "${n:-keystone}"; }
 
 publish_module() {
   command -v spacetime >/dev/null 2>&1 || die "--publish needs the spacetime CLI on this machine (it runs \`spacetime build\`); see DEPLOY.md step 3c"
+  # A fresh checkout or git worktree has no spacetime/node_modules, and the build needs them.
+  if [ ! -d "$ROOT/spacetime/node_modules" ]; then
+    log "Installing module dependencies (npm ci in spacetime/)"
+    ( cd "$ROOT/spacetime" && npm ci --no-audit --no-fund --loglevel=error ) || die "npm ci failed in spacetime/"
+  fi
   log "Building the module (spacetime build -p spacetime)"
   ( cd "$ROOT" && spacetime build -p spacetime ) 2>&1 | tail -n 3
+  [ "${PIPESTATUS[0]}" -eq 0 ] || die "spacetime build failed (see the lines above)"
   [ -f "$ROOT/spacetime/dist/bundle.js" ] || die "spacetime/dist/bundle.js was not produced by the build"
   log "Publishing $(db_name) from inside the spacetime container (non-breaking: add -c always yourself only for a wipe)"
   rsync -a -e "$RSYNC_SSH" "$ROOT/spacetime/dist/bundle.js" "$TARGET:/tmp/keystone-bundle.js"
