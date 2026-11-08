@@ -1,7 +1,6 @@
 # Tracks → how Brianotron wins each
 
 Paraphrased from the opening-ceremony slides (Nov 7, 2026). If anything here is wrong, ask a sponsor mentor.
-`{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is live.
 
 > **Verify first:** can one Devpost submission enter PNC + NVIDIA + Spacetime at the same time? Ask at the Help Desk
 > before the 11:00 PM initial Devpost deadline. (Spacetime's slide says you can enter both of *its* tracks; check the others.)
@@ -22,7 +21,7 @@ obligations, a "what if" simulator, or something nobody has thought of yet.
 
 | Their example | Our feature | Status | Evidence a judge can check |
 |---|---|---|---|
-| Whole picture across institutions | **Onboarding**: link a bank through Plaid Sandbox (one-tap demo bank, or Plaid Link) → choose accounts → answer questions → the dashboard fills itself → first insights | Sync verified; onboarding flow building | Plaid sync: 7 accounts, 331 transactions. Judge links the demo bank on their own phone at `{{URL}}/onboarding` and watches the dashboard fill. The demo bank is a Plaid Sandbox custom user [verify it exists and the one-tap path works] |
+| Whole picture across institutions | **Onboarding**: link a bank through Plaid Sandbox (one-tap demo bank, or Plaid Link) → choose accounts → answer questions → the dashboard fills itself → first insights | Sync verified; onboarding flow building | Plaid sync: 7 accounts, 331 transactions. Judge links the demo bank on their own phone at `https://brianotron.us/onboarding` and watches the dashboard fill. The demo bank is a Plaid Sandbox custom user [verify it exists and the one-tap path works] |
 | Conversational coach | **Ask Brianotron** panel: answers by calling tools on the family's own (synthetic) data | Verified (coach workflow); panel building | Every tool call is visible in the Agent Trail |
 | 3+ health indicators | **Eight** indicators computed in the database: liquidity runway, debt-to-income, credit utilization, savings rate, net-worth trend, emergency fund, forecast low point, credit score. (This file said six before; the module computes eight.) | Verified | Dashboard cards each carry a one-line explanation. Math is in `spacetime/src/finance.ts` |
 | Forecast balances & obligations | 90-day cash forecast with bills and loan payments marked, plus the low point | Verified | Riveras' low point lands around Dec 1 [verify on the live card]. Patel's room should show an overdraft alert when the forecast goes negative [verify] |
@@ -76,7 +75,7 @@ code on GitHub is required to win. Free Maincloud credit: code `HACKUTD2026` (on
 | Public source | https://github.com/Blean69/HackUTD-2026. No secrets in git; production worker secret is a hash set at publish time | [verify the repo is public before judging] |
 
 Checkable live: `spacetime sql -s aws keystone "SELECT workflow, status FROM agent_job WHERE household_id = 'hh_rivera'"`
-(set up the server once with `spacetime server add --url {{URL}} aws`; `keystone` is the database name). [verify it works from a non-team network]
+(set up the server once with `spacetime server add --url https://brianotron.us aws`; `keystone` is the database name). [verify it works from a non-team network]
 
 Judge pitch: *"Three phones, one family, zero backend code outside the database."*
 

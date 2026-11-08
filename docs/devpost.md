@@ -2,7 +2,6 @@
 
 **Fill-ins before pasting**
 
-- `{{URL}}`: `https://52-72-164-85.sslip.io` until the new domain is live.
 - `[verify]` marks a claim the repo docs do not confirm. Resolve or delete every one before the final submit (Sun 12:00 PM).
 - Features tagged *(shipping tonight)* must be cut from the text if they are not on the deployed build by then.
 - Ask at the Help Desk whether one submission can enter PNC, NVIDIA and Spacetime together. [verify]
@@ -109,13 +108,13 @@ SpacetimeDB 2.14.1 (TypeScript module, self-hosted) · NVIDIA Nemotron 3 Ultra �
 
 **PNC: 360° Financial Health Navigator.** A judge can link the demo bank on their own phone and watch the dashboard fill itself with accounts, eight health indicators and a 90-day forecast, then read the first insights Nemotron wrote. PNC listed a coach, health indicators, a forecast and a what-if simulator; each is a screen: Ask Brianotron, the Dashboard, the cash forecast, What-If Studio. The new parts are Table Mode (the family plans out loud, agents check it), the Family vote with an affordability verdict, and the Nguyens' scam check. Check the numbers on the Riveras: six institutions and a net worth of $344,800 on the seed. The forecast low point lands around December 1, when the mortgage and several other bills post together. [verify against the live card]
 
-**NVIDIA: Use Nemotron beyond a chatbot.** Most runs start without a chat message: finishing onboarding, ending a Table Mode session, creating a proposal, opening a sandbox. Open the Agent Trail and pick any run to see plan, tool calls, tool results and the decision, each with model, provider, latency and token counts. Nemotron 3 Ultra plans and calls tools, Nemotron 3.5 Lightning extracts structured fields, the tools reach FRED and College Scorecard, the `plaid_sync` workflow reaches Plaid Sandbox, and voice goes through NVIDIA ASR [verify ASR path tested live]. All five workflows pass on real Nemotron in 9 to 31 seconds. `{{URL}}/worker/health` lists the live providers and models. Qwen on tenvor.io is a labelled fallback, and our own Nemotron on NVIDIA Brev is configured as the tier with no shared rate limit. [verify `brev` appears as a provider in the trace]
+**NVIDIA: Use Nemotron beyond a chatbot.** Most runs start without a chat message: finishing onboarding, ending a Table Mode session, creating a proposal, opening a sandbox. Open the Agent Trail and pick any run to see plan, tool calls, tool results and the decision, each with model, provider, latency and token counts. Nemotron 3 Ultra plans and calls tools, Nemotron 3.5 Lightning extracts structured fields, the tools reach FRED and College Scorecard, the `plaid_sync` workflow reaches Plaid Sandbox, and voice goes through NVIDIA ASR [verify ASR path tested live]. All five workflows pass on real Nemotron in 9 to 31 seconds. `https://brianotron.us/worker/health` lists the live providers and models. Qwen on tenvor.io is a labelled fallback, and our own Nemotron on NVIDIA Brev is configured as the tier with no shared rate limit. [verify `brev` appears as a provider in the trace]
 
 **Spacetime: main track.** SpacetimeDB holds all application state. There is no other database and no REST data API. The health indicators, the 90-day forecast and the data-quality rules are reducers, a scheduled reducer recomputes them every minute, and the AI job queue is a table with an atomic `claim_job`. Presence, the Table Mode transcript, goal cards, votes, onboarding progress and agent trace events all sync to every phone as row updates. The worker is an ordinary SpacetimeDB client. Everything is in the public repo (`spacetime/src`): 32+ module tests run against a real in-memory datastore. We self-host SpacetimeDB 2.14.1 on EC2 instead of using Maincloud. [verify sponsors accept this]
 
 ## Try it: the 60-second judge path
 
-Phone, no account, no real data. Start at `{{URL}}/onboarding`. [verify route, that the questions can be skipped, and that this really takes 60 seconds on a phone]
+Phone, no account, no real data. Start at `https://brianotron.us/onboarding`. [verify route, that the questions can be skipped, and that this really takes 60 seconds on a phone]
 
 1. **0:00** Name your household and accept the consent screen (sandbox data only).
 2. **0:10** Tap **Use the demo bank**. Prefer the real flow? Tap **Link with Plaid** and sign in with `user_good` / `pass_good`, Plaid's public sandbox login.
@@ -125,7 +124,7 @@ Phone, no account, no real data. Start at `{{URL}}/onboarding`. [verify route, t
 
 Two more minutes:
 
-- Open `{{URL}}/me` for the Riveras' room. In **Table Mode**, play the sample conversation and watch goal cards land with feasibility chips.
+- Open `https://brianotron.us/me` for the Riveras' room. In **Table Mode**, play the sample conversation and watch goal cards land with feasibility chips.
 - Vote on the SBA loan proposal on the Dashboard. The tally moves on every phone, and the affordability verdict appears when the agent finishes.
 - In **What-If Studio**, tap "Open a second bakery location".
 - Switch to the Nguyens to see the scam alert tie a phone call to $2,000 of gift cards.

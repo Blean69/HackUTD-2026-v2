@@ -1,6 +1,5 @@
 # Demo script: 3 minutes per judge panel
 
-Fill-ins: `{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is live.
 `[verify]` marks a step or label to check on the deployed build before judging; fix the script, not the judge.
 
 Hand out the QR code first, so judges hold the app while we talk. Every path opens the same way (the onboarding opener),
@@ -11,7 +10,7 @@ Ask Brianotron (the coach panel). Code and tables still say `huddle`, so a Table
 Agent Trail and in SQL. Say so if a judge asks.
 
 **Where things are.** Side nav: Dashboard, Table Mode, What-If Studio, Goals, Credit, Analytics, Agent Trail. The Family voting
-card is on the Dashboard (and under Goals). `/me` opens the Riveras' room. Onboarding is `{{URL}}/onboarding`. [verify all labels after the redesign lands]
+card is on the Dashboard (and under Goals). `/me` opens the Riveras' room. Onboarding is `https://brianotron.us/onboarding`. [verify all labels after the redesign lands]
 
 ## Opener, all paths (0:00 to 0:55): a judge links the demo bank on their own phone
 
@@ -52,7 +51,7 @@ Angle: the database is the backend, and a family shares it live.
    spacetime sql -s aws keystone "SELECT voter_name, choice FROM vote WHERE proposal_id = 'prop_rivera_second_location'"
    spacetime sql -s aws keystone "SELECT COUNT(*) AS n FROM transcript_line WHERE household_id = 'hh_rivera'"
    ```
-   The last one returns 0: the transcript was purged after analysis. (`keystone` is the database name, not the product name. Set `aws` up once with `spacetime server add --url {{URL}} aws`. Run all three once from the venue Wi-Fi beforehand: the table names follow contracts.md section 6 and Caddy may block a laptop that is not in `ADMIN_IPS`. [verify])
+   The last one returns 0: the transcript was purged after analysis. (`keystone` is the database name, not the product name. Set `aws` up once with `spacetime server add --url https://brianotron.us aws`. Run all three once from the venue Wi-Fi beforehand: the table names follow contracts.md section 6 and Caddy may block a laptop that is not in `ADMIN_IPS`. [verify])
 5. **2:40** Kicker.
 
 ## NVIDIA path (Agent Trail on a big screen + a judge's phone)
@@ -74,7 +73,7 @@ Spare beats if a judge asks: open a Table Mode run and point at `goal_feasibilit
 
 ## If a judge asks
 
-- **"Is that really Nemotron?"** Each step has a provider and model badge, and `{{URL}}/worker/health` lists the live providers.
+- **"Is that really Nemotron?"** Each step has a provider and model badge, and `https://brianotron.us/worker/health` lists the live providers.
 - **"Is it always listening?"** No. Voice is an opt-in session with named consent and a visible recording indicator. The transcript is deleted after analysis; we keep goals and short evidence quotes.
 - **"Whose data is this?"** Synthetic households, plus a Plaid Sandbox bank. No real customer data anywhere.
 - **"What does the phone line do?"** Planned, not built: call a number, a voice explains the household's finances and runs a what-if. Same tools as the coach, traced in the Agent Trail, AI disclosure at the start of every call.
@@ -82,7 +81,7 @@ Spare beats if a judge asks: open a Table Mode run and point at `goal_feasibilit
 ## Demo hygiene
 
 - **Pre-warm** (the day of, on the deployed box, after the last redeploy):
-  1. `curl -s {{URL}}/worker/health | jq '{ok, spacetime, demo_mode, nvidia, jobs_run}'` must say `spacetime: connected`. Open the app on a phone off the team Wi-Fi: the header badge reads **Live**.
+  1. `curl -s https://brianotron.us/worker/health | jq '{ok, spacetime, demo_mode, nvidia, jobs_run}'` must say `spacetime: connected`. Open the app on a phone off the team Wi-Fi: the header badge reads **Live**.
   2. Run every canned input once, with the exact text you will use at the table: the Riveras' two sample Table Mode conversations, the Nguyens' conversation, "Open a second bakery location", the Nguyens' scam check, and each proposal you will vote on (SBA loan at minimum).
   3. Open each run in the Agent Trail and confirm the provider is `nvidia`. A worker with a real provider only replays runs a real model answered, so a run that fell back to `local` will not be reused. Rerun it.
   4. Replay each once more and check it finishes in 8 seconds or less with provider `cache`.
