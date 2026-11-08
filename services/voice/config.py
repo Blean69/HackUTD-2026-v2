@@ -107,7 +107,7 @@ class Settings:
     llm_base_url: str = "https://integrate.api.nvidia.com/v1"
     llm_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     llm_api_key: str = ""
-    llm_temperature: float = 0.7
+    llm_temperature: float = 0.5  # lower = sticks to the notes and tool results (0.7 invented figures under pushback)
     llm_top_p: float = 0.95
     llm_max_tokens: int = 80  # backstop against rambling, applied to PLAIN-TEXT replies only (about 55 spoken words); the prompt asks for ~30
     llm_api_max_tokens: int = 400  # what the API is allowed to generate: a tool call cut at 80 tokens is invalid JSON and silences the bot
@@ -214,7 +214,7 @@ def load_settings() -> Settings:
         llm_base_url=_s("VOICE_LLM_BASE_URL", "https://integrate.api.nvidia.com/v1"),
         llm_model=_s("VOICE_LLM_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b"),
         llm_api_key=_s("VOICE_LLM_API_KEY") or nvidia_key,
-        llm_temperature=_f("VOICE_LLM_TEMPERATURE", 0.7),
+        llm_temperature=_f("VOICE_LLM_TEMPERATURE", 0.5),
         llm_top_p=_f("VOICE_LLM_TOP_P", 0.95),
         llm_max_tokens=_i("VOICE_LLM_MAX_TOKENS", 80),
         llm_api_max_tokens=max(_i("VOICE_LLM_API_MAX_TOKENS", 400), _i("VOICE_LLM_MAX_TOKENS", 80)),

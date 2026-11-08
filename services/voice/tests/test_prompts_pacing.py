@@ -89,7 +89,7 @@ def test_brief_is_humanized_before_the_model_reads_it():
 
 
 def test_prompt_size_stays_modest():
-    assert len(prompt().split()) < 1100  # a 3B-active model follows a short prompt better (raised from 1000 for the humor examples)
+    assert len(prompt().split()) < 1250  # a 3B-active model follows a short prompt better (raised for the humor examples and grounding rules)
 
 
 def test_disclosure_is_brief_natural_and_complete():
@@ -173,3 +173,13 @@ def test_reset_starts_a_new_reply():
     assert cap.closed
     cap.reset()
     assert not cap.closed and cap.words == 0 and cap.allow("Hello there.")
+
+
+def test_prompt_grounds_every_figure_and_never_moves_money():
+    p = prompt()
+    assert "Never work out a new number yourself" in p and "call the tool first" in p
+    assert "don't just agree: call the tool" in p and "never say you checked unless you just got a tool result" in p
+    assert "You can't move money" in p and "never ask for passwords, PINs, codes or card numbers" in p
+    for line in (prompts.CALLBACK_OPENING, prompts.CALLBACK_VOICEMAIL):
+        assert "Brianotron" in line and "on your account" not in line  # the family's own app, not "your account"
+    assert "call me back" not in prompts.CALLBACK_VOICEMAIL.lower()  # a voicemail that asks for a callback is the scam pattern

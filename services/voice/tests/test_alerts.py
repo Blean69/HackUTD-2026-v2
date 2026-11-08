@@ -154,7 +154,7 @@ def test_the_script_has_the_alert_the_recommendation_a_dashboard_line_only_if_po
     ok, no = spoken_script(a, posted=True), spoken_script(a, posted=False)
     assert ok.startswith(a.statement) and a.action in ok and prompts.CALLBACK_DASHBOARD in ok and ok.endswith(prompts.CALLBACK_ASK)
     assert prompts.CALLBACK_DASHBOARD not in no and no.endswith(prompts.CALLBACK_ASK)  # never claims a dashboard entry that was not written
-    assert prompts.CALLBACK_OPENING == "Hi, it's Brian again, sorry to call right back. I've got a critical alert on your account."
+    assert prompts.CALLBACK_OPENING == "Hi, it's Brian again from your Brianotron app, calling back like I said I might. There's a critical alert on your dashboard."
 
 
 def test_the_spoken_text_survives_the_speech_normalizer_in_plain_words():

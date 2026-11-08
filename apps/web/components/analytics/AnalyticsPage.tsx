@@ -33,13 +33,15 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
   const spend = useMemo(() => spendingBreakdown(txns, today, 90, 8), [txns, today]);
   const sum = useMemo(() => cashSummary(cash), [cash]);
   const dti = health.find((h) => h.key === "debt_to_income");
+  // the household-health indicator (SpacetimeDB): same figure as the dashboard and Brian; card spending counted, own transfers not
+  const savingsRate = health.find((h) => h.key === "savings_rate")?.value ?? sum.savingsRate;
   const hasTrend = trend.rows.filter((r) => r.actual !== undefined).length > 1;
 
   const header = <PageHeader title="Analytics" sub="How the money moved over the last six months." />;
   if (!fin.ready) return <>{header}<AnalyticsSkeleton /></>;
 
   const netTone: Tone | undefined = sum.avgNet === null ? undefined : sum.avgNet < 0 ? "risk" : "good";
-  const srTone: Tone | undefined = sum.savingsRate === null ? undefined : sum.savingsRate >= 15 ? "good" : sum.savingsRate >= 5 ? "watch" : "risk";
+  const srTone: Tone | undefined = savingsRate === null ? undefined : savingsRate >= 15 ? "good" : savingsRate >= 5 ? "watch" : "risk";
 
   return (
     <>
@@ -55,10 +57,10 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
         <StatCard
           className={BENTO.quarter}
           label="Savings rate"
-          value={sum.savingsRate === null ? "n/a" : `${sum.savingsRate.toFixed(1)}%`}
+          value={savingsRate === null ? "n/a" : `${savingsRate.toFixed(1)}%`}
           tone={srTone}
           sub="of income kept after spending"
-          info="Net cash flow as a share of income over the completed months, from checking and savings activity."
+          info="What is left of a month's income after all spending, card purchases included, over the last 3 months. The same figure as the Household health card."
         />
         <StatCard
           className={BENTO.quarter}

@@ -183,7 +183,7 @@ def test_answering_machine_detection_hangs_up_or_leaves_only_a_private_message()
             return post_twiml(c, {"CallSid": "CAo", "From": OUR, "To": NUMBER, "AnsweredBy": answered_by}, query=f"cb={dial}")
 
         vm = hit("machine_end_beep")
-        assert "<Say>" in vm.text and "<Hangup/>" in vm.text and "<Connect>" not in vm.text and "critical alert" in vm.text
+        assert "<Say>" in vm.text and "<Hangup/>" in vm.text and "<Connect>" not in vm.text and "new alert on your dashboard" in vm.text
         assert not re.search(r"\$|\d", vm.text.split("<Response>")[1])  # no amounts, no card digits, nothing private on a voicemail
         assert len(m.store) == 0
         early = hit("machine_start")

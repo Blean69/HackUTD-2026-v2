@@ -26,15 +26,17 @@ function RingTile({ label, value, pct, tone, sub, i }: { label: string; value: R
   );
 }
 
-/** Savings rate, cash runway, and where the last 90 days went. Derived from the same rows as the rest of the dashboard. */
+/** Savings rate, cash runway, and where the last 90 days went. The two rings show the household-health indicators computed in
+ *  SpacetimeDB (the same numbers as the Household health card and Brian), so the dashboard never contradicts itself. */
 export function InsightCards({ fin }: { fin: RoomFinance }) {
-  const { cash, txns, today, accounts } = fin;
+  const { cash, txns, today, accounts, health } = fin;
   const sum = useMemo(() => cashSummary(cash), [cash]);
+  const indicator = (key: string) => health.find((h) => h.key === key)?.value ?? null;
   const spend = useMemo(() => spendingBreakdown(txns, today, 90, 5), [txns, today]);
   const liquid = accounts.filter((a) => a.type === "checking" || a.type === "savings").reduce((s, a) => s + a.balance, 0);
   const burn = spend.total / 3;
-  const runway = burn > 0 ? liquid / burn : null;
-  const sr = sum.savingsRate;
+  const runway = indicator("liquidity_runway") ?? (burn > 0 ? liquid / burn : null);
+  const sr = indicator("savings_rate") ?? sum.savingsRate;
   const srTone: Tone = sr === null ? "watch" : sr >= 15 ? "good" : sr >= 5 ? "watch" : "risk";
   const rwTone: Tone = runway === null ? "watch" : runway >= 6 ? "good" : runway >= 3 ? "watch" : "risk";
   const mood: MascotMood = srTone === "risk" || rwTone === "risk" ? "worried" : srTone === "good" && rwTone === "good" ? "cheer" : "happy";

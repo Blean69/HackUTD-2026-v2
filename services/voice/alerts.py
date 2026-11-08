@@ -66,7 +66,7 @@ def system_notes(alert: CallbackAlert, *, posted: bool = True) -> str:
         f"{facts}\n"
         "Those are the only details you have about it. If they ask for more (which store, which account, what to do), answer from them, from your tools "
         "(accounts, bills, forecast) and from the notes below; if you do not have a detail, say you are not sure and point them to the alert on their dashboard. "
-        "You cannot freeze a card or call the bank for them; you can only recommend it. When they are done, say a short goodbye."
+        "You cannot freeze a card, move money or call the bank for them; you can only recommend it, and never offer to do it. Never ask for a PIN, password, code or card number. When they are done, say a short goodbye."
     )
 
 

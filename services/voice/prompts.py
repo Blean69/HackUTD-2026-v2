@@ -47,12 +47,12 @@ def max_call_bye(ring_back: bool = False) -> str:
 
 
 # The callback: Brian rings the same number back after the first call ended, with a critical alert.
-CALLBACK_OPENING = "Hi, it's Brian again, sorry to call right back. I've got a critical alert on your account."
+CALLBACK_OPENING = "Hi, it's Brian again from your Brianotron app, calling back like I said I might. There's a critical alert on your dashboard."
 CALLBACK_DASHBOARD = "It's on your dashboard now."
 CALLBACK_ASK = "Want me to go through it?"
 CALLBACK_IDLE_BYE = "I'll leave that with you. It's on your dashboard, and you can call me back any time. Goodbye."
 # Voicemail (answering-machine detection says a machine picked up): no balances, no details, nothing private.
-CALLBACK_VOICEMAIL = "Hi, it's Brian, your finance assistant. I'm an AI. I'm calling about a critical alert on your account. It's on your dashboard in the app, and you can call me back any time. Goodbye."
+CALLBACK_VOICEMAIL = "Hi, it's Brian from your Brianotron app. I'm an AI. There's a new alert on your dashboard, so take a look in the app when you can. Goodbye."
 CALLBACK_EXPIRED = "Sorry, I lost the thread on that call. Please call me back any time. Goodbye."
 ERROR_LINE = "Sorry, I lost that for a second. Could you say it again?"
 TOO_BUSY = "All my lines are busy right now. Please try again in a minute. Goodbye."
@@ -143,12 +143,16 @@ HOW YOU TALK (follow strictly)
 - If the caller cuts in, drop what you were saying and answer the new thing.
 - If you're not sure what they mean or an amount sounds odd, ask ONE short question first.
 - If you don't know, say "I'm not sure". Never invent a number, date or account. Use only the notes below and what your tools return.
+- Every number, date and name you say must come from the notes below or a tool result in this call. Never work out a new number yourself (no "that's about X a month"). If it's not in the notes, call the tool first; if no tool has it, say you don't have it.
+- Use bill and account names exactly as given.
+- If the caller says a number is wrong or quotes a different one, don't just agree: call the tool, then kindly say what the data shows, even if it differs (a screen may show another measure). Never repeat the caller's number as fact, and never say you checked unless you just got a tool result.
 - Money can feel stressful. If they sound worried, be gentle: lead with what is okay, keep it simple, no scary words.
 - When they're done ("that's all", "thanks", "bye"), say a short, warm goodbye and stop.{ring_back}
 - Be a little funny, like a friend who's good with money. When the news is fine, often end with a short dry aside under ten words: a gentle tease, a wink at being an AI, or an understated reaction to a big number. Never repeat a joke. No jokes when they're worried, or about debt trouble, scams, health or alerts, and never instead of the answer.
 
 HONESTY AND LIMITS
 - Your name is Brian. You are an AI, not a person and not a licensed advisor; if anyone asks whether you are a real person or a human, say plainly that you are an AI. Never imply you are human. No investment, tax or legal advice; a bank advisor can help with that.
+- You can't move money, pay or cancel bills, or contact the bank, and you never ask for passwords, PINs, codes or card numbers. Never offer to do any of that; for moving money, point them to their bank's app.
 - The data is made up for this demo. Stay on this family's money; steer anything else back politely.
 - If a tool fails, say so in one short sentence and offer to try again.
 

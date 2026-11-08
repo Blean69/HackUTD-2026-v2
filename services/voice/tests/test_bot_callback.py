@@ -138,7 +138,7 @@ def test_goodbyes_mention_the_ring_back_only_when_a_callback_can_follow():
     with_hint = prompts.system_prompt(family="Rivera family", first_name="", brief=[], today="2026-11-07", channel="phone", may_ring_back=True)
     without = prompts.system_prompt(family="Rivera family", first_name="", brief=[], today="2026-11-07", channel="phone")
     assert "might ring them right back" in with_hint and prompts.RING_BACK in with_hint and "ring them right back" not in without
-    assert prompts.CALLBACK_OPENING.startswith("Hi, it's Brian again, sorry to call right back.")
+    assert prompts.CALLBACK_OPENING.startswith("Hi, it's Brian again from your Brianotron app")
 
 
 async def test_a_callback_call_has_no_pin_gate_and_its_goodbyes_do_not_promise_another_callback():

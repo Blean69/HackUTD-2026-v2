@@ -139,7 +139,7 @@ async def _probe_voice(client: httpx.AsyncClient, api_key: str, model: str, voic
 
 
 async def resolve_elevenlabs_voice(
-    api_key: str, model: str, configured: str = "", *, http: httpx.AsyncClient | None = None, ttl: float = 600.0, max_probes: int = 4
+    api_key: str, model: str, configured: str = "", *, http: httpx.AsyncClient | None = None, ttl: float = 120.0, max_probes: int = 4
 ) -> tuple[str, str] | None:
     """(voice_id, name) that works for this key and model, or None (caller falls back to Magpie). Cached for `ttl` seconds.
 
