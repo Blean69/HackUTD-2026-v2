@@ -165,7 +165,7 @@ function TrailBody({ householdId }: { householdId: string }) {
       />
 
       <p className="num mb-3 text-label text-ink-2" aria-label="Agent run totals">
-        <span className="figure text-lead text-ink">{all.length}</span> runs{provText ? <span className="text-ink-3"> · by provider: {provText}</span> : null}
+        <span className="figure text-lead text-ink">{all.length}</span> {all.length === 1 ? "run" : "runs"}{provText ? <span className="text-ink-3"> · by provider: {provText}</span> : null}
       </p>
 
       <div className="no-scrollbar -mx-4 mb-3 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Filter by workflow">

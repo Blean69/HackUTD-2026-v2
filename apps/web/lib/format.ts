@@ -57,7 +57,7 @@ export function duration(ms: number): string {
 }
 
 export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const parts = name.replace(/\([^)]*\)/g, " ").trim().split(/\s+/).filter((p) => /\p{L}|\d/u.test(p));
   if (!parts.length) return "?";
   if (parts.length > 1 && /^\d/.test(parts[parts.length - 1])) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();

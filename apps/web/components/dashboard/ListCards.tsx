@@ -180,7 +180,7 @@ export function GoalsCard({ goals, fin, householdId, className }: { goals: reado
             </li>
           );
         })}
-        {!shown.length ? <li className="px-4 py-2 text-label text-ink-3">No goals yet. Start Table Mode and the agents will find them.</li> : null}
+        {!shown.length ? <li className="px-4 py-2 text-label text-ink-3">No goals yet. <Link href={`/room/${householdId}/table`} className="font-medium text-brand-strong hover:underline">Play a sample conversation in Table Mode</Link> and the agents will find them.</li> : null}
       </ul>
     </Panel>
   );

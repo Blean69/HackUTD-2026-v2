@@ -214,7 +214,7 @@ export function CreditPage({ householdId }: { householdId: string }) {
             sub={v.history.length > 1 ? <span className="num">Low {lowest} · high {highest}</span> : undefined}
             className="col-span-12 md:col-span-7"
           >
-            <CreditTrend points={v.history} className="block w-full" />
+            <CreditTrend points={v.history} className="mx-auto block w-full max-w-[480px]" />
           </Panel>
 
           <Panel

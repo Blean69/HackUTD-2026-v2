@@ -55,7 +55,7 @@ export function RoomHeader({ householdId }: { householdId: string }) {
 
   return (
     <header className="flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6 md:pt-5">
-      <h1 className="display min-w-0 truncate text-[1.3rem] leading-tight text-ink sm:text-[1.5rem]">{household?.name ?? "Household"}</h1>
+      <h1 className="display min-w-0 truncate text-[1.3rem] leading-tight text-ink sm:text-[1.5rem]">{household?.name ? <><span className="sm:hidden">{household.name.replace(/ \(sandbox\)$/, "")}</span><span className="hidden sm:inline">{household.name}</span></> : "Household"}</h1>
       <div className="flex shrink-0 items-center gap-1.5">
         <People householdId={householdId} />
         <IconButton label="Add people to this room" onClick={() => setInviting(true)} className="h-7 w-7 rounded-full border border-dashed border-line-strong text-ink-3 hover:border-ink-3 hover:bg-surface">

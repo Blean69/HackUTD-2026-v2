@@ -237,7 +237,7 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
       {!ready ? (
         <Skeleton className="mt-3 h-64 !rounded-lg" />
       ) : (
-        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className={cx("mt-3 grid gap-3 lg:items-start", scenarios.length > 1 && "lg:grid-cols-[minmax(0,1fr)_320px]")}>
           <Panel id="whatif-result" title="Result">
             {selected ? (
               <Result s={selected} run={run} />

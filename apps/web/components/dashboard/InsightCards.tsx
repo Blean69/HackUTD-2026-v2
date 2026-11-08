@@ -15,7 +15,7 @@ import { cx, usd } from "@/lib/format";
 function RingTile({ label, value, pct, tone, sub, i }: { label: string; value: React.ReactNode; pct: number; tone: Tone; sub: string; i: number }) {
   const color = tone === "good" ? "var(--good)" : tone === "risk" ? "var(--risk)" : "var(--watch)";
   return (
-    <div className={cx("card motion-rise @container relative p-4 transition-transform duration-200 hover:-translate-y-0.5", BENTO.quarter)} style={{ ["--i" as string]: i }}>
+    <div className={cx("card motion-rise @container relative flex flex-col justify-center p-4 transition-transform duration-200 hover:-translate-y-0.5", BENTO.quarter)} style={{ ["--i" as string]: i }}>
       <div className="flex flex-col items-start gap-2.5 @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:gap-3">
         <Donut size={76} thickness={9} total={100} slices={[{ key: "v", value: Math.max(2, Math.min(100, pct)), color, label }]} label={`${label}: ${sub}`} />
         <div className="min-w-0">
