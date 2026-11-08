@@ -18,7 +18,9 @@ A live money room for the whole family. Plan together on every phone, or just ca
 
 ## Inspiration
 
-PNC asked for a 360° view of a household's financial health. Money sits in checking, savings, a 529, an IRA, a mortgage, a car loan and two cards, and nobody can see how the whole thing is doing or what to do next.
+Americans get fewer than half of basic money questions right: 47% in the 2026 TIAA Institute–GFLEC Personal Finance Index, the lowest in its ten years. Gen Z, our generation, scored 38%. The problem usually isn't a lack of advice. A family's money is scattered across checking, savings, a CD, an IRA, a mortgage, a car loan and a couple of cards at half a dozen institutions, and nobody can see how the whole thing is doing or what to do next.
+
+That is exactly PNC's challenge: a 360° Financial Health Navigator that helps people see the whole picture, understand it, and act with confidence.
 
 We added the part finance apps skip: a household is several people, and big money decisions happen out loud. At the dinner table, in the car, on the phone with a parent. Apps assume one person on one screen, so the family's real conversation never touches the numbers. We wanted one room where the whole family, and a team of AI agents, look at the same live numbers and plan together. And for the people in the family who will never open an app, a number they can just call.
 
@@ -39,6 +41,25 @@ The name is in memory of Brian. B.R.I.A.N. stands for "Be Rich In A Night", whic
 - **The Agent Trail.** Every plan, tool call, result, model and latency for every run, live. Nothing the AI does is hidden.
 
 All data is synthetic or Plaid Sandbox. There is no real customer information anywhere.
+
+## How it answers PNC's challenge
+
+PNC suggested a conversational coach, three or more health indicators, forecasting of balances and obligations, a what-if simulator, or something nobody has thought of yet. We built all four, then the something new.
+
+- **The whole picture.** Plaid Sandbox links a bank in one tap and maps everything into eight account types: checking, savings, CD, IRA, auto loan, personal loan, credit card and mortgage. Recurring payments are detected from the family's own transactions and become bills with amounts and due days, so nobody types their obligations in by hand.
+- **Health indicators: eight, not three.** Liquidity runway (months of cushion), emergency fund, debt-to-income, credit utilization, savings rate, net-worth trend, the 90-day low point and a simulated credit score. They roll up into a 0–100 household health score. Each comes with one plain sentence ("$40,109 in checking and savings covers 3.3 months of spending"). They're computed *inside the database* by scheduled reducers and recomputed whenever data changes, so the score is never stale.
+- **Forecasting balances and obligations.** A 90-day cash forecast that places every bill and loan payment on its date, with a best-to-worst band and the low point called out ("cash dips to about $40k on November 24 when the bills stack up"). Cash flow uses the same trailing-90-day numbers everywhere.
+- **What-if simulator.** Type a decision in plain words. A Nemotron agent turns it into a structured scenario (loan amount, rate from FRED, start month, cost cuts) and simulates it month by month for 12 to 24 months against the real balances. It returns a verdict (fine, tight, risky or not advised), the low point and a safer suggestion.
+- **Conversational coach, in two forms.** *Ask Brianotron* in the app, and *Brian* on the phone. Both answer by calling tools on the family's own data (26 tools: ledger, bills, forecast, simulator, savings finder, credit, scam detectors and more), not from a script.
+- **Something new.** Table Mode turns a dinner-table conversation into checked goals; family votes put an affordability check on every big purchase; Kids & Teens gives children chores, jars and a budget; a scam check links a suspicious call to the gift cards bought right after it.
+
+### What makes us different
+
+- **Built for a household, not one person on one screen.** Everyone joins the same live room from their own phone. A vote, a goal or a chore lands on every screen at once, and Table Mode works at the dinner table, where money decisions actually happen.
+- **It meets people where they are.** Not everyone in a family will open a finance app. Anyone can call Brian, hear the picture in plain words ("a little over three months of cushion", not "liquidity runway"), and get **called back** when something critical needs them.
+- **AI you can check.** Every agent step is visible in the Agent Trail. Every dollar figure in an answer is checked in code against the tool results before anyone sees it. Brian confirms every change out loud, never moves money, and never asks for codes or PINs.
+- **One source of truth.** Cash flow, health, forecast and bills are computed once in SpacetimeDB, so the dashboard, the agents and Brian always say the same number.
+- **It teaches by doing.** Every number explains itself in one sentence, and every what-if shows what would happen before the family commits. That's financial literacy built into the everyday picture, not a separate course.
 
 ## How we built it
 
@@ -105,7 +126,7 @@ We built it as a team working alongside Claude Code and Codex, against one bindi
   - Brev was the fix for latency. An L40S running Lightning in NVFP4 on vLLM gave Brian his own model with no shared limit.
   - Nemotron streaming ASR over gRPC plugged straight into Pipecat.
 - **Plaid Sandbox.** Custom sandbox users let us build realistic sample customers with months of history. Mapping Plaid's sign conventions and account subtypes took real work. The default transaction window silently clipped older history until we asked for 365 days.
-- **SignalWire.** A toll-free number, inbound calls and outbound callbacks through a familiar LaML API, with signed webhooks, all quick to set up. Failed outbound calls come back from the API without an error code, which made debugging harder.
+- **SignalWire.** A toll-free number, inbound calls and outbound callbacks through a familiar LaML API, with signed webhooks, all quick to set up. One snag: after a teammate's burst of test calls, our toll-free number hit an outbound throttle ("exceeded outbound call rate") that isn't in the rate-limit docs, which say over-limit calls queue. Through the API the failed calls carried no error code. We added a second number for callbacks.
 - **ElevenLabs.** The Brian voice is great. Its moderation catching our callback script was annoying in the moment, but it made the product safer.
 - **Pipecat.** Made the voice pipeline composable (VAD, turn detection, barge-in, function calls) in Python.
 - **Agentic coding (Claude Code, Codex).** We gave the coding agents one contracts doc and an AGENTS.md of hard rules: no secrets in git, synthetic data only, never touch the shared demo room. Then we ran them in parallel worktrees. Overnight they ran judge-style UX audits, verified fixes end to end on production in private copies, and produced our demo video in Remotion. The lesson: agents go fast when they have a way to check their own work (tests, live checks) and clear lines they can't cross.
