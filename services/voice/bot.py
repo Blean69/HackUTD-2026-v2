@@ -20,7 +20,7 @@ from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame, EndFrame, Frame, FunctionCallsStartedFrame, InterruptionFrame, LLMFullResponseEndFrame, LLMFullResponseStartFrame, LLMTextFrame, MetricsFrame, TTSSpeakFrame
+from pipecat.frames.frames import FunctionCallResultProperties, TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame, EndFrame, Frame, FunctionCallsStartedFrame, InterruptionFrame, LLMFullResponseEndFrame, LLMFullResponseStartFrame, LLMTextFrame, MetricsFrame, TTSSpeakFrame
 from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -716,6 +716,19 @@ class VoiceCall:
             await params.result_callback({"error": "The tool is not available right now. Tell the caller briefly and offer to try again."})
             return
         logger.info(f"tool {name} {round((time.monotonic() - t0) * 1000)} ms ok={res.get('ok')}")
+        result = res.get("result") if res.get("ok") else None
+        ask = result.get("ask") if isinstance(result, dict) and result.get("done") is False else None
+        if isinstance(ask, str) and ask.strip():
+            # An app-changing tool wants a spoken yes first (tools/confirm.ts in the worker). Say its question word for word: a
+            # small model paraphrased or skipped it, and then the caller's "yes" had nothing to confirm. The question stays in the
+            # context, so the next "yes" calls the tool again with confirmed true; the model is not run again for this turn.
+            await params.llm.push_frame(TTSSpeakFrame(ask.strip(), append_to_context=True))
+            self.reporter.note("Asked the caller to confirm before changing the app", tool=name, ask=ask.strip())
+            await params.result_callback(
+                {**result, "note": "You just asked the caller this question out loud. Wait for their answer; on a yes, call the tool again with confirmed true."},
+                properties=FunctionCallResultProperties(run_llm=False),
+            )
+            return
         if res.get("ok"):
             await params.result_callback(res["result"])
         else:
