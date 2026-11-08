@@ -1,132 +1,125 @@
-# Devpost submission draft
+# Devpost submission (paste-ready)
 
-**Fill-ins before pasting**
+Four Devpost fields, in the order the form asks for them. Final submit: Sunday 12:00 PM.
 
-- `[verify]` marks a claim the repo docs do not confirm. Resolve or delete every one before the final submit (Sun 12:00 PM).
-- Features tagged *(shipping tonight)* must be cut from the text if they are not on the deployed build by then.
-- Ask at the Help Desk whether one submission can enter PNC, NVIDIA and Spacetime together. [verify]
-- Repo: https://github.com/Blean69/HackUTD-2026. It must be public before judging (Spacetime rule). [verify]
-- Video link: add it where Devpost asks. [verify whether a video is required]
+- Repo (public): https://github.com/Blean69/HackUTD-2026-v2
+- Live: https://brianotron.us · Brian's line: +1 (844) 468-1795
+- Video: upload `brianotron-demo-v2.mp4` (1:54, under the 2-minute cap) to YouTube and paste the link.
 
 ---
 
-## Title
+## Elevator pitch
 
-Brianotron
-
-## Tagline (159 characters)
-
-A live money room for the whole family: link a bank, then plan, vote and run what-ifs together while Nemotron agents check every idea against the real numbers.
-
-## Initial submission, 11 PM (short version)
-
-Brianotron is a shared financial room: a family links a bank, sees every account, health indicator and 90-day cash forecast in one place, and plans together on their own phones. Nemotron agents plan, call tools and check each goal, what-if and scam signal against the real balances, and every step shows up in an Agent Trail. All state, the AI job queue and the finance math run in SpacetimeDB, self-hosted on one EC2 box, and the code is public at https://github.com/Blean69/HackUTD-2026. [verify public]
+A live money room for the whole family. Plan together on every phone, or just call Brian, the AI who checks every idea against your real numbers and calls you back when something needs you.
 
 ---
+
+## About the project
 
 ## Inspiration
 
-PNC's challenge describes a common problem. Money sits in checking, savings, CDs, an IRA, loans, cards and a mortgage, and nobody can see how the whole thing is doing or what to do next.
+PNC asked for a 360° view of a household's financial health. Money sits in checking, savings, a 529, an IRA, a mortgage, a car loan and two cards, and nobody can see how the whole thing is doing or what to do next.
 
-We added a second problem. A household has several people in it, and big money decisions get made out loud: at the dinner table, in the car, on a call with a parent. Finance apps usually assume one person on one screen, so the family's real conversation never touches the numbers.
+We added the part finance apps skip: a household is several people, and big money decisions happen out loud. At the dinner table, in the car, on the phone with a parent. Apps assume one person on one screen, so the family's real conversation never touches the numbers. We wanted one room where the whole family, and a team of AI agents, look at the same live numbers and plan together. And for the people in the family who will never open an app, a number they can just call.
 
-Then there is the call nobody plans for. In our synthetic data, a retired couple, the Nguyens, get a call from a "grandson in jail" and buy $2,000 of gift cards before anyone else in the family hears about it. We wanted a place where a plan, a purchase or a worry gets checked against the real accounts while the family is still in the room.
+The name is in memory of Brian. B.R.I.A.N. stands for "Be Rich In A Night", which is exactly the plan Brian will talk you out of.
 
 ## What it does
 
-Brianotron is one live space that a family and a team of Nemotron agents share.
+**Brianotron is one live, shared financial room for a family.**
 
-- **Onboarding.** Link a bank through Plaid (Sandbox), choose which accounts to import, and answer a few questions while the sync runs. The dashboard fills itself and Nemotron writes the first three to five insights in plain English. *(shipping tonight)*
-- **Dashboard.** Accounts across eight account types (checking, savings, CD, IRA, auto loan, personal loan, credit card, mortgage), eight health indicators with a one-line explanation each, and a 90-day cash forecast with bills and loan payments marked and the low point called out. The math runs inside the database.
-- **Table Mode.** The family opts in, talks (or plays a sample conversation, or types), and every phone shows the same live transcript. When they end it, Nemotron pulls out the goals, checks each one against the real balances, and posts goal cards with a feasibility chip to every screen. The transcript is then deleted; we keep the goals and a short evidence quote. Voice is opt-in per session with named consent and a visible recording indicator. Transcription uses NVIDIA ASR with browser speech as the fallback. [verify ASR path tested live]
-- **Family vote.** Anyone proposes a purchase or a decision. Everyone votes from their own phone, the tally updates live, and an agent attaches an affordability check with a verdict of fine, tight or risky. *(shipping tonight)*
-- **What-If Studio.** Type a scenario in plain words ("open a second bakery location"). An agent turns it into a structured scenario, runs the simulator over 12 to 24 months, and shares the verdict, the low point and a suggestion with the whole family.
-- **Scam check and data quality.** Rules inside the database catch duplicates, garbled merchants, impossible values and card testing. Agents link the Nguyens' "grandson in jail" call to the $2,000 of gift cards.
-- **Agent Trail.** Every plan, tool call, result, model, provider, latency and token count for every run, streaming live from every session.
-- **Ask Brianotron.** A coach panel that answers by calling tools on the family's own data, with each call visible in the trail.
-- **Credit monitoring.** A simulated 300–850 score per family member, mostly driven by the household's financial health, with the factors explained, a 6-month trend and alerts on big moves.
-- **Brian calls you back.** About 15 seconds after a phone call, Brian rings back with a critical alert from your own accounts and stays on the line.
+- **Link a bank in one tap.** Plaid Sandbox brings in the accounts and months of transactions. Bills are detected from the family's own recurring payments, and the dashboard scores their financial health right away.
+- **The 360° dashboard.** Net worth, assets and debts, monthly cash flow, eight health indicators, and a 90-day cash forecast with the low point called out. Plus Analytics, a simulated credit score per family member, and Goals. One number for each thing, computed once in the database, so every screen, agent and voice says the same figure.
+- **Live on every phone.** Family members join the room from their own phones. A vote, a goal or an agent result shows up everywhere at once.
+- **Table Mode.** The family talks it out; every phone shows the transcript. When they finish, Nemotron agents pull out the goals, check each one against the real balances, and post goal cards marked On track, Stretch or Not advised. Then the transcript is deleted. Gambling is never a plan.
+- **What-If Studio and family votes.** "Open a second bakery location" becomes a structured scenario, simulated month by month, with a verdict (fine, tight, risky or not advised) before anyone signs anything.
+- **Kids & Teens.** Chores, allowance jars and a teen budget and loan planner.
+- **Ask Brianotron.** Answers come from tool calls on the family's own data, and every dollar figure is checked against those results before you see it.
+- **Brian, the voice.** Tap Talk in the app, or call +1 (844) 468-1795 and enter the family's 5-digit code. Brian says up front that he's an AI. He answers in plain words, finds bills you could cut, and can do most of what you'd do by hand: add a chore, put money in a kid's jar, create a goal, save a what-if. He confirms every change out loud first, and the code enforces that confirmation. About 15 seconds after you hang up, if there's a critical alert, **Brian calls you back.** He never asks for codes, PINs or money.
+- **The Agent Trail.** Every plan, tool call, result, model and latency for every run, live. Nothing the AI does is hidden.
 
 All data is synthetic or Plaid Sandbox. There is no real customer information anywhere.
 
 ## How we built it
 
-**SpacetimeDB is the backend.** One TypeScript module (`spacetimedb` 2.14.1) holds every table: households, accounts, transactions, goals, proposals, votes, presence, the agent job queue and the trace log. The health indicators, the 90-day forecast and the data-quality rules are reducers, and a scheduled reducer recomputes them every 60 seconds. The browser subscribes to tables and calls reducers. It never asks an API server for data.
+**SpacetimeDB is the whole backend.** One TypeScript module (SpacetimeDB 2.14.1, self-hosted) holds every table: households, accounts, transactions, goals, votes, presence, the agent job queue and the trace log. Reducers are the API. The health indicators, the 90-day forecast, cash flow, bill detection and the data-quality rules run *inside* the database on a schedule. Phones subscribe to tables and get every change pushed to them. There is no separate database and no REST API for data.
 
-**Agents are a queue, not a chat box.** Reducers enqueue `agent_job` rows when a Table Mode session ends, a proposal is created, a what-if is requested or onboarding finishes. A Node worker, which is just another SpacetimeDB client, claims a job atomically and runs a multi-step workflow on a hand-rolled tool loop: write a plan, call tools, read the results, decide, write the outcome back through worker-only reducers. Every step is a `trace_event` row, so every phone sees it as it happens.
+**Agents are a job queue, not a chat box.** Reducers enqueue `agent_job` rows when a Table Mode session ends, a vote opens, a what-if is asked or a bank finishes syncing. A Node worker, which is just another SpacetimeDB client, claims each job atomically. It runs a hand-rolled tool loop: plan, call tools (26 of them: ledger, forecast, simulator, feasibility, savings finder, scam detectors, FRED rates, College Scorecard and more), observe, decide. Then it writes back through worker-only reducers. Every step is a `trace_event` row, so the Agent Trail streams live for free.
 
-**Two Nemotron models, each in the job it fits.** Nemotron 3 Ultra plans and calls tools. Nemotron 3.5 Lightning does structured extraction through a forced tool call checked against a schema, with one retry. The tools are ledger queries, forecast, scenario simulator, goal feasibility, anomaly and scam detectors, FRED interest rates and College Scorecard tuition data. A separate workflow syncs Plaid.
+**Nemotron, each model where it fits.**
+- **Nemotron 3 Ultra** (550B) plans and calls tools for the agent team.
+- **Nemotron 3.5 Lightning** (30B-A3B) handles the fast steps and structured extraction.
+- For Brian's voice, Lightning runs **self-hosted on an NVIDIA L40S via Brev** (vLLM, NVFP4), which removes the shared rate limit and keeps responses quick.
+- **Nemotron streaming ASR** (NVIDIA cloud) turns speech into text.
 
-**Failover that says what happened.** The worker rate-limits itself to stay under NVIDIA's free tier, waits out a 429, then moves down a list: NVIDIA Brev self-hosted Nemotron (configured as the no-rate-limit tier), Qwen on tenvor.io, and last, keyless local rules. Every trace event records the provider and model that answered. A Qwen answer is badged Qwen. An identical earlier input can be replayed from cache with realistic timing, and the badge says `cache`.
+Every trace event records which model and provider answered. A fallback is labelled, never silent.
 
-**Data.** A seeded Python generator makes five synthetic families with 2,918 transactions, 41 of them labelled anomalies. The labels never reach the math: the module has no field for them, and a test flips every label and checks that nothing changes. Plaid Sandbox supplies real bank-API data.
+**Guardrails in code, not just prompts.**
+- A grounding check rejects any answer containing a dollar figure or percentage that isn't in the tool results, and rewrites it from the data. The trace shows "Check: 24 of 24 figures match".
+- An advice reviewer blocks moving money, gambling and plans the family can't afford.
+- Voice actions are confirm-first.
+- Credit scores are always labelled simulated.
 
-**Deploy.** One EC2 t3.medium runs Docker Compose with Caddy (HTTPS), the Next.js app, the Node worker and a self-hosted SpacetimeDB 2.14.1. The repo is public, so the production worker secret is a hash set at publish time and never lives in source, and Caddy only allows publishing from the team's IP. We built it with Codex and Claude Code in parallel, against generated TypeScript bindings and a shared contracts doc.
+**Voice.** Python + Pipecat: Silero VAD, Smart Turn and barge-in. SignalWire for the phone line, WebRTC for the in-app Talk button, ElevenLabs for Brian's voice. The voice service calls the same worker tools as the agents.
+
+**Deploy.** One EC2 t3.medium runs Docker Compose with Caddy (Let's Encrypt), the Next.js app, the worker, the voice service and self-hosted SpacetimeDB at brianotron.us. Every merge to main deploys itself within a minute: the database module publishes first, then the services, with health checks and automatic rollback. Over 1,000 automated tests cover the module, worker and voice service.
+
+We built it as a team working alongside Claude Code and Codex, against one binding contracts doc so people and agents could work in parallel without breaking each other.
 
 ## Challenges we ran into
 
-- **Rate limits.** NVIDIA's free tier allows about 40 requests a minute, and a hall of judges starts a lot of runs. We added a request limiter, backoff on 429, failover, and cache replay for identical inputs, and kept the labels honest at each step.
-- **The right model for each job.** Nemotron 3 Ultra's model card lists structured output as unsupported, and the Super model we planned around returned 404 for our key. So Ultra plans, and Lightning extracts through a forced tool call with schema validation.
-- **Deterministic reducers.** A module cannot call a model or fetch a URL, so every LLM and Plaid call lives in the worker and comes back through reducers. The module runtime also has no synchronous crypto, so we wrote SHA-256 ourselves and tested it against `node:crypto`.
-- **Detectors that do not cheat.** It is easy to score well by reading the answer key. Ours cannot see it, and the measurements below come from that setup.
-- **A public repo with a real deployment.** The module ships with a public dev secret for tests. Production overrides it with a hash set by an admin-only reducer.
-- **Voice and privacy.** Bank judges will ask whether we are always listening. We are not: sessions are opt-in, consent is named, and the transcript is deleted after analysis.
-- **Plaid's data shape.** Plaid's sign conventions and account subtypes do not match ours. We map them to our eight types and call Nemotron only for the ambiguous ones.
-
-## Accomplishments that we're proud of
-
-- All five agent workflows pass on real Nemotron in 9 to 31 seconds: Table Mode, what-if, coach, scam check and data quality.
-- In-database rules caught card testing 7 of 7, garbled merchants 10 of 10, impossible values 3 of 3 and duplicates 10 of 11, with zero false positives on the seed.
-- The scam check links the Nguyens' "grandson in jail" call to $2,000 of gift cards, four $500 purchases in one afternoon.
-- Plaid Sandbox sync verified end to end: 7 accounts and 331 transactions.
-- 2,918 synthetic transactions across five families, with 41 planted anomalies we can measure against.
-- Tests: 32+ in the SpacetimeDB module (run against a real in-memory datastore) and 138 in the worker.
-- The whole stack, self-hosted SpacetimeDB included, runs on one t3.medium, roughly $1.15 a day.
-- Every trace step names the model and provider that produced it, including when that is not Nemotron.
+- **The model made up numbers.** Early on, Nemotron sometimes invented figures, and three screens showed three different "monthly surplus" numbers. We moved every cash number into one table computed in the database. We also made the grounding check mandatory, so an unbacked figure gets rewritten before anyone sees it.
+- **Voice latency.** A shared API endpoint is too slow for a phone call. We self-hosted Lightning in NVFP4 on a Brev L40S and keep it warm between calls.
+- **An AI that calls you sounds like a scam.** ElevenLabs' moderation flagged one of our early callback scripts. Fair: "there's a critical alert on your account" is exactly what a scammer says. We rewrote it so Brian always says he's an AI from your app (not your bank), and never asks for codes, PINs or money.
+- **Letting an AI change things safely.** Brian once put money in a kid's jar before the caller said yes. Now every write needs a spoken confirmation, enforced in code rather than the prompt.
+- **Rate limits with a hall full of judges.** NVIDIA's free tier is about 40 requests a minute. We added a limiter, backoff, labelled failover and replay of identical earlier runs.
+- **Deterministic reducers.** A module can't call a model or fetch a URL, and has no synchronous crypto. All model and Plaid calls live in the worker, and we wrote SHA-256 ourselves.
+- **One demo room, many judges.** "Use the demo account" now gives every visitor a private copy of the demo family, so nobody steps on anybody else's demo.
 
 ## What we learned
 
-- **A table is a good job queue.** Enqueue a row, claim it atomically, and stream results back as rows. Live trace streaming came free with subscriptions.
-- **Show the plan.** Making every run visible changed what we built. Each step has to be a one-line human sentence, or nobody reads it.
-- **Measure against planted ground truth.** One miss in duplicate detection (10 of 11) is on the table, not hidden.
-- **Say which model answered.** Fallbacks are fine. Silent fallbacks are not.
-- **Write the contracts first.** A binding doc for tables, reducers and trace events let several agents and people build in parallel without breaking each other.
+- **A table is a great job queue.** Enqueue a row, claim it atomically, stream results back as rows. Live progress came free with subscriptions.
+- **Ground every number.** Telling a model to stick to the data isn't enough. Checking its figures in code is.
+- **Show your work.** Making every agent step visible changed what we built, because each step had to read as a plain sentence.
+- **Say which model answered.** Fallbacks are fine; silent fallbacks are not.
+- **Write voice copy for trust.** Disclose the AI first, keep answers short, and never sound like a bank.
 
 ## What's next
 
-- **Phone line (planned, not built).** Call a number and a human-sounding voice explains the household's finances and runs a what-if by voice. It will use the same tools as the coach, appear in the Agent Trail as a traced run, match the caller by phone number and PIN, and say up front that it is an AI assistant.
-- **Row-level security.** Today any identity can call any client reducer on any household. That is acceptable for a hackathon with synthetic data and not for anything else.
-- **Brev as the default tier.** Move Nemotron on our own NVIDIA Brev GPU from backup to first choice for busy periods. [verify instance is running]
-- **Living goals.** Goal progress that updates as new transactions arrive, and a spoken read-back of the plan.
-- **Beyond Sandbox.** Real bank connections need consent flows and a security review first.
+- Row-level security per family. Today it's a demo with synthetic data.
+- Real bank connections, which need consent flows and a security review first.
+- A warm handoff from Brian to a human advisor.
+- Goals that update themselves as new transactions arrive.
 
-## Built with
+---
 
-SpacetimeDB 2.14.1 (TypeScript module, self-hosted) · NVIDIA Nemotron 3 Ultra · NVIDIA Nemotron 3.5 Lightning · NVIDIA API Catalog · NVIDIA ASR · NVIDIA Brev · Qwen on tenvor.io (vLLM) · Plaid Sandbox and Plaid Link · FRED API · College Scorecard API (data.gov) · Next.js · React · TypeScript · Tailwind CSS · Node.js 24 · Python (data generator) · Vitest · Docker Compose · Caddy · AWS EC2 · sslip.io · Codex · Claude Code
+## Tell us about your technology experience this weekend
 
-## Track fit
+- **SpacetimeDB.** The biggest speedup of the weekend. Writing the backend as one module meant live sync, presence and a live agent trace came for free, and a table worked as our AI job queue.
+  - Friction: reducers are deterministic (no fetch, no synchronous crypto), so anything external lives in a separate client.
+  - Every schema change means republishing and regenerating bindings in two places.
+  - When self-hosting in Docker, the CLI inside the image is a symlink, which tripped our auto-deploy script until we copied the real binary.
+- **NVIDIA Nemotron and Brev.** Nemotron 3 Ultra is strong at multi-step tool planning, and Lightning is fast enough for live voice.
+  - The free-tier rate limit (about 40 requests a minute) is tight for a judged demo.
+  - Model availability per key wasn't obvious: a Super model we planned around returned 404, and Ultra doesn't support structured output.
+  - Brev was the fix for latency. An L40S running Lightning in NVFP4 on vLLM gave Brian his own model with no shared limit.
+  - Nemotron streaming ASR over gRPC plugged straight into Pipecat.
+- **Plaid Sandbox.** Custom sandbox users let us build realistic sample customers with months of history. Mapping Plaid's sign conventions and account subtypes took real work. The default transaction window silently clipped older history until we asked for 365 days.
+- **SignalWire.** A toll-free number, inbound calls and outbound callbacks through a familiar LaML API, with signed webhooks, all quick to set up. Failed outbound calls come back from the API without an error code, which made debugging harder.
+- **ElevenLabs.** The Brian voice is great. Its moderation catching our callback script was annoying in the moment, but it made the product safer.
+- **Pipecat.** Made the voice pipeline composable (VAD, turn detection, barge-in, function calls) in Python.
+- **Agentic coding (Claude Code, Codex).** We gave the coding agents one contracts doc and an AGENTS.md of hard rules: no secrets in git, synthetic data only, never touch the shared demo room. Then we ran them in parallel worktrees. Overnight they ran judge-style UX audits, verified fixes end to end on production in private copies, and produced our demo video in Remotion. The lesson: agents go fast when they have a way to check their own work (tests, live checks) and clear lines they can't cross.
 
-**PNC: 360° Financial Health Navigator.** A judge can link the demo bank on their own phone and watch the dashboard fill itself with accounts, eight health indicators and a 90-day forecast, then read the first insights Nemotron wrote. PNC listed a coach, health indicators, a forecast and a what-if simulator; each is a screen: Ask Brianotron, the Dashboard, the cash forecast, What-If Studio. The new parts are Table Mode (the family plans out loud, agents check it), the Family vote with an affordability verdict, and the Nguyens' scam check. Check the numbers on the Riveras: six institutions and a net worth of $344,800 on the seed. The forecast low point lands around December 1, when the mortgage and several other bills post together. [verify against the live card]
+---
 
-**NVIDIA: Use Nemotron beyond a chatbot.** Most runs start without a chat message: finishing onboarding, ending a Table Mode session, creating a proposal, opening a sandbox. Open the Agent Trail and pick any run to see plan, tool calls, tool results and the decision, each with model, provider, latency and token counts. Nemotron 3 Ultra plans and calls tools, Nemotron 3.5 Lightning extracts structured fields, the tools reach FRED and College Scorecard, the `plaid_sync` workflow reaches Plaid Sandbox, and voice goes through NVIDIA ASR [verify ASR path tested live]. All five workflows pass on real Nemotron in 9 to 31 seconds. `https://brianotron.us/worker/health` lists the live providers and models. Qwen on tenvor.io is a labelled fallback, and our own Nemotron on NVIDIA Brev is configured as the tier with no shared rate limit. [verify `brev` appears as a provider in the trace]
+## Did you implement a generative AI model or API in your hack this weekend?
 
-**Spacetime: main track.** SpacetimeDB holds all application state. There is no other database and no REST data API. The health indicators, the 90-day forecast and the data-quality rules are reducers, a scheduled reducer recomputes them every minute, and the AI job queue is a table with an atomic `claim_job`. Presence, the Table Mode transcript, goal cards, votes, onboarding progress and agent trace events all sync to every phone as row updates. The worker is an ordinary SpacetimeDB client. Everything is in the public repo (`spacetime/src`): 32+ module tests run against a real in-memory datastore. We self-host SpacetimeDB 2.14.1 on EC2 instead of using Maincloud. [verify sponsors accept this]
+Yes.
 
-## Try it: the 60-second judge path
+- **NVIDIA Nemotron 3 Ultra (550B-A55B)** via the NVIDIA API: the planner for our agent team. It calls tools on the family's data for Table Mode, What-If Studio, family votes, Ask Brianotron, onboarding insights and the scam check.
+- **NVIDIA Nemotron 3.5 Lightning (30B-A3B):** fast steps and structured extraction through the NVIDIA API, and the brain of Brian, our voice assistant, **self-hosted on an NVIDIA L40S with Brev** (vLLM, NVFP4).
+- **NVIDIA speech recognition:** Nemotron streaming ASR for phone calls and the Talk button, and Parakeet (NVIDIA cloud) for Table Mode recordings.
+- **ElevenLabs:** text-to-speech for Brian's voice.
+- **Qwen on tenvor.io:** a labelled fallback only, used if NVIDIA is unavailable.
 
-Phone, no account, no real data. Start at `https://brianotron.us/onboarding`. [verify route, that the questions can be skipped, and that this really takes 60 seconds on a phone]
-
-1. **0:00** Name your household and accept the consent screen (sandbox data only).
-2. **0:10** Tap **Use the demo bank**. Prefer the real flow? Tap **Link with Plaid** and sign in with `user_good` / `pass_good`, Plaid's public sandbox login.
-3. **0:20** Keep all accounts selected and continue. Pick two priorities and finish.
-4. **0:45** Your dashboard has filled itself: accounts, health indicators, 90-day forecast. The first insights appear as Nemotron finishes (9 to 31 seconds).
-5. **0:55** Open **Agent Trail** and find the run you just started: plan, tool calls, the model that answered.
-
-Two more minutes:
-
-- Open `https://brianotron.us/me` for the Riveras' room. In **Table Mode**, play the sample conversation and watch goal cards land with feasibility chips.
-- Vote on the SBA loan proposal on the Dashboard. The tally moves on every phone, and the affordability verdict appears when the agent finishes.
-- In **What-If Studio**, tap "Open a second bakery location".
-- Switch to the Nguyens to see the scam alert tie a phone call to $2,000 of gift cards.
-
-With a laptop: the code is at https://github.com/Blean69/HackUTD-2026, and `spacetime/src` is the entire backend.
+Every model call shows up in the Agent Trail with its model, provider and latency. Figures in AI answers are checked in code against the tool results before anyone sees them. We also built the project with Claude Code and Codex as coding assistants.
