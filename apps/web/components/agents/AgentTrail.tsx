@@ -95,7 +95,7 @@ const RunRow = memo(function RunRow({
   );
 });
 
-function TrailBody() {
+function TrailBody({ householdId }: { householdId: string }) {
   useDataScope("agents");
   const ready = useDataReady();
   const params = useSearchParams();
@@ -103,7 +103,8 @@ function TrailBody() {
   const [wf, setWf] = useState<Workflow | "all">("all");
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const [limit, setLimit] = useState(PAGE);
-  const all = useRuns();
+  // only the family you are in: another family's coach plans and call transcripts are theirs
+  const all = useRuns({ householdId });
   const byRun = useTraceByRun();
   const households = useHouseholds();
   const now = useNow(30_000).getTime();
@@ -159,7 +160,7 @@ function TrailBody() {
     <>
       <PageHeader
         title="Agent Trail"
-        sub="Every step below was planned and run by Nemotron agents."
+        sub={`Every step below was planned and run by Nemotron agents. Showing ${households.find((h) => h.id === householdId)?.name ?? "your household"} only.`}
         right={live ? <LivePill label={`${live} live now`} /> : undefined}
       />
 
@@ -226,12 +227,12 @@ function TrailBody() {
   );
 }
 
-/** Global activity log of every agent run, across households. Honors `?run=<run_id>` to open and highlight one run. */
+/** Activity log of every agent run for the household you are in. Honors `?run=<run_id>` to open and highlight one run. */
 export function AgentTrail() {
   const householdId = useLastHousehold();
   return (
     <AppShell householdId={householdId} header={<h1 className="sr-only">Agent Trail</h1>}>
-      <TrailBody />
+      <TrailBody householdId={householdId} />
     </AppShell>
   );
 }

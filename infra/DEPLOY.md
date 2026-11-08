@@ -416,3 +416,21 @@ because the file isn't in git. Upload them with `infra/deploy.sh`.
 
 A local clone can follow `main` with `infra/local-autopull.sh --install`. That's a systemd user timer that fast-forwards every
 2 minutes, only when `main` is checked out and clean.
+
+## 13. Before judging (run from the team network, which has SSH)
+
+```bash
+K="ssh -i ~/.ssh/keystone-hackutd.pem ubuntu@52.72.164.85"
+$K 'touch /opt/keystone/.autodeploy-paused'                     # 1. freeze deploys (a restart would drop a live call)
+$K 'docker exec keystone-spacetime-1 spacetime call -s local keystone admin_reset_household "\"hh_rivera\""'   # 2. clean the shared demo room
+curl -s https://brianotron.us/worker/health | head -c 120; echo  # 3. health: nvidia/brev ok, spacetime connected
+```
+
+- `admin_reset_household` (publisher only) removes everything visitors added to the shared Rivera room: Ask chat, what-ifs,
+  goals, chores and jars, agent runs and traces, Table Mode sessions, alerts, new proposals and guest votes. The seeded family,
+  accounts, transactions, bills, sample conversations and the seeded proposal stay, and the numbers are recomputed.
+- Judges who tap "Use the demo account" get their **own private copy** of the Riveras (`hh_sbx_*`), so nothing they do lands
+  in the shared room you present from (`/room/hh_rivera`, which the phone PIN also opens).
+- Rehearse the agent questions in a private copy: replays are keyed by the template household, so those recordings survive the
+  reset and judges' identical questions replay instantly.
+- After judging: `$K 'rm /opt/keystone/.autodeploy-paused'`.

@@ -101,3 +101,7 @@ export function markDirty(ctx: Ctx, household_id: string): void {
   if (ctx.db.dirty_household.household_id.find(household_id)) return;
   ctx.db.dirty_household.insert({ household_id, marked_at: ctx.timestamp });
 }
+
+/** A proposal from the seed data ("prop_rivera_second_location"), not one a visitor made: `newId` ids ("prop_mw7c64gtnr6k")
+ *  never have a second underscore. Used to keep demo rooms and their private copies free of visitors' proposals. */
+export const isSeededProposal = (id: string): boolean => id.startsWith('prop_') && id.slice(5).includes('_');

@@ -51,7 +51,9 @@ function ToolCalls({ events, running }: { events: readonly TraceEvent[]; running
  * mono label, instead of showing the raw asterisks and brackets. Everything else stays plain text (no HTML is parsed).
  */
 function RichText({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*\n]+\*\*|【[^】\n]{1,40}】)/g);
+  // single *italic* / _italic_ markers and `code` ticks are dropped (bold is handled below)
+  const clean = text.replace(/`([^`\n]+)`/g, "$1").replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s.,;:!?)]|$)/g, "$1$2");
+  const parts = clean.split(/(\*\*[^*\n]+\*\*|【[^】\n]{1,40}】)/g);
   return (
     <>
       {parts.map((p, i) =>
@@ -67,6 +69,73 @@ function RichText({ text }: { text: string }) {
   );
 }
 
+const cells = (line: string): string[] => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+const isRule = (line: string): boolean => /^\s*(?:[-*_]\s*){3,}$/.test(line) || /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+
+/**
+ * Block-level light markdown for answers: paragraphs, "- " / "1. " lists, "#" headings as bold lines, and pipe tables shown as
+ * readable rows ("**Rewards Visa:** Balance $1,558.81 · APR 21.99%"), which read well on a phone. Horizontal rules are dropped.
+ * Plain text only: nothing is parsed as HTML.
+ */
+function Answer({ text }: { text: string }) {
+  const blocks: React.ReactNode[] = [];
+  const lines = text.replace(/\r/g, "").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (!line.trim() || isRule(line)) {
+      i++;
+      continue;
+    }
+    if (line.trim().startsWith("|")) {
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i]!.trim().startsWith("|")) {
+        if (!isRule(lines[i]!)) rows.push(cells(lines[i]!));
+        i++;
+      }
+      const [head, ...body] = rows.length > 1 ? rows : [[], ...rows];
+      blocks.push(
+        <ul key={blocks.length} className="space-y-1">
+          {body.map((r, k) => (
+            <li key={k}>
+              <RichText text={`**${r[0]?.replace(/\*\*/g, "") ?? ""}**${r.length > 1 ? ": " : ""}${r.slice(1).map((c, j) => (head?.[j + 1] ? `${head[j + 1]!.replace(/\*\*/g, "")} ${c}` : c)).join(" · ")}`} />
+            </li>
+          ))}
+        </ul>,
+      );
+      continue;
+    }
+    const bullet = /^\s*(?:[-*•]|\d+[.)])\s+/;
+    if (bullet.test(line)) {
+      const ordered = /^\s*\d+[.)]\s+/.test(line);
+      const items: string[] = [];
+      while (i < lines.length && bullet.test(lines[i]!)) items.push(lines[i++]!.replace(bullet, ""));
+      const List = ordered ? "ol" : "ul";
+      blocks.push(
+        <List key={blocks.length} className={cx("space-y-0.5 pl-5", ordered ? "list-decimal" : "list-disc")}>
+          {items.map((t, k) => (
+            <li key={k}>
+              <RichText text={t} />
+            </li>
+          ))}
+        </List>,
+      );
+      continue;
+    }
+    const heading = /^\s*#{1,6}\s+/.test(line);
+    const para: string[] = [];
+    if (heading) para.push(line.replace(/^\s*#{1,6}\s+/, ""));
+    else while (i < lines.length && lines[i]!.trim() && !isRule(lines[i]!) && !lines[i]!.trim().startsWith("|") && !bullet.test(lines[i]!) && !/^\s*#{1,6}\s+/.test(lines[i]!)) para.push(lines[i++]!);
+    if (heading) i++;
+    blocks.push(
+      <p key={blocks.length} className={heading ? "font-semibold text-ink" : undefined}>
+        <RichText text={para.join("\n")} />
+      </p>,
+    );
+  }
+  return <div className="space-y-2">{blocks}</div>;
+}
+
 function Bubble({ m, me }: { m: CoachMessage; me: string }) {
   const events = useTraceEvents(m.run_id || undefined);
   const mine = m.role === "user";
@@ -78,7 +147,7 @@ function Bubble({ m, me }: { m: CoachMessage; me: string }) {
           {mine ? (m.author_name === me ? "You" : m.author_name) : PRODUCT_NAME}
         </p>
         {!mine ? <ToolCalls events={events} /> : null}
-        <p className="whitespace-pre-wrap break-words text-body leading-relaxed">{mine ? m.text : <RichText text={m.text} />}</p>
+        {mine ? <p className="whitespace-pre-wrap break-words text-body leading-relaxed">{m.text}</p> : <div className="whitespace-pre-wrap break-words text-body leading-relaxed"><Answer text={m.text} /></div>}
         {!mine && m.run_id ? (
           <button type="button" onClick={() => openTrace(m.run_id)} className="mt-1.5 rounded text-caption font-medium text-brand-strong hover:underline">
             How I got this

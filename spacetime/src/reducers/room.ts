@@ -5,7 +5,7 @@ import spacetimedb from '../schema';
 import { recomputeHousehold } from '../recompute';
 import { backfillCreditHistory } from '../credit_store';
 import { enqueueProposalCheck } from '../proposals';
-import { ROLES, cleanText, enqueueJob, fail, randomSuffix, requireHousehold, upsertPresence } from '../util';
+import { ROLES, cleanText, enqueueJob, fail, randomSuffix, requireHousehold, upsertPresence, isSeededProposal } from '../util';
 
 /** Upsert the caller's presence. household_id "" means the lobby. Call it again as a heartbeat to refresh last_seen. */
 export const join_room = spacetimedb.reducer(
@@ -88,6 +88,7 @@ export const create_sandbox = spacetimedb.reducer(
     // The affordability verdict is a function of the household's numbers, which the copy shares, so it is kept
     // (run_id is cleared: the trace belongs to the template). A proposal without a verdict gets its check queued.
     for (const p of ctx.db.proposal.household_id.filter(tpl.id)) {
+      if (!isSeededProposal(p.id)) continue; // only seeded proposals: never a visitor's
       const pid = rid(p.id);
       const span = p.closes_at.microsSinceUnixEpoch - p.created_at.microsSinceUnixEpoch;
       const copy = ctx.db.proposal.insert({

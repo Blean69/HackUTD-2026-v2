@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AckAlertReducer from "./ack_alert_reducer";
 import AddKidTaskReducer from "./add_kid_task_reducer";
+import AdminResetHouseholdReducer from "./admin_reset_household_reducer";
 import AdminSetWorkerSecretHashReducer from "./admin_set_worker_secret_hash_reducer";
 import AgentCoachReplyReducer from "./agent_coach_reply_reducer";
 import AgentCreateAlertReducer from "./agent_create_alert_reducer";
@@ -626,6 +627,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
   __reducerSchema("add_kid_task", AddKidTaskReducer),
+  __reducerSchema("admin_reset_household", AdminResetHouseholdReducer),
   __reducerSchema("admin_set_worker_secret_hash", AdminSetWorkerSecretHashReducer),
   __reducerSchema("agent_coach_reply", AgentCoachReplyReducer),
   __reducerSchema("agent_create_alert", AgentCreateAlertReducer),

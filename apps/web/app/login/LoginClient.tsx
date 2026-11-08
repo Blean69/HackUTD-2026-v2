@@ -12,6 +12,7 @@ import {
   useAllProfilesSubscription, useOnboardingMode, useOnboardingSubscription, useOwnedHouseholds, useSampleSetups, type OwnedHousehold, type SandboxProfile,
 } from "@/lib/data/onboarding";
 import { relTime } from "@/lib/format";
+import { createSandbox } from "@/lib/data/actions";
 import { rememberHousehold } from "@/lib/lastHousehold";
 import { SampleCustomers } from "./SampleCustomers";
 import { useSampleSetup } from "./useSampleSetup";
@@ -48,10 +49,25 @@ export function LoginClient() {
     leaveThen(box.current, () => router.push(href));
   };
   const openRoom = (householdId: string) => open(`/room/${encodeURIComponent(householdId)}`, householdId);
-  const openDemo = () => {
+  // Every visitor gets a private copy of the demo family: whatever one judge clicks, asks or adds never shows up in another
+  // judge's room (or in the shared room the team presents from). A copy made on this device earlier is reopened.
+  const [demoBusy, setDemoBusy] = useState(false);
+  const openDemo = async () => {
     // Judges skip the name prompt: they join as a named guest and can rename themselves later.
-    if (!ident.name) setLocalIdentity(suggestName(), "guest");
-    open(`/room/${DEMO_HOUSEHOLD_ID}`, DEMO_HOUSEHOLD_ID);
+    let name = ident.name;
+    if (!name) {
+      name = suggestName();
+      setLocalIdentity(name, "guest");
+    }
+    const copy = mine.find((h) => h.status === "copy" && h.household.template_id === DEMO_HOUSEHOLD_ID);
+    if (copy) return openRoom(copy.household.id);
+    setDemoBusy(true);
+    try {
+      openRoom(await createSandbox(DEMO_HOUSEHOLD_ID, name));
+    } catch {
+      setDemoBusy(false);
+      open(`/room/${DEMO_HOUSEHOLD_ID}`, DEMO_HOUSEHOLD_ID); // no copy possible (offline demo, older module): the shared room
+    }
   };
 
   // An automatic setup reads its household's bank link, accounts and transactions, so the page follows it into that room's data.
@@ -146,11 +162,19 @@ export function LoginClient() {
             <h2 id="demo-h" className="sr-only">
               Demo account
             </h2>
-            <Button size="lg" variant={booted && mine.length === 0 ? "primary" : "secondary"} className="group w-full" onClick={openDemo}>
-              Use the demo account <IconArrowRight size={17} className="transition-transform duration-150 group-hover:translate-x-0.5" />
+            <Button size="lg" variant={booted && mine.length === 0 ? "primary" : "secondary"} className="group w-full" onClick={openDemo} disabled={demoBusy}>
+              {demoBusy ? (
+                <>
+                  <Spinner size={16} /> Making your private copy…
+                </>
+              ) : (
+                <>
+                  Use the demo account <IconArrowRight size={17} className="transition-transform duration-150 group-hover:translate-x-0.5" />
+                </>
+              )}
             </Button>
             <p className="mt-2 text-center text-caption text-ink-3">
-              {demo?.name ?? "The Rivera family"}, a fully set-up synthetic household. Skips setup.
+              Your own private copy of {demo?.name ?? "the Rivera family"}, a fully set-up synthetic household. Click anything.
             </p>
           </section>
 

@@ -831,7 +831,7 @@ describe('family voting', () => {
     expect(call('seed_votes', [{ ...seedVotes[0], voter_key: 'mem_c', choice: 'sure' }])).toThrow('choice');
   });
 
-  it('create_sandbox copies proposals and seeded member votes with remapped ids; delete_sandbox removes them', () => {
+  it('create_sandbox copies the seeded proposals (never a visitor\'s) and seeded member votes with remapped ids; delete_sandbox removes them', () => {
     const test = seeded();
     const j = JSON.stringify;
     test.withReducerTx(worker, (ctx) => m.seed_proposals(ctx, { rows_json: j(seedRows) }));
@@ -844,7 +844,8 @@ describe('family voting', () => {
     const sbx = [...test.db.household.iter()].find((h) => h.id.startsWith('hh_sbx_'))!;
     const suffix = sbx.id.slice('hh_sbx_'.length);
     const props = [...test.db.proposal.household_id.filter(sbx.id)];
-    expect(props).toHaveLength(3);
+    expect(props).toHaveLength(2); // the 2 seeded ones; the judge's live proposal stays in the template only
+    expect(props.some((p) => p.title === 'Live proposal from a judge')).toBe(false);
     for (const p of props) expect(p.id.endsWith(`__${suffix}`)).toBe(true);
     // the template is untouched
     expect([...test.db.proposal.household_id.filter('hh_demo')]).toHaveLength(3);
@@ -868,10 +869,9 @@ describe('family voting', () => {
     expect([...test.db.vote.household_id.filter(sbx.id)].some((v) => v.proposal_id.startsWith(p1.id))).toBe(false);
     // the sandbox owner can vote on the copy at once
     vote(test, alice, copy.id, 'yes', 'Judy');
-    // a copy that still has no verdict gets its check queued (the live proposal was never analysed)
+    // the judge's live (never analysed) proposal is not copied, so no check is queued for the copy
     const queued = [...test.db.agent_job.iter()].filter((x) => x.household_id === sbx.id && x.workflow === 'what_if');
-    expect(queued.map((x) => x.subject_id).sort()).toEqual([`${p1.id}__${suffix}`]);
-    expect(JSON.parse(queued[0]!.input_json).proposal_id).toBe(`${p1.id}__${suffix}`);
+    expect(queued).toHaveLength(0);
 
     test.withReducerTx(alice, (ctx) => m.delete_sandbox(ctx, { household_id: sbx.id }));
     expect([...test.db.proposal.household_id.filter(sbx.id)]).toHaveLength(0);
@@ -1134,5 +1134,28 @@ describe('kids: chores and the savings jar', () => {
     call(m.redeem_kid_goal, { member_id: 'mem_b' });
     const jar = test.db.kid_jar.member_id.find('mem_b')!;
     expect([jar.balance, jar.goal_target]).toEqual([1, 0]);
+  });
+});
+
+describe('admin_reset_household (clean a shared demo room before judging)', () => {
+  it('removes what visitors added, keeps the seeded data, and only the publisher may call it', () => {
+    const test = seeded();
+    test.withReducerTx(publisher, (ctx) => m.init(ctx, {}));
+    const accountsBefore = test.db.account.count();
+    const txnsBefore = test.db.txn.count();
+    test.withReducerTx(alice, (ctx) => m.ask_coach(ctx, { household_id: 'hh_demo', text: 'Gamble her tip jar' }));
+    test.withReducerTx(alice, (ctx) => m.upsert_goal(ctx, { id: '', household_id: 'hh_demo', title: 'Double crypto through gambling', target_amount: 500, target_date: '', priority: 2 }));
+    expect(test.db.coach_message.count()).toBeGreaterThan(0n);
+    expect(test.db.goal.count()).toBeGreaterThan(0n);
+
+    expect(() => test.withReducerTx(alice, (ctx) => m.admin_reset_household(ctx, { household_id: 'hh_demo' }))).toThrow('not allowed');
+    test.withReducerTx(publisher, (ctx) => m.admin_reset_household(ctx, { household_id: 'hh_demo' }));
+
+    expect([...test.db.coach_message.iter()].filter((r) => r.household_id === 'hh_demo')).toHaveLength(0);
+    expect([...test.db.goal.iter()].filter((r) => r.household_id === 'hh_demo')).toHaveLength(0);
+    expect([...test.db.agent_job.iter()].filter((r) => r.household_id === 'hh_demo')).toHaveLength(0); // the coach job too
+    expect(test.db.account.count()).toBe(accountsBefore); // seeded data stays
+    expect(test.db.txn.count()).toBe(txnsBefore);
+    expect([...test.db.health_indicator.iter()].some((h) => h.household_id === 'hh_demo')).toBe(true); // recomputed
   });
 });

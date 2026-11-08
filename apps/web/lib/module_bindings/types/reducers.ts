@@ -8,6 +8,7 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import AckAlertReducer from "../ack_alert_reducer";
 import AddKidTaskReducer from "../add_kid_task_reducer";
+import AdminResetHouseholdReducer from "../admin_reset_household_reducer";
 import AdminSetWorkerSecretHashReducer from "../admin_set_worker_secret_hash_reducer";
 import AgentCoachReplyReducer from "../agent_coach_reply_reducer";
 import AgentCreateAlertReducer from "../agent_create_alert_reducer";
@@ -72,6 +73,7 @@ import UpsertGoalReducer from "../upsert_goal_reducer";
 
 export type AckAlertParams = __Infer<typeof AckAlertReducer>;
 export type AddKidTaskParams = __Infer<typeof AddKidTaskReducer>;
+export type AdminResetHouseholdParams = __Infer<typeof AdminResetHouseholdReducer>;
 export type AdminSetWorkerSecretHashParams = __Infer<typeof AdminSetWorkerSecretHashReducer>;
 export type AgentCoachReplyParams = __Infer<typeof AgentCoachReplyReducer>;
 export type AgentCreateAlertParams = __Infer<typeof AgentCreateAlertReducer>;
