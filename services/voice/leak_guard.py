@@ -29,6 +29,7 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
 _SENTENCE_END = re.compile(r"(?<=[.!?])[\"')\]]*\s+")
 _WORD = re.compile(r"[a-z0-9']+")
 _BRIEF_MARK = "WHAT YOU KNOW RIGHT NOW"
+_CALLBACK_MARK = "THIS IS A CALLBACK"  # the alert notes on a callback sit just above the brief: they are what Brian rang to say
 
 
 def _shingles(text: str, n: int) -> set[tuple[str, ...]]:
@@ -47,8 +48,9 @@ class LeakGuard:
         self.reset()
 
     def set_prompt(self, prompt: str) -> None:
-        """The instructions that must never be read back. The household notes after the marker are fair game: they are what Brian talks about."""
-        self._echo = _shingles(prompt.split(_BRIEF_MARK)[0], self.n) if prompt else set()
+        """The instructions that must never be read back. The household notes after the marker, and a callback's alert notes just above
+        it, are fair game: they are what Brian talks about (reading the alert out must not trip the guard)."""
+        self._echo = _shingles(prompt.split(_BRIEF_MARK)[0].split(_CALLBACK_MARK)[0], self.n) if prompt else set()
 
     def reset(self) -> None:
         self._buf = ""

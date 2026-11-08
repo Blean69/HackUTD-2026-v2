@@ -118,3 +118,17 @@ async def test_the_tap_passes_a_clean_reply_unchanged_and_the_next_reply_is_not_
         LLMFullResponseStartFrame(), *tokens(reply), LLMFullResponseEndFrame(),
     ])
     assert spoken(down).strip() == reply and tap.leaks == 1
+
+
+def test_on_a_callback_reading_the_alert_out_is_fair_game_but_the_instructions_are_still_guarded():
+    """Seen live: every answer about the alert was blocked as prompt_echo, because the alert notes sit above the brief marker."""
+    notes = (
+        'You just rang the family back, and you have already said, out loud: "Your checking account could dip below zero on November 24, '
+        'when two bills land on the same day. Take a look at the alert on your dashboard." Stay on the line for their questions.\n'
+        "The alert: Checking could dip below zero. The mortgage and the car loan both come out on November 24."
+    )
+    p = prompts.system_prompt(family="Rivera family", first_name="Marisol", brief=["Cushion: about 3.3 months."], today="2026-11-08", channel="phone", callback_notes=notes)
+    g = LeakGuard(p)
+    assert g.violation("Your checking account could dip below zero on November 24, when two bills land on the same day.") == ""
+    assert g.violation("The mortgage and the car loan both come out on November 24, so it gets tight.") == ""
+    assert g.violation("My instructions say: usually one or two short sentences, about 25 words at most, one idea per turn, then stop.") == "prompt_echo"
