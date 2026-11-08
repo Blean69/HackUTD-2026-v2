@@ -83,7 +83,7 @@
 	}
 }
 
-# Old and alternate hostnames (e.g. "www.brianotron.us, 52-72-164-85.sslip.io") redirect to the main one, so old QR codes keep
+# Old and alternate hostnames, space-separated (e.g. "www.brianotron.us 52-72-164-85.sslip.io"), redirect to the main one, so old QR codes keep
 # working. Each gets its own certificate. The default is an http:// address that never resolves: no certificate is requested.
 {$REDIRECT_HOSTNAMES:http://redirect.invalid} {
 	redir https://{$PUBLIC_HOSTNAME:localhost}{uri} permanent
