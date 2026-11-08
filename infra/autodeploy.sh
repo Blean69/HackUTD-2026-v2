@@ -59,7 +59,8 @@ main() {
   # ---- 2. module first --------------------------------------------------------------------------------------------------------
   if changed '^spacetime/'; then
     log "spacetime/ changed: building the module"
-    [ -x "$STATE/spacetime" ] || docker cp keystone-spacetime-1:/usr/local/bin/spacetime "$STATE/spacetime" || { fail "copying the spacetime CLI"; return 1; }
+    # the image's /usr/local/bin/spacetime is a symlink: copy the real CLI binary (a regular file) so it can be bind-mounted
+    [ -f "$STATE/spacetime" ] && [ ! -L "$STATE/spacetime" ] || { rm -f "$STATE/spacetime"; docker cp keystone-spacetime-1:/opt/spacetime/spacetimedb-cli "$STATE/spacetime"; } || { fail "copying the spacetime CLI"; return 1; }
     if ! docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e npm_config_cache=/tmp/npm \
         -v "$DIR/spacetime:/src" -v "$STATE/spacetime:/usr/local/bin/spacetime:ro" -w /src node:22-bookworm \
         sh -c 'npm ci --no-audit --no-fund --loglevel=error && spacetime build -p .' 2>&1 | tail -n 5; then
