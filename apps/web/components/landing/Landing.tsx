@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
 import { ScoreGauge, HEALTH_BANDS } from "@/components/charts/ScoreGauge";
 import { Sparkline } from "@/components/charts/Sparkline";
 import { BrandMark, IconArrowRight, IconCheck } from "@/components/icons";
@@ -19,14 +19,33 @@ const STEPS = [
   { n: "03", title: "Answer three questions", text: "Goals, home and comfort with risk." },
 ];
 
+/*
+ * Every figure in the still is the demo household's (the Riveras), as the live room shows them on Nov 8: net worth $344,800
+ * (+7.7% in 6 months), health 79, forecast low $39,655 on Nov 24, a 3.3-month cash runway. From data/seed: the college fund
+ * ($21,500) and card interest (Rewards Visa $1,558.81 at 21.99% + Gas Rewards Mastercard $2,049.99 at 19.49% = about $742
+ * a year). If the seed changes, update these.
+ */
 const INSIGHTS = [
-  { tone: "bg-good", text: "Cash covers 4.1 months of spending" },
-  { tone: "bg-watch", text: "Card interest costs about $420 a year" },
-  { tone: "bg-good", text: "College fund is on track for 2034" },
+  { tone: "bg-watch", text: "Cash covers 3.3 months of spending" },
+  { tone: "bg-watch", text: "Card interest costs about $742 a year" },
+  { tone: "bg-good", text: "College fund holds $21,500 for the kids" },
 ];
 
-/** A smooth, slightly rising six-month series for the still. */
+/** A smooth, slightly rising series ending at today's net worth, for the still. */
 const TREND = [318, 316, 321, 327, 324, 331, 336, 333, 338, 342, 340, 344.8];
+
+/**
+ * Parts joined by a middle dot without the dot wrapping onto a line of its own: on phones each part gets its own line
+ * (no dot); from `sm` they share one line.
+ */
+function Dotted({ text }: { text: string }) {
+  return text.split(" · ").map((p, i) => (
+    <Fragment key={p}>
+      {i ? <span aria-hidden="true" className="hidden sm:inline">{" · "}</span> : null}
+      <span className="block sm:inline">{p}</span>
+    </Fragment>
+  ));
+}
 
 const btn = "press group inline-flex h-12 items-center justify-center gap-2 rounded-lg px-5 text-lead font-semibold";
 
@@ -41,7 +60,7 @@ function Preview() {
               {[
                 ["MR", 152],
                 ["DR", 28],
-                ["ER", 212],
+                ["EM", 212],
               ].map(([t, h]) => (
                 <span key={t} className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[0.6rem] font-semibold text-white ring-2 ring-surface" style={{ background: `hsl(${h} 28% 42%)` }}>
                   {t}
@@ -51,7 +70,7 @@ function Preview() {
             <span className="display truncate text-label">Rivera Family</span>
           </div>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-caption font-medium text-ink-2">
-            <span className="anim-blink h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true" />3 here now
+            <span className="anim-blink h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true" />Live
           </span>
         </div>
 
@@ -89,9 +108,7 @@ function Preview() {
             </ul>
             <p className="mt-3.5 flex items-start gap-1.5 border-t border-line pt-3 text-caption text-ink-3">
               <IconCheck size={13} strokeWidth={2.4} className="mt-0.5 shrink-0 text-good" />
-              <span>
-                Read <span className="num">1,204</span> transactions in <span className="num">9</span> traced agent steps
-              </span>
+              <span>Every agent step is traced, with the model that answered</span>
             </p>
           </div>
         </div>
@@ -111,7 +128,7 @@ export function Landing() {
         </Link>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Link href="/login" className="press inline-flex h-9 items-center rounded-md px-3 text-body font-medium text-ink-2 hover:bg-surface hover:text-ink">
+          <Link href="/login" className="press relative inline-flex h-9 items-center rounded-md px-3 text-body font-medium text-ink-2 before:absolute before:inset-x-0 before:-inset-y-0.5 hover:bg-surface hover:text-ink">
             Log in
           </Link>
         </div>
@@ -142,6 +159,9 @@ export function Landing() {
           <p className="motion-rise mt-3 text-caption text-ink-3" style={at(3)}>
             About two minutes. Synthetic sandbox data only, never real money.
           </p>
+          <p className="motion-rise mt-1 text-caption text-ink-3" style={at(3)}>
+            <span className="whitespace-nowrap">Agents run on NVIDIA Nemotron ·</span> <span className="whitespace-nowrap">live sync on SpacetimeDB</span>
+          </p>
         </div>
 
         <Preview />
@@ -161,9 +181,12 @@ export function Landing() {
       </main>
 
       <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-caption text-ink-3 sm:flex-row sm:justify-between sm:px-6">
+        {/* Side by side only from xl, where both notes fit on one line; stacked below that, so neither wraps mid-way. */}
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-5 text-caption text-ink-3 sm:px-6 xl:flex-row xl:justify-between">
           <p>{SYNTHETIC_NOTE}</p>
-          <p>{CHALLENGE_NOTE}</p>
+          <p>
+            <Dotted text={CHALLENGE_NOTE} />
+          </p>
         </div>
       </footer>
     </div>

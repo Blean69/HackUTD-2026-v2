@@ -9,18 +9,23 @@ import type { RoomFinance } from "@/lib/data/finance-hooks";
 import { cashSummary, categoryLabel, spendingBreakdown, withSharedSpending } from "@/lib/finance-analytics";
 import { cx, usd } from "@/lib/format";
 
-/** A ring metric: Penny's colour-coded verdict around one number. */
+/**
+ * A ring metric: Penny's colour-coded verdict around one number. The tile is a container: in a narrow tile (two-up on a
+ * phone) the ring sits above the figure, so the figure always has the tile's full width and is never cut off.
+ */
 function RingTile({ label, value, pct, tone, sub, i }: { label: string; value: React.ReactNode; pct: number; tone: Tone; sub: string; i: number }) {
   const color = tone === "good" ? "var(--good)" : tone === "risk" ? "var(--risk)" : "var(--watch)";
   return (
-    <div className={cx("card motion-rise relative flex items-center gap-3 p-4 transition-transform duration-200 hover:-translate-y-0.5", BENTO.quarter)} style={{ ["--i" as string]: i }}>
-      <Donut size={76} thickness={9} total={100} slices={[{ key: "v", value: Math.max(2, Math.min(100, pct)), color, label }]} label={`${label}: ${sub}`}>
-        <Mascot mood={tone === "risk" ? "worried" : tone === "good" ? "cheer" : "happy"} size={30} />
-      </Donut>
-      <div className="min-w-0">
-        <p className="text-caption font-medium text-ink-3">{label}</p>
-        <p className={cx("figure truncate text-kpi-sm", TONE_TEXT[tone])}>{value}</p>
-        <p className="text-caption text-ink-3">{sub}</p>
+    <div className={cx("card motion-rise @container relative p-4 transition-transform duration-200 hover:-translate-y-0.5", BENTO.quarter)} style={{ ["--i" as string]: i }}>
+      <div className="flex flex-col items-start gap-2.5 @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:gap-3">
+        <Donut size={76} thickness={9} total={100} slices={[{ key: "v", value: Math.max(2, Math.min(100, pct)), color, label }]} label={`${label}: ${sub}`}>
+          <Mascot mood={tone === "risk" ? "worried" : tone === "good" ? "cheer" : "happy"} size={30} />
+        </Donut>
+        <div className="min-w-0">
+          <p className="text-caption font-medium text-ink-3">{label}</p>
+          <p className={cx("figure whitespace-nowrap text-kpi-sm", TONE_TEXT[tone])}>{value}</p>
+          <p className="text-caption text-ink-3">{sub}</p>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useMemo } from "react";
+import { useNow } from "@/lib/data/finance-hooks";
 import { IconBank, IconCap, IconChevron, IconFile, IconLandmark, IconRepeat, IconShield } from "@/components/icons";
 import { Chip, Empty, List, ListRow, Panel, PanelLink, Progress } from "@/components/ui";
 import type { RoomFinance } from "@/lib/data/finance-hooks";
@@ -79,17 +80,21 @@ export function UpcomingCard({ fin, householdId, className }: { fin: RoomFinance
   );
 }
 
-const FEAS: Record<string, { text: string; cls: string }> = {
-  on_track: { text: "On track", cls: "text-good" },
-  stretch: { text: "Stretch", cls: "text-watch" },
-  off_track: { text: "Off track", cls: "text-risk" },
-  needs_details: { text: "Needs an amount", cls: "text-ink-3" },
-  not_advised: { text: "Not advised", cls: "text-risk" },
+/** The same labels as the Goals page and Table Mode, for every feasibility value. */
+const FEAS: Record<string, { text: string; cls: string; tone: "good" | "watch" | "risk" | "brand" }> = {
+  on_track: { text: "On track", cls: "text-good", tone: "brand" },
+  stretch: { text: "Stretch", cls: "text-watch", tone: "watch" },
+  off_track: { text: "Off track", cls: "text-risk", tone: "risk" },
+  needs_details: { text: "Needs an amount", cls: "text-ink-3", tone: "brand" },
+  not_advised: { text: "Not advised", cls: "text-risk", tone: "risk" },
 };
+/** A goal with no status yet reads "Checking" while the agents may still be on it (updated in the last 5 minutes), then "Not checked". */
+const FRESH_MS = 5 * 60_000;
 
 export function GoalsCard({ goals, fin, householdId, className }: { goals: readonly Goal[]; fin: RoomFinance; householdId: string; className?: string }) {
   const shown = goals.slice(0, 5);
   const href = `/room/${householdId}/goals`;
+  const now = useNow();
   return (
     <Panel
       id="shared-goals"
@@ -102,17 +107,24 @@ export function GoalsCard({ goals, fin, householdId, className }: { goals: reado
         {shown.map((g) => {
           const prog = goalProgress(g, fin.accounts, fin.today);
           const f = g.feasibility ? FEAS[g.feasibility] : null;
+          const fresh = now.getTime() - Date.parse(g.updated_at || g.created_at) < FRESH_MS;
           return (
             <li key={g.id}>
               <Link href={href} className="press group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-2">
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-body font-medium">{g.title}</span>
-                    {f ? <span className={cx("shrink-0 text-caption font-medium", f.cls)}>{f.text}</span> : <span className="shrink-0 text-caption text-ink-3">{g.target_amount ? "Checking" : "Needs an amount"}</span>}
+                    <span className="line-clamp-2 min-w-0 text-body font-medium leading-snug">{g.title}</span>
+                    {f ? (
+                      <span className={cx("shrink-0 text-caption font-medium", f.cls)}>{f.text}</span>
+                    ) : (
+                      <span className="shrink-0 text-caption text-ink-3" title={fresh ? "The agents are checking this against your accounts" : "No check ran for this goal. Edit it to add an amount and a date."}>
+                        {fresh ? "Checking" : "Not checked"}
+                      </span>
+                    )}
                   </span>
                   {prog ? (
                     <span className="mt-2 flex items-center gap-2.5">
-                      <Progress value={prog.pct} tone={g.feasibility === "off_track" ? "risk" : g.feasibility === "stretch" ? "watch" : "brand"} label={`${g.title} progress`} className="flex-1" />
+                      <Progress value={prog.pct} tone={f?.tone ?? "brand"} label={`${g.title} progress`} className="flex-1" />
                       <span className="num shrink-0 text-caption text-ink-2">{usd(prog.saved, { compact: true })} / {usd(g.target_amount ?? 0, { compact: true })}</span>
                     </span>
                   ) : null}

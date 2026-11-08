@@ -24,7 +24,12 @@ export function KpiTiles({ fin, householdId }: { fin: RoomFinance; householdId: 
         info="Everything you own minus everything you owe. Home and vehicle values are estimates on file."
         value={<CountUp value={nw.net} format={(n) => usd(n)} />}
         delta={history.length > 1 ? <Delta value={trend.change.pct} text={`${trend.change.pct >= 0 ? "+" : ""}${trend.change.pct.toFixed(1)}% in 6 mo`} /> : undefined}
-        sub={<span className="num">{usd(nw.assets, { compact: true })} assets · {usd(nw.liabilities, { compact: true })} owed</span>}
+        sub={
+          <span className="num">
+            <span className="whitespace-nowrap">{usd(nw.assets, { compact: true })} assets ·</span>{" "}
+            <span className="whitespace-nowrap">{usd(nw.liabilities, { compact: true })} owed</span>
+          </span>
+        }
         chart={<Sparkline values={history.map((h) => h.value)} width={150} height={52} color="var(--chart-1)" label="Net worth over the last six months" />}
       />
       <StatCard className={T} label="Total assets" value={<CountUp value={nw.assets} format={(n) => usd(n, { compact: true })} />} tone="good" sub={`${fin.accounts.length} accounts`} />

@@ -3,13 +3,22 @@ import { useMemo, useState } from "react";
 import { IconAlert, IconArrowRight, IconCheck, IconSend, IconSpark } from "@/components/icons";
 import { ScenarioChart } from "@/components/charts/lazy";
 import { Button, Chip, Empty, ErrorNote, inputCls, PageHeader, Panel, Skeleton, Spinner, type Tone } from "@/components/ui";
+import { DEMO_HOUSEHOLD_ID } from "@/lib/constants";
 import { requestSimulation } from "@/lib/data/actions";
-import { useRoomTables, useRuns, useScenarios } from "@/lib/data/hooks";
+import { useHousehold, useRoomTables, useRuns, useScenarios } from "@/lib/data/hooks";
 import { cx, metric, relTime } from "@/lib/format";
 import { openTrace } from "@/lib/traceUi";
 import type { AgentRun, Scenario } from "@/lib/types";
 
-const CHIPS = ["Buy a $32k car in March", "Open a second bakery location", "Pay off the Visa", "Lose $1,000 a month of income"];
+/** Suggestions. The bakery and the Visa are the Riveras' (the demo household and its private copies); everyone else gets generic ones. */
+const DEMO_CHIPS = ["Buy a $32k car in March", "Open a second bakery location", "Pay off the Visa", "Lose $1,000 a month of income"];
+const CHIPS = ["Buy a $30,000 car", "Cut subscriptions by $50 a month", "Pay off the credit card", "Lose $1,000 a month of income"];
+
+/** The chips are 36 px tall; this widens the hit area to 40 px without changing how they look. */
+const HIT = "relative before:absolute before:-inset-y-1 before:inset-x-0";
+
+/** Months of spending covered: below zero means the cash runs out, which reads better in words than as "-2.1 mo". */
+const show = (v: number, unit: Parameters<typeof metric>[1]) => (unit === "months" && v < 0 ? "Runs out" : metric(v, unit));
 
 const VERDICT: Record<NonNullable<NonNullable<Scenario["result"]>["verdict"]>, { tone: Tone; label: string; banner: string }> = {
   fine: { tone: "good", label: "Works comfortably", banner: "border-transparent bg-good-soft text-good" },
@@ -53,7 +62,7 @@ function ResultSkeleton({ status }: { status: Scenario["status"] }) {
   return (
     <div aria-busy="true" aria-live="polite">
       <p className="flex items-center gap-2 text-body font-medium text-ink-2">
-        <Spinner size={15} /> {status === "queued" ? "Queued. Waiting for an agent…" : "Simulating your next 90 days…"}
+        <Spinner size={15} /> {status === "queued" ? "Queued. Waiting for an agent…" : "Simulating the months ahead…"}
       </p>
       <Skeleton className="mt-3 h-14" />
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
@@ -102,12 +111,12 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
                     <dd className="num mt-1 flex flex-wrap items-center gap-x-1.5">
                       {m.before !== undefined ? (
                         <>
-                          <span className="text-label text-ink-3">{metric(m.before, m.unit)}</span>
+                          <span className="text-label text-ink-3">{show(m.before, m.unit)}</span>
                           <span className="sr-only">changes to</span>
                           <IconArrowRight size={13} className="text-ink-3" />
                         </>
                       ) : null}
-                      <span className={cx("figure text-[1.125rem] leading-6 sm:text-kpi-sm", !changed ? "text-ink" : worse ? "text-watch" : "text-good")}>{metric(m.after, m.unit)}</span>
+                      <span className={cx("figure text-[1.125rem] leading-6 sm:text-kpi-sm", !changed ? "text-ink" : worse ? "text-watch" : "text-good")}>{show(m.after, m.unit)}</span>
                     </dd>
                   </div>
                 );
@@ -147,9 +156,11 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
   );
 }
 
-/** What-If Studio: describe a decision in plain English, agents replay the next 90 days, and the room sees the result. */
+/** What-If Studio: describe a decision in plain English, agents replay the next 12 to 24 months (the simulator's horizon), and the room sees the result. */
 export function WhatIfStudio({ householdId }: { householdId: string }) {
   const ready = useRoomTables(householdId, ["scenario"]);
+  const household = useHousehold(householdId);
+  const chips = householdId === DEMO_HOUSEHOLD_ID || household?.template_id === DEMO_HOUSEHOLD_ID ? DEMO_CHIPS : CHIPS;
   const scenarios = useScenarios(householdId);
   const runs = useRuns({ householdId, workflow: "what_if" });
   const [prompt, setPrompt] = useState("");
@@ -179,7 +190,7 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader title="What-If Studio" sub="Describe a decision. The agents replay your next 90 days with it." />
+      <PageHeader title="What-If Studio" sub="Describe a decision. The agents replay the next 12 to 24 months with it." />
 
       <Panel id="whatif-ask" title="What if we…">
         <form onSubmit={(e) => { e.preventDefault(); void submit(prompt); }}>
@@ -189,7 +200,7 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
               id="whatif-in"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g. Buy a $32k car in March"
+              placeholder={`e.g. ${chips[0]}`}
               autoComplete="off"
               className={cx(inputCls, "min-w-0 flex-1")}
             />
@@ -200,13 +211,13 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
           </div>
         </form>
         <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Scenario suggestions">
-          {CHIPS.map((c) => (
+          {chips.map((c) => (
             <button
               key={c}
               type="button"
               disabled={busy}
               onClick={() => void submit(c)}
-              className="press min-h-9 rounded-full border border-line bg-surface px-3 py-1.5 text-label font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
+              className={cx(HIT, "press min-h-9 rounded-full border border-line bg-surface px-3 py-1.5 text-label font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50")}
             >
               {c}
             </button>
