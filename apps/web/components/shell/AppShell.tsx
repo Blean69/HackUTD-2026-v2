@@ -102,7 +102,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
   if (!voiceUsed && (call.sheetOpen || call.phase !== "idle")) setVoiceUsed(true);
 
   return (
-    <div className="min-h-dvh bg-bg text-ink">
+    <div className="min-h-svh bg-bg text-ink">
       <div className="fixed inset-y-0 left-0 z-30 hidden md:block" style={{ width: SIDEBAR_W }}>
         <Sidebar householdId={householdId} />
       </div>

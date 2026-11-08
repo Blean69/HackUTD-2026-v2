@@ -275,7 +275,7 @@ export function OnboardingFlow() {
   const others = householdId ? present.filter((p) => !p.isMe) : [];
   const showProgress = drive && (!householdId || (booted && !!household));
   return (
-    <div className="min-h-dvh bg-surface text-ink sm:bg-bg">
+    <div className="min-h-svh bg-surface text-ink sm:bg-bg">
       <header className="mx-auto flex h-16 w-full max-w-xl items-center gap-3 px-4 sm:px-0">
         <Link href="/" className="flex items-center gap-2.5 rounded-md" aria-label={`${PRODUCT_NAME} home`}>
           <BrandMark size={26} />

@@ -69,7 +69,7 @@ export function LoginClient() {
   };
 
   return (
-    <div className="min-h-dvh bg-bg text-ink">
+    <div className="min-h-svh bg-bg text-ink">
       <header className="mx-auto flex h-16 w-full max-w-md items-center px-4 sm:px-0">
         <Link href="/" className="flex items-center gap-2.5 rounded-md" aria-label={`${PRODUCT_NAME} home`}>
           <BrandMark size={26} />

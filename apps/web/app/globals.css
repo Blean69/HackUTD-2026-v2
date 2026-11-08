@@ -257,6 +257,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   background: var(--bg);
+  /* No rubber-band at the edges: on phones the bounce dragged the sticky header and the whole page with it. */
+  overscroll-behavior-y: none;
 }
 body {
   background: var(--bg);
@@ -268,7 +270,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
   text-rendering: optimizeLegibility;
+  overscroll-behavior-y: none;
+  /* clip, not hidden: hidden turns the body into a scroll container on iOS Safari, which breaks the sticky header */
   overflow-x: hidden;
+  overflow-x: clip;
 }
 ::selection {
   background: color-mix(in srgb, var(--brand) 22%, transparent);
