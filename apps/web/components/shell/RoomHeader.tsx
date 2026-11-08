@@ -14,7 +14,7 @@ import { NotificationsBell } from "./NotificationsBell";
 
 const first = (s: string) => s.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
 
-/** Members first (green dot when someone with that name is in the room), then any other visitors. Links to Household. */
+/** Members first (presence dot when someone with that name is in the room), then any other visitors. Links to Household. */
 function People({ householdId }: { householdId: string }) {
   const members = useMembers(householdId);
   const present = usePresence(householdId);
@@ -36,10 +36,10 @@ function People({ householdId }: { householdId: string }) {
     <Link href={`/room/${householdId}/household`} className="flex items-center rounded-full" aria-label={`Household: ${people.length} people, ${online} here now`}>
       <span className="flex items-center -space-x-0.5">
         {shown.map((p) => (
-          <Avatar key={p.key} name={p.name} size={28} ring dot={p.online ? "online" : undefined} />
+          <Avatar key={p.key} name={p.name} size={28} ring="bg" dot={p.online ? "online" : undefined} />
         ))}
         {people.length > shown.length ? (
-          <span className="num relative flex h-7 min-w-7 items-center justify-center rounded-full bg-line px-1.5 text-[0.7rem] font-semibold text-ink-2 ring-2 ring-surface">+{people.length - shown.length}</span>
+          <span className="num relative flex h-7 min-w-7 items-center justify-center rounded-full bg-surface-3 px-1.5 text-2xs font-semibold text-ink-2 ring-2 ring-bg">+{people.length - shown.length}</span>
         ) : null}
       </span>
     </Link>
@@ -67,12 +67,12 @@ export function RoomHeader({ householdId }: { householdId: string }) {
   }
 
   return (
-    <header className="flex items-center gap-3 px-4 pb-2 pt-4 sm:px-6 md:pt-6">
-      <h1 className="min-w-0 truncate text-[1.35rem] font-semibold leading-tight tracking-[-0.015em] sm:text-[1.55rem]">{household?.name ?? "Household"}</h1>
+    <header className="flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6 md:pt-5">
+      <h1 className="display min-w-0 truncate text-[1.3rem] leading-tight text-ink sm:text-[1.5rem]">{household?.name ?? "Household"}</h1>
       <div className="flex shrink-0 items-center gap-1.5">
         <People householdId={householdId} />
-        <IconButton label={copied ? "Link copied" : "Invite someone to this room"} onClick={() => void invite()} className="h-7 w-7 rounded-full border border-dashed border-line-strong">
-          <IconPlus size={15} />
+        <IconButton label={copied ? "Link copied" : "Invite someone to this room"} onClick={() => void invite()} className="h-7 w-7 rounded-full border border-dashed border-line-strong text-ink-3 hover:border-ink-3 hover:bg-surface">
+          <IconPlus size={14} />
         </IconButton>
         <span className="sr-only" role="status">
           {copied ? "Link copied" : ""}
@@ -82,11 +82,12 @@ export function RoomHeader({ householdId }: { householdId: string }) {
       {/* Phones reach these from the top bar and the tab bar instead. */}
       <div className="hidden shrink-0 items-center gap-2 md:flex">
         <Button variant="secondary" onClick={openCoach}>
-          <IconSpark size={16} /> Ask {PRODUCT_NAME}
+          <IconSpark size={16} className="text-brand-strong" /> Ask {PRODUCT_NAME}
         </Button>
         <TalkButton variant="header" />
         <CallBrianButton variant="header" />
-        <AgentActivityButton householdId={householdId} />
+        <span className="mx-0.5 h-5 w-px bg-line-strong" aria-hidden="true" />
+        <AgentActivityButton householdId={householdId} bordered />
         <NotificationsBell householdId={householdId} me={ident.name ?? "Someone"} />
       </div>
     </header>

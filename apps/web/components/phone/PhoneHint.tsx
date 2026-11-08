@@ -7,7 +7,7 @@ import { PHONE_DISPLAY, PHONE_HREF, PHONE_NUMBER } from "@/lib/phone";
 export function PhoneHint({ className }: { className?: string }) {
   if (!PHONE_NUMBER) return null;
   return (
-    <p className={cx("flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-center text-[0.8rem] text-ink-2", className)}>
+    <p className={cx("flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 text-center text-label text-ink-2", className)}>
       <IconPhone size={14} className="text-ink-3" />
       <span>Prefer a phone?</span>
       <a href={PHONE_HREF} className="num rounded font-semibold text-brand-strong hover:underline">

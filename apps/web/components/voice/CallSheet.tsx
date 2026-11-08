@@ -9,9 +9,11 @@ import { cx } from "@/lib/format";
 import { openCoach } from "@/lib/traceUi";
 import { checkVoice, useVoiceStatus } from "@/lib/voiceCall/health";
 import {
-  closeCallSheet, enableSound, hangUp, isCallActive, openCallSheet, resetCall, retryCall, setHint, startCall, SUGGESTIONS, toggleMute, useCall,
+  closeCallSheet, enableSound, hangUp, interrupt, isCallActive, openCallSheet, pressTalk, releaseTalk, resetCall, retryCall, setHint, setPushToTalk,
+  startCall, SUGGESTIONS, toggleMute, useCall,
   type Caption, type CallErrorKind, type CallState,
 } from "@/lib/voiceCall/session";
+import { HOLD_TO_TALK_CLASS, holdToTalkProps } from "@/lib/voiceCall/hold";
 import { PhoneHint } from "@/components/phone/PhoneHint";
 import { LevelOrb, activityLabel } from "./LevelOrb";
 import { CallClock, clockText } from "./TalkButton";
@@ -84,22 +86,22 @@ function SheetFrame({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-4">
-      <button type="button" aria-hidden="true" tabIndex={-1} onClick={onClose} className="absolute inset-0 cursor-default bg-black/40" />
+      <button type="button" aria-hidden="true" tabIndex={-1} onClick={onClose} className="scrim absolute inset-0 cursor-default" />
       <section
         ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="anim-dialog relative flex max-h-[92dvh] w-full flex-col rounded-t-xl border border-line bg-surface outline-none md:max-h-[min(44rem,92dvh)] md:max-w-[30rem] md:rounded-xl"
+        className="pop anim-dialog relative flex max-h-[92dvh] w-full flex-col rounded-t-xl outline-none md:max-h-[min(46rem,92dvh)] md:max-w-[30rem] md:rounded-xl"
       >
         <header className="flex items-start gap-3 border-b border-line px-4 py-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-strong" aria-hidden="true">
-            <IconMic size={18} />
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-brand-strong" aria-hidden="true">
+            <IconMic size={17} />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="text-[1rem] font-semibold leading-tight">{title}</h2>
-            {subtitle ? <div className="mt-0.5 text-[0.78rem] leading-snug text-ink-2">{subtitle}</div> : null}
+            <h2 id={titleId} className="text-lead font-semibold leading-tight">{title}</h2>
+            {subtitle ? <div className="mt-0.5 text-caption leading-snug text-ink-2">{subtitle}</div> : null}
           </div>
           {right}
           <button
@@ -112,7 +114,7 @@ function SheetFrame({
             {minimize ? <IconChevronDown size={20} /> : <IconClose size={18} />}
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
         {footer ? <footer className="pb-safe border-t border-line px-4 py-3">{footer}</footer> : null}
       </section>
     </div>
@@ -123,7 +125,7 @@ function SheetFrame({
 
 function Disclosure({ className }: { className?: string }) {
   return (
-    <p className={cx("flex items-start gap-2 text-[0.8rem] leading-snug text-ink-2", className)}>
+    <p className={cx("flex items-start gap-2 text-label leading-snug text-ink-2", className)}>
       <IconLock size={15} className="mt-0.5 shrink-0 text-ink-3" />
       <span>{DISCLOSURE}</span>
     </p>
@@ -133,7 +135,7 @@ function Disclosure({ className }: { className?: string }) {
 function Prompts({ onPick, label = "Try asking", active, row }: { onPick: (p: string) => void; label?: string; active?: string | null; row?: boolean }) {
   return (
     <div>
-      <p className="mb-1.5 text-[0.74rem] font-semibold uppercase tracking-wide text-ink-3">{label}</p>
+      <p className="eyebrow mb-1.5">{label}</p>
       <div className={cx("flex gap-1.5", row ? "no-scrollbar -mx-4 overflow-x-auto px-4 pb-0.5" : "flex-wrap")} role="group" aria-label="Suggested questions">
         {SUGGESTIONS.map((p) => (
           <button
@@ -142,9 +144,9 @@ function Prompts({ onPick, label = "Try asking", active, row }: { onPick: (p: st
             onClick={() => onPick(p)}
             aria-pressed={active === p || undefined}
             className={cx(
-              "rounded-md border px-2.5 py-1.5 text-left text-[0.82rem] font-medium transition-colors",
+              "rounded-md border px-2.5 py-1.5 text-left text-label font-medium transition-colors",
               row && "shrink-0 whitespace-nowrap",
-              active === p ? "border-brand bg-brand-soft text-ink" : "border-line-strong bg-surface text-ink-2 hover:border-brand hover:bg-brand-soft hover:text-ink",
+              active === p ? "border-brand bg-brand-soft text-ink" : "border-line-strong bg-surface text-ink-2 hover:border-ink-3/50 hover:bg-surface-2 hover:text-ink",
             )}
           >
             {p}
@@ -235,12 +237,12 @@ function ErrorView({ kind, detail }: { kind: CallErrorKind; detail?: string }) {
       <div className="flex items-start gap-3">
         <IconTile tone="risk" size={40}><IconAlert size={20} /></IconTile>
         <div className="min-w-0">
-          <h3 className="text-[1.05rem] font-semibold leading-tight">{c.title}</h3>
-          <p className="mt-1 text-[0.88rem] leading-snug text-ink-2">{c.body}</p>
+          <h3 className="text-h3 font-semibold">{c.title}</h3>
+          <p className="mt-1 text-body leading-snug text-ink-2">{c.body}</p>
         </div>
       </div>
       {c.steps ? (
-        <ol className="list-decimal space-y-1.5 rounded-md border border-line bg-surface-2 py-3 pl-8 pr-3 text-[0.86rem] leading-snug text-ink marker:font-semibold marker:text-ink-3">
+        <ol className="list-decimal space-y-1.5 rounded-md border border-line bg-surface-2 py-3 pl-8 pr-3 text-body leading-snug text-ink marker:font-semibold marker:text-ink-3">
           {c.steps.map((s) => <li key={s}>{s}</li>)}
         </ol>
       ) : null}
@@ -261,9 +263,9 @@ function ErrorView({ kind, detail }: { kind: CallErrorKind; detail?: string }) {
           </>
         )}
       </div>
-      {check === "still" ? <p role="status" className="text-center text-[0.8rem] text-ink-3">No answer from the voice service yet.</p> : null}
+      {check === "still" ? <p role="status" className="text-center text-label text-ink-3">No answer from the voice service yet.</p> : null}
       {detail ? (
-        <details className="text-[0.76rem] text-ink-3">
+        <details className="text-caption text-ink-3">
           <summary className="cursor-pointer rounded font-medium hover:text-ink">Technical details</summary>
           <p className="mt-1 break-words font-mono">{detail}</p>
         </details>
@@ -277,7 +279,7 @@ function RunLink({ runId, onGo, children }: { runId: string; onGo: () => void; c
     <Link
       href={`/agents?run=${encodeURIComponent(runId)}`}
       onClick={onGo}
-      className="inline-flex items-center gap-1.5 rounded text-[0.88rem] font-semibold text-brand-strong hover:underline"
+      className="inline-flex items-center gap-1.5 rounded text-body font-semibold text-brand-strong hover:underline"
     >
       {children} <IconArrowRight size={14} />
     </Link>
@@ -289,8 +291,8 @@ function Bubble({ c }: { c: Caption }) {
   return (
     <li className={cx("anim-fade flex", mine ? "justify-end" : "justify-start")}>
       <div className={cx("max-w-[88%] rounded-lg px-3 py-2", mine ? "bg-brand-soft" : "border border-line bg-surface-2")}>
-        <p className="mb-0.5 text-[0.7rem] font-semibold text-ink-3">{mine ? "You" : PRODUCT_NAME}</p>
-        <p className="break-words text-[0.9rem] leading-relaxed text-ink">
+        <p className="mb-0.5 text-2xs font-semibold text-ink-3">{mine ? "You" : PRODUCT_NAME}</p>
+        <p className="break-words text-body leading-relaxed text-ink">
           {c.text}
           {c.interim ? <span className="text-ink-3">{c.text ? " " : ""}{c.interim}</span> : null}
           {c.interrupted ? <span className="text-ink-3"> …</span> : null}
@@ -314,7 +316,7 @@ function Captions({ captions, live }: { captions: Caption[]; live: boolean }) {
       {captions.length ? (
         <ol className="space-y-2">{captions.map((c) => <Bubble key={c.id} c={c} />)}</ol>
       ) : (
-        <p className="py-6 text-center text-[0.84rem] text-ink-3">{live ? "Captions appear here as you talk." : "No captions were captured."}</p>
+        <p className="py-6 text-center text-label text-ink-3">{live ? "Captions appear here as you talk." : "No captions were captured."}</p>
       )}
     </div>
   );
@@ -329,13 +331,14 @@ function IdleView({ householdId, name }: { householdId: string; name: string }) 
   const start = () => startCall({ householdId, displayName: name });
   return (
     <div className="space-y-4 p-4">
-      <p className="text-[0.92rem] leading-snug text-ink">
+      <p className="text-lead leading-snug text-ink">
         Ask {PRODUCT_NAME} about your accounts, bills and big purchases. It answers out loud, and every step it takes shows up in the Agent Trail.
       </p>
       <div className="space-y-2.5">
         <Button size="lg" className="w-full" onClick={start} data-autofocus><IconMic size={18} /> Start call</Button>
         <Disclosure />
       </div>
+      <HoldToTalkToggle call={call} className="rounded-lg border border-line px-3.5 py-3" />
       <Prompts
         label="Or tap a question to start with"
         active={call.hint}
@@ -344,7 +347,7 @@ function IdleView({ householdId, name }: { householdId: string; name: string }) 
           start();
         }}
       />
-      <p className="flex items-center gap-1.5 text-[0.74rem] text-ink-3">
+      <p className="flex items-center gap-1.5 text-caption text-ink-3">
         <span className={cx("h-2 w-2 rounded-full", voice === "up" ? "bg-good" : "bg-ink-3")} aria-hidden="true" />
         {voice === "up" ? "Voice line is online" : "Checking the voice line…"}
       </p>
@@ -358,11 +361,11 @@ function ExplainerView({ householdId, name }: { householdId: string; name: strin
       <div className="flex items-start gap-3">
         <IconTile size={40}><IconMic size={20} /></IconTile>
         <div className="min-w-0">
-          <h3 className="text-[1.05rem] font-semibold leading-tight">Allow your microphone</h3>
-          <p className="mt-1 text-[0.88rem] leading-snug text-ink-2">{PRODUCT_NAME} needs to hear you. Your browser will ask first, and only this tab can use the microphone.</p>
+          <h3 className="text-h3 font-semibold">Allow your microphone</h3>
+          <p className="mt-1 text-body leading-snug text-ink-2">{PRODUCT_NAME} needs to hear you. Your browser will ask first, and only this tab can use the microphone.</p>
         </div>
       </div>
-      <ol className="list-decimal space-y-2 rounded-md border border-line bg-surface-2 py-3 pl-8 pr-3 text-[0.88rem] leading-snug text-ink marker:font-semibold marker:text-ink-3">
+      <ol className="list-decimal space-y-2 rounded-md border border-line bg-surface-2 py-3 pl-8 pr-3 text-body leading-snug text-ink marker:font-semibold marker:text-ink-3">
         <li>Tap <b>Allow microphone and start</b> below.</li>
         <li>When your browser asks, choose <b>Allow</b> (on iPhone, <b>Allow</b>; on Android, <b>While using the app</b> or <b>Allow</b>).</li>
         <li>Start talking. Hang up any time and the microphone switches off right away.</li>
@@ -383,12 +386,84 @@ function ConnectingView({ call }: { call: CallState }) {
     <div className="flex flex-col items-center gap-3 p-6 text-center" role="status" aria-live="polite">
       <LevelOrb activity="idle" muted={false} live={false} />
       <div>
-        <p className="text-[1rem] font-semibold">{call.step || "Connecting"}…</p>
-        <p className="mt-0.5 text-[0.84rem] text-ink-2">This usually takes a few seconds. If your browser asks about the microphone, choose Allow.</p>
+        <p className="text-lead font-semibold">{call.step || "Connecting"}…</p>
+        <p className="mt-0.5 text-label text-ink-2">This usually takes a few seconds. If your browser asks about the microphone, choose Allow.</p>
       </div>
       <Disclosure className="max-w-sm text-left" />
       <Button variant="secondary" size="lg" className="mt-1 w-full max-w-xs" onClick={hangUp} data-autofocus>Cancel</Button>
     </div>
+  );
+}
+
+/** Why the mic is (or is not) reaching the assistant, in a few words. */
+function micText(call: CallState): string {
+  if (call.micLive) return call.pushToTalk ? "Mic live. Release to send" : "Mic live";
+  if (call.muted) return "Muted";
+  if (call.pushToTalk) return "Mic closed. Hold to talk";
+  if (call.botSpeaking) return `Mic paused while ${PRODUCT_NAME} speaks`;
+  return "Mic closed";
+}
+
+/** The one place that says whether anyone can hear you: a red live pill, or a quiet closed one. Never colour alone. */
+function MicIndicator({ call }: { call: CallState }) {
+  const live = call.micLive;
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-caption font-semibold transition-colors",
+        live ? "border-rec/30 bg-rec/10 text-rec" : "border-line bg-surface-2 text-ink-3",
+      )}
+    >
+      {live ? <span className="anim-rec h-2 w-2 rounded-full bg-rec" aria-hidden="true" /> : <IconMicOff size={13} />}
+      {micText(call)}
+    </span>
+  );
+}
+
+/** "Noisy room? Hold to talk": a switch row. The preference is remembered (lib/voiceCall/prefs). */
+function HoldToTalkToggle({ call, className }: { call: CallState; className?: string }) {
+  const id = useId();
+  return (
+    <div className={cx("flex items-center justify-between gap-3", className)}>
+      <label htmlFor={id} className="min-w-0 cursor-pointer">
+        <span className="block text-label font-medium text-ink">Noisy room? Hold to talk</span>
+        <span className="block text-caption text-ink-3">The mic only listens while you hold the button.</span>
+      </label>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={call.pushToTalk}
+        onClick={() => setPushToTalk(!call.pushToTalk)}
+        className={cx("relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors", call.pushToTalk ? "bg-brand" : "bg-surface-3 shadow-[inset_0_0_0_1px_var(--line-strong)]")}
+      >
+        <span className="sr-only">{call.pushToTalk ? "On" : "Off"}</span>
+        <span aria-hidden="true" className={cx("inline-block h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform duration-200", call.pushToTalk ? "translate-x-[19px]" : "translate-x-[3px]")} />
+      </button>
+    </div>
+  );
+}
+
+/** The big press-and-hold button (pointer, touch, and Space/Enter held from the keyboard). */
+function HoldButton({ call }: { call: CallState }) {
+  const held = call.talkHeld;
+  return (
+    <button
+      type="button"
+      {...holdToTalkProps(pressTalk, releaseTalk)}
+      aria-pressed={held}
+      aria-label={held ? "Talking. Release to send" : "Hold to talk"}
+      data-autofocus
+      className={cx(
+        HOLD_TO_TALK_CLASS,
+        "relative flex h-16 w-full items-center justify-center gap-2.5 rounded-xl text-lead font-semibold transition-[background-color,transform] duration-150",
+        held ? "scale-[0.985] bg-rec text-white" : "bg-brand text-brand-ink hover:bg-brand-hover",
+      )}
+    >
+      {held ? <span className="anim-rec h-2.5 w-2.5 rounded-full bg-white" aria-hidden="true" /> : <IconMic size={20} />}
+      {held ? "Listening. Release to send" : "Hold to talk"}
+      <span className="absolute bottom-1.5 hidden text-2xs font-medium opacity-70 md:block">{held ? "" : "or hold Space"}</span>
+    </button>
   );
 }
 
@@ -397,29 +472,30 @@ function LiveView({ call }: { call: CallState }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-col items-center px-4 pt-4">
         <LevelOrb activity={call.activity} muted={call.muted} live size={104} />
-        <p role="status" aria-live="polite" className="mt-2 text-[1rem] font-semibold">{activityLabel(call.activity, call.muted)}</p>
-        <p className="mt-0.5 flex items-center gap-2 text-[0.8rem] text-ink-2">
+        <p role="status" aria-live="polite" className="mt-2 text-lead font-semibold">{activityLabel(call.activity, call.muted)}</p>
+        <div className="mt-1.5 flex items-center gap-2 text-label text-ink-2">
           <CallClock startedAt={call.startedAt} className="font-medium text-ink" />
-          <span aria-hidden="true">·</span>
-          {call.muted ? (
-            <span className="inline-flex items-center gap-1"><IconMicOff size={13} /> Mic off</span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 text-rec"><span className="anim-blink h-1.5 w-1.5 rounded-full bg-rec" aria-hidden="true" /> Mic on</span>
-          )}
-        </p>
+          <MicIndicator call={call} />
+        </div>
+        {/* Phones (speakerphone guard): talk over the assistant without waiting for it to finish. */}
+        {call.botSpeaking && !call.pushToTalk ? (
+          <Button variant="secondary" size="sm" onClick={interrupt} className="anim-pop-in mt-2.5 md:hidden">
+            <IconMic size={14} /> Interrupt
+          </Button>
+        ) : null}
       </div>
 
       {call.soundBlocked ? (
         <div className="mx-4 mt-3">
           <Button variant="dark" className="w-full" onClick={enableSound}>Tap to turn sound on</Button>
-          <p className="mt-1 text-center text-[0.76rem] text-ink-3">Your browser is holding the assistant&apos;s voice until you tap.</p>
+          <p className="mt-1 text-center text-caption text-ink-3">Your browser is holding the assistant&apos;s voice until you tap.</p>
         </div>
       ) : null}
-      {call.notice ? <p role="alert" className="mx-4 mt-3 rounded-md bg-watch-soft px-3 py-2 text-[0.84rem] text-watch">{call.notice}</p> : null}
+      {call.notice ? <p role="alert" className="mx-4 mt-3 rounded-md bg-watch-soft px-3 py-2 text-label text-watch">{call.notice}</p> : null}
       {call.hint ? (
         <div className="mx-4 mt-3 rounded-md border border-brand/30 bg-brand-soft px-3 py-2">
-          <p className="text-[0.72rem] font-semibold uppercase tracking-wide text-brand-strong">Say it out loud</p>
-          <p className="mt-0.5 text-[0.95rem] font-medium leading-snug text-ink">“{call.hint}”</p>
+          <p className="eyebrow text-brand-strong">Say it out loud</p>
+          <p className="mt-0.5 text-lead font-medium leading-snug text-ink">“{call.hint}”</p>
         </div>
       ) : null}
 
@@ -434,11 +510,15 @@ function LiveView({ call }: { call: CallState }) {
 
 function LiveFooter({ call }: { call: CallState }) {
   return (
-    <div className="space-y-2.5">
-      <div className="grid grid-cols-2 gap-2.5">
-        <Button variant="secondary" size="lg" onClick={toggleMute} aria-pressed={call.muted} className={cx(call.muted && "border-dark bg-surface-2")}>
-          {call.muted ? <IconMicOff size={18} /> : <IconMic size={18} />} {call.muted ? "Unmute" : "Mute"}
-        </Button>
+    <div className="space-y-3">
+      <HoldToTalkToggle call={call} />
+      {call.pushToTalk ? <HoldButton call={call} /> : null}
+      <div className={cx("grid gap-2.5", call.pushToTalk ? "grid-cols-1" : "grid-cols-2")}>
+        {call.pushToTalk ? null : (
+          <Button variant="secondary" size="lg" onClick={toggleMute} aria-pressed={call.muted} className={cx(call.muted && "border-ink-3 bg-surface-3")}>
+            {call.muted ? <IconMicOff size={18} /> : <IconMic size={18} />} {call.muted ? "Unmute" : "Mute"}
+          </Button>
+        )}
         <Button variant="danger" size="lg" onClick={hangUp}>
           <IconPhone size={18} className="rotate-[135deg]" /> Hang up
         </Button>
@@ -461,12 +541,12 @@ function EndedView({ call, householdId, name }: { call: CallState; householdId: 
       <div className="flex items-start gap-3 px-4 pt-4">
         <IconTile tone={call.endReason === "lost" ? "watch" : "good"} size={40}>{call.endReason === "lost" ? <IconAlert size={20} /> : <IconCheck size={20} />}</IconTile>
         <div className="min-w-0">
-          <h3 className="text-[1.05rem] font-semibold leading-tight">Call ended{length ? <span className="num font-normal text-ink-2"> · {length}</span> : null}</h3>
-          <p className="mt-0.5 text-[0.86rem] leading-snug text-ink-2">
+          <h3 className="text-h3 font-semibold">Call ended{length ? <span className="num font-normal text-ink-2"> · {length}</span> : null}</h3>
+          <p className="mt-0.5 text-body leading-snug text-ink-2">
             {reason}
             {call.endReason === "lost" ? " Check your signal; if it keeps happening, switch off Wi-Fi and use cellular data." : ""}
           </p>
-          <p className="mt-1 text-[0.76rem] text-ink-3">Captions stay only while this window is open. Audio was never stored.</p>
+          <p className="mt-1 text-caption text-ink-3">Captions stay only while this window is open. Audio was never stored.</p>
         </div>
       </div>
       {call.runId ? (
@@ -541,14 +621,14 @@ export function CallPill() {
   const call = useCall();
   if (!isCallActive(call) || call.sheetOpen) return null;
   return (
-    <div className="on-dark fixed bottom-[4.75rem] left-4 z-40 flex items-center overflow-hidden rounded-full bg-dark text-white md:bottom-6 md:left-[calc(232px+1.5rem)]" role="group" aria-label="Voice call in progress">
+    <div className="pop fixed bottom-[4.75rem] left-4 z-40 flex items-center overflow-hidden rounded-full text-ink md:bottom-6 md:left-[calc(232px+1.5rem)]" role="group" aria-label="Voice call in progress">
       <button
         type="button"
         onClick={() => openCallSheet()}
-        className="inline-flex h-11 items-center gap-2 pl-4 pr-3 text-[0.88rem] font-semibold hover:bg-[var(--dark-hover)]"
+        className="inline-flex h-11 items-center gap-2 pl-4 pr-3 text-body font-semibold hover:bg-surface-2"
         aria-label="Open the call window"
       >
-        <span className="anim-blink h-2 w-2 rounded-full bg-[#3fd18a]" aria-hidden="true" />
+        <span className={cx("h-2 w-2 rounded-full", call.micLive ? "anim-rec bg-rec" : "bg-ink-3")} aria-hidden="true" />
         {call.phase === "live" ? <>In call <CallClock startedAt={call.startedAt} /></> : <><Spinner size={13} /> Connecting</>}
       </button>
       <button
@@ -556,7 +636,7 @@ export function CallPill() {
         onClick={hangUp}
         aria-label="Hang up"
         title="Hang up"
-        className="inline-flex h-11 w-11 items-center justify-center border-l border-white/15 bg-risk hover:opacity-90"
+        className="inline-flex h-11 w-11 items-center justify-center bg-risk text-white hover:opacity-90 dark:text-[#1a0706]"
       >
         <IconPhone size={18} className="rotate-[135deg]" />
       </button>

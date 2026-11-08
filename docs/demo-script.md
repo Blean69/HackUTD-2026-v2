@@ -6,11 +6,11 @@ Fill-ins: `{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is l
 Hand out the QR code first, so judges hold the app while we talk. Every path opens the same way (the onboarding opener),
 then splits by track. Each path works on its own. Close with the 20-second kicker.
 
-**Names to use out loud.** Table Mode (was Huddle), What-If Studio, Agent Trail (was the glass box), Advisor Console,
+**Names to use out loud.** Table Mode (was Huddle), What-If Studio, Agent Trail (was the glass box), Credit, Analytics,
 Ask {{NAME}} (the coach panel). Code and tables still say `huddle`, so a Table Mode run shows `workflow: huddle` in the
 Agent Trail and in SQL. Say so if a judge asks.
 
-**Where things are.** Side nav: Dashboard, Table Mode, What-If Studio, Goals, Agent Trail, Advisor Console. The Family voting
+**Where things are.** Side nav: Dashboard, Table Mode, What-If Studio, Goals, Credit, Analytics, Agent Trail. The Family voting
 card is on the Dashboard (and under Goals). `/me` opens the Riveras' room. Onboarding is `{{URL}}/onboarding`. [verify all labels after the redesign lands]
 
 ## Opener, all paths (0:00 to 0:55): a judge links the demo bank on their own phone
@@ -37,7 +37,7 @@ Angle: the whole financial picture, understood, then acted on.
 6. **2:25** Switch to the Nguyens: the scam alert links the "grandson in jail" call to a $2,000 gift-card purchase.
 7. **2:40** Kicker.
 
-Optional if the judge leans in: **Advisor Console** (`/advisor`): households by urgency, and a note typed there appears live in the family's room. Ask {{NAME}}: ask "Can we afford the second location?" and show the tool calls under the answer.
+Optional if the judge leans in: **Credit** (`/room/hh_rivera/credit`): the simulated score, what's shaping it and how household health drives about 45% of it. Or call the line, hang up, and let Brian ring back with a critical alert.
 
 ## Spacetime path (2 or 3 judges' phones + laptop)
 

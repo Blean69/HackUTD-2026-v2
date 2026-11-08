@@ -60,15 +60,15 @@ export function Verdict({ p, full }: { p: Proposal; full?: boolean }) {
       <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         {v ? <Chip tone={v.tone}>{v.label}</Chip> : waiting ? <Chip tone="brand"><Spinner size={11} /> Checking affordability</Chip> : <Chip>No verdict</Chip>}
         {p.run_id ? (
-          <Link href={`/agents?run=${encodeURIComponent(p.run_id)}`} className="inline-flex items-center gap-1 text-[0.78rem] font-medium text-brand-strong hover:underline" title="Open this agent run in Agent Trail">
+          <Link href={`/agents?run=${encodeURIComponent(p.run_id)}`} className="inline-flex items-center gap-1 text-label font-medium text-brand-strong hover:underline" title="Open this agent run in Agent Trail">
             <IconBot size={13} /> Agent analysis
           </Link>
         ) : v ? (
-          <span className="text-[0.76rem] text-ink-3">Quick estimate from your balances</span>
+          <span className="text-caption text-ink-3">Quick estimate from your balances</span>
         ) : null}
       </p>
-      {summary ? <p className={cx("mt-1.5 text-[0.82rem] leading-snug text-ink-2", !full && "line-clamp-2")}>{summary}</p> : null}
-      {full && p.analysis?.suggestion ? <p className="mt-1 text-[0.82rem] leading-snug text-ink-2"><span className="font-medium text-ink">Suggestion:</span> {p.analysis.suggestion}</p> : null}
+      {summary ? <p className={cx("mt-1.5 text-label leading-snug text-ink-2", !full && "line-clamp-2")}>{summary}</p> : null}
+      {full && p.analysis?.suggestion ? <p className="mt-1 text-label leading-snug text-ink-2"><span className="font-medium text-ink">Suggestion:</span> {p.analysis.suggestion}</p> : null}
     </div>
   );
 }
@@ -118,12 +118,12 @@ export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { 
       <div className="flex items-start gap-3">
         {!compact ? <IconTile tone={open ? "brand" : "neutral"} size={40}><ProposalIcon title={p.title} size={20} /></IconTile> : null}
         <div className="min-w-0 flex-1">
-          <h3 className="text-[0.95rem] font-semibold leading-snug">{p.title}</h3>
-          <p className="num mt-0.5 text-[0.8rem] text-ink-2">{proposalTerms(p)}{!compact ? <span className="text-ink-3"> · by {p.created_by_name}</span> : null}</p>
+          <h3 className="text-lead font-semibold leading-snug">{p.title}</h3>
+          <p className="num mt-0.5 text-label text-ink-2">{proposalTerms(p)}{!compact ? <span className="text-ink-3"> · by {p.created_by_name}</span> : null}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           {outcome ? <Chip tone={outcome.tone}>{outcome.label}</Chip> : null}
-          <span className="text-[0.74rem] text-ink-3">{whenText(p)}</span>
+          <span className="text-caption text-ink-3">{whenText(p)}</span>
         </div>
       </div>
 
@@ -150,7 +150,7 @@ export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { 
       {err ? <ErrorNote className="mt-2 !py-2">{err}</ErrorNote> : null}
 
       {voters.length ? (
-        <p className="mt-2.5 text-[0.8rem] text-ink-2" aria-label="Who voted">
+        <p className="mt-2.5 text-label text-ink-2" aria-label="Who voted">
           {voters.map((v, i) => (
             <span key={v.id}>{i ? " · " : ""}{v.voter_name} <span className={cx("font-medium", CHOICE_TEXT[v.choice])}>{v.choice}</span></span>
           ))}
@@ -164,10 +164,10 @@ export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { 
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {metrics.map((m) => (
               <div key={m.label} className="rounded-md bg-surface-2 p-2.5">
-                <dt className="text-[0.72rem] leading-tight text-ink-2">{m.label}</dt>
+                <dt className="text-caption leading-tight text-ink-2">{m.label}</dt>
                 <dd className="num mt-1 flex items-baseline gap-1.5">
-                  {m.before !== undefined ? <span className="text-[0.78rem] text-ink-3 line-through">{metric(m.before, m.unit)}</span> : null}
-                  <span className="text-[0.98rem] font-semibold">{metric(m.after, m.unit)}</span>
+                  {m.before !== undefined ? <span className="text-label text-ink-3 line-through">{metric(m.before, m.unit)}</span> : null}
+                  <span className="text-lead font-semibold">{metric(m.after, m.unit)}</span>
                 </dd>
               </div>
             ))}

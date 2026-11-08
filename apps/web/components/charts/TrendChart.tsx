@@ -1,30 +1,37 @@
 "use client";
+import { useMemo } from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { longDate, usd } from "@/lib/format";
 import type { TrendModel, TrendRow } from "@/lib/finance";
+import { ChartLegend, ChartTooltip, type TooltipRow } from "./parts";
+import { chartTheme } from "./theme";
 
 const MONTH = new Intl.DateTimeFormat("en-US", { month: "short" });
 const monthOf = (d: string) => MONTH.format(new Date(`${d}T12:00:00`));
+const C = "var(--chart-1)";
 
-function Tip({ active, payload }: { active?: boolean; payload?: { payload: TrendRow }[] }) {
+type Row = TrendRow & { range?: [number, number] };
+
+function Tip({ active, payload }: { active?: boolean; payload?: { payload: Row }[] }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
-  const isForecast = p.actual === undefined;
-  return (
-    <div className="rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.78rem]">
-      <p className="font-semibold">{longDate(p.date)}</p>
-      {p.actual !== undefined ? <p className="num text-ink-2">Net worth: <span className="font-semibold text-ink">{usd(p.actual)}</span></p> : null}
-      {isForecast && p.forecast !== undefined ? <p className="num text-ink-2">Forecast: <span className="font-semibold text-ink">{usd(p.forecast)}</span></p> : null}
-      {isForecast && p.best !== undefined ? <p className="num text-good">Best case: {usd(p.best)}</p> : null}
-      {isForecast && p.worst !== undefined ? <p className="num text-risk">Worst case: {usd(p.worst)}</p> : null}
-    </div>
-  );
+  const rows: TooltipRow[] = [];
+  if (p.actual !== undefined) rows.push({ label: "Net worth", value: usd(p.actual), color: C, kind: "line", strong: true });
+  else {
+    if (p.forecast !== undefined) rows.push({ label: "Forecast", value: usd(p.forecast), color: C, kind: "dash", strong: true });
+    if (p.best !== undefined) rows.push({ label: "Best case", value: usd(p.best), color: C, kind: "band" });
+    if (p.worst !== undefined) rows.push({ label: "Worst case", value: usd(p.worst), color: C, kind: "band" });
+  }
+  return <ChartTooltip title={longDate(p.date)} rows={rows} note={p.actual === undefined ? "Estimate from the 90-day forecast" : undefined} />;
 }
 
-/** Net worth: derived history (solid), 90-day forecast (dashed) and best / worst bands. */
+/** Net worth: derived history (solid line on a faint wash), the 90-day forecast (dashed) inside its best-to-worst range band. */
 /** `height` is the size from `sm` up; `mobileHeight` below it. One chart is mounted either way. */
 export function TrendChart({ model, height = 260, mobileHeight }: { model: TrendModel; height?: number; mobileHeight?: number }) {
-  const rows = model.rows;
+  const rows = useMemo<Row[]>(
+    () => model.rows.map((r) => (r.best !== undefined && r.worst !== undefined ? { ...r, range: [Math.min(r.worst, r.best), Math.max(r.worst, r.best)] } : r)),
+    [model.rows],
+  );
   if (rows.length < 2) return <div className="skeleton" style={{ height: mobileHeight ?? height }} aria-busy="true" />;
   const ticks: string[] = [];
   let lastMonth = "";
@@ -36,27 +43,28 @@ export function TrendChart({ model, height = 260, mobileHeight }: { model: Trend
     }
   }
   const todayRow = rows.find((r) => r.date === model.today);
+  const hasForecast = rows.some((r) => r.forecast !== undefined);
   const summary = `Net worth ${usd(todayRow?.actual ?? 0)} today${model.forecastEnd !== undefined ? `, forecast ${usd(model.forecastEnd)} in 90 days (estimate)` : ""}.`;
   return (
     <div>
-      <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.72rem] text-ink-2" aria-hidden="true">
-        <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[var(--c1)]" /> Actual</li>
-        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--c2)]" /> 90-day forecast</li>
-        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dotted border-[var(--c3)]" /> Best and worst case</li>
-      </ul>
+      <ChartLegend
+        items={[
+          { label: "Actual", color: C, kind: "line" },
+          ...(hasForecast ? [{ label: "90-day forecast", color: C, kind: "dash" as const }, { label: "Best to worst case", color: C, kind: "band" as const }] : []),
+        ]}
+      />
       <div style={{ ["--h" as string]: `${mobileHeight ?? height}px`, ["--hd" as string]: `${height}px` }} className="h-[var(--h)] sm:h-[var(--hd)]" role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-          <ComposedChart data={rows} margin={{ top: 14, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="var(--line)" />
-            <XAxis dataKey="date" ticks={ticks} tickFormatter={monthOf} tick={{ fontSize: 11, fill: "var(--ink-3)" }} tickLine={false} axisLine={{ stroke: "var(--line-strong)" }} interval={0} />
-            <YAxis tickFormatter={(v: number) => usd(v, { compact: true })} tick={{ fontSize: 11, fill: "var(--ink-3)" }} tickLine={false} axisLine={false} width={52} domain={["auto", "auto"]} />
-            <Tooltip content={<Tip />} cursor={{ stroke: "var(--line-strong)" }} />
-            <Area type="monotone" dataKey="actual" stroke="var(--c1)" strokeWidth={2.25} fill="var(--c3)" fillOpacity={0.16} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} connectNulls={false} />
-            <Line type="monotone" dataKey="forecast" stroke="var(--c2)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} connectNulls />
-            <Line type="monotone" dataKey="best" stroke="var(--c3)" strokeWidth={1.75} strokeDasharray="2 4" dot={false} isAnimationActive={false} connectNulls />
-            <Line type="monotone" dataKey="worst" stroke="var(--risk)" strokeOpacity={0.75} strokeWidth={1.75} strokeDasharray="2 4" dot={false} isAnimationActive={false} connectNulls />
-            <ReferenceLine x={model.today} stroke="var(--ink-3)" strokeDasharray="3 3" />
-            {todayRow?.actual !== undefined ? <ReferenceDot x={model.today} y={todayRow.actual} r={4.5} fill="var(--c1)" stroke="var(--surface)" strokeWidth={2} /> : null}
+          <ComposedChart data={rows} margin={{ ...chartTheme.margin, top: 16, right: 10 }}>
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" ticks={ticks} tickFormatter={monthOf} {...chartTheme.axisX} interval={0} minTickGap={0} />
+            <YAxis tickFormatter={chartTheme.tickUsd} {...chartTheme.axisY} width={52} domain={["auto", "auto"]} tickCount={5} />
+            <Tooltip content={<Tip />} cursor={chartTheme.cursorLine} isAnimationActive={false} />
+            <Area type="monotone" dataKey="range" stroke="none" fill={C} fillOpacity={0.12} isAnimationActive={false} connectNulls activeDot={false} />
+            <Area type="monotone" dataKey="actual" stroke={C} strokeWidth={2} fill={C} fillOpacity={0.07} dot={false} activeDot={chartTheme.activeDot(C)} isAnimationActive={false} connectNulls={false} />
+            <Line type="monotone" dataKey="forecast" stroke={C} strokeWidth={2} strokeDasharray="4 4" dot={false} activeDot={chartTheme.activeDot(C)} isAnimationActive={false} connectNulls />
+            <ReferenceLine x={model.today} stroke="var(--ink-3)" strokeOpacity={0.6} strokeDasharray="2 3" label={{ value: "Today", position: "top", fill: "var(--ink-3)", fontSize: 10, offset: 6 }} />
+            {todayRow?.actual !== undefined ? <ReferenceDot x={model.today} y={todayRow.actual} r={4.5} fill={C} stroke="var(--surface)" strokeWidth={2} /> : null}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

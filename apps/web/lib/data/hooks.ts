@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { dedupeGoals } from "@/lib/finance";
-import { LIABILITY_TYPES } from "@/lib/format";
 import type {
-  AgentRun, Alert, HealthIndicator, HealthStatus, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
+  AgentRun, Alert, HealthIndicator, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
 import type { DataScope, RoomTable } from "./backend";
 import { useConnection } from "./connection";
@@ -113,7 +112,8 @@ export function useAlerts(householdId: string): Alert[] {
   return useMemo(
     () =>
       rows
-        .filter((a) => a.household_id === householdId)
+        // `advisor` alerts came from the removed Advisor Console (contracts.md section 11); old rows stay hidden.
+        .filter((a) => a.household_id === householdId && a.kind !== "advisor")
         .sort((a, b) => Number(!!a.acknowledged_by) - Number(!!b.acknowledged_by) || SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.created_at.localeCompare(a.created_at)),
     [rows, householdId],
   );
@@ -195,12 +195,6 @@ export function usePresence(householdId: string): PresenceView[] {
     [rows, householdId, identity],
   );
 }
-/** Everyone connected anywhere (for the advisor console). */
-export function usePresenceAll(): PresenceView[] {
-  const rows = useRows("presence");
-  const { identity } = useConnection();
-  return useMemo(() => rows.map((p) => ({ ...p, isMe: p.identity === identity })), [rows, identity]);
-}
 
 /** The household's most recent Huddle (live > analyzing > done). */
 export function useHuddle(householdId: string) {
@@ -221,10 +215,6 @@ export function useScenarios(householdId: string) {
 export function useCoachMessages(householdId: string) {
   const rows = useRows("coach_message");
   return useMemo(() => rows.filter((m) => m.household_id === householdId).sort((a, b) => a.id - b.id), [rows, householdId]);
-}
-export function useAdvisorNotes(householdId: string) {
-  const rows = useRows("advisor_note");
-  return useMemo(() => rows.filter((n) => n.household_id === householdId).sort((a, b) => b.id - a.id), [rows, householdId]);
 }
 
 // ------------------------------------------------------------------ agent runs + trace
@@ -301,59 +291,4 @@ export function useTraceByRun(): Map<string, TraceEvent[]> {
     }
     return out;
   }, [rows]);
-}
-
-// ------------------------------------------------------------------ advisor roll-up
-
-export interface HouseholdSummary {
-  id: string;
-  name: string;
-  city: string;
-  state: string;
-  persona: string;
-  isSandbox: boolean;
-  status: HealthStatus;
-  indicators: HealthIndicator[];
-  openAlerts: Alert[];
-  openGoals: number;
-  netWorth: number;
-  online: number;
-  lastNote?: string;
-}
-const STATUS_RANK: Record<HealthStatus, number> = { good: 0, watch: 1, risk: 2 };
-export function useHouseholdSummaries(): HouseholdSummary[] {
-  const households = useHouseholds();
-  const health = useRows("health_indicator");
-  const alerts = useRows("alert");
-  const goals = useRows("goal");
-  const accounts = useRows("account");
-  const presence = useRows("presence");
-  const notes = useRows("advisor_note");
-  return useMemo(
-    () =>
-      households.map((h) => {
-        const indicators = health.filter((i) => i.household_id === h.id);
-        let status: HealthStatus = "good";
-        for (const i of indicators) if (STATUS_RANK[i.status] > STATUS_RANK[status]) status = i.status;
-        let net = (h.home_value ?? 0) + (h.vehicle_value ?? 0);
-        for (const a of accounts) if (a.household_id === h.id) net += LIABILITY_TYPES.has(a.type) ? -a.balance : a.balance;
-        const lastNote = notes.filter((n) => n.household_id === h.id).sort((a, b) => b.id - a.id)[0];
-        return {
-          id: h.id,
-          name: h.name,
-          city: h.city,
-          state: h.state,
-          persona: h.persona,
-          isSandbox: h.id.startsWith("hh_sbx_"),
-          status,
-          indicators,
-          openAlerts: alerts.filter((a) => a.household_id === h.id && !a.acknowledged_by),
-          openGoals: goals.filter((g) => g.household_id === h.id).length,
-          netWorth: net,
-          online: presence.filter((p) => p.household_id === h.id).length,
-          lastNote: lastNote?.text,
-        };
-      }),
-    [households, health, alerts, goals, accounts, presence, notes],
-  );
 }

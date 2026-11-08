@@ -1,5 +1,4 @@
 "use client";
-import { cx } from "@/lib/format";
 import { STEPS } from "@/lib/data/onboarding";
 
 /**
@@ -10,9 +9,9 @@ export function Stepper({ current, sub = 0 }: { current: number; sub?: number })
   const label = STEPS[current]?.label ?? "";
   return (
     <nav aria-label="Setup progress">
-      <p className="flex items-baseline justify-between gap-3 text-[0.8rem]">
+      <p className="flex items-baseline justify-between gap-3 text-caption">
         <span className="font-medium text-ink-3">
-          Step <span className="num">{current + 1}</span> of <span className="num">{STEPS.length}</span>
+          Step <span className="num font-mono">{current + 1}</span> of <span className="num font-mono">{STEPS.length}</span>
         </span>
         <span className="truncate font-semibold text-ink" aria-current="step">
           {label}
@@ -22,8 +21,8 @@ export function Stepper({ current, sub = 0 }: { current: number; sub?: number })
         {STEPS.map((s, i) => {
           const fill = i < current ? 1 : i === current ? Math.max(0.12, Math.min(1, sub)) : 0;
           return (
-            <li key={s.key} className="h-1 flex-1 overflow-hidden rounded-full bg-line">
-              <span className={cx("bar-fill block h-full rounded-full", i < current ? "bg-brand" : "bg-brand-strong")} style={{ transform: `scaleX(${fill})` }} />
+            <li key={s.key} className="h-1 flex-1 overflow-hidden rounded-full bg-surface-3 sm:bg-line-strong/60">
+              <span className="bar-fill block h-full rounded-full bg-brand" style={{ transform: `scaleX(${fill})` }} />
             </li>
           );
         })}

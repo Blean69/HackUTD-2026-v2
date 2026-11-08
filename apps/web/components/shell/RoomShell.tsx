@@ -15,7 +15,7 @@ import { RoomHeader } from "./RoomHeader";
 function RoomSkeleton() {
   return (
     <div className="space-y-3" aria-busy="true" aria-label="Loading household">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-28 !rounded-lg" />)}</div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className={`h-28 !rounded-lg ${i === 0 ? "col-span-2 lg:col-span-1" : ""}`} />)}</div>
       <div className="grid gap-3 lg:grid-cols-2"><Skeleton className="h-72 !rounded-lg" /><Skeleton className="h-72 !rounded-lg" /></div>
     </div>
   );
@@ -68,15 +68,15 @@ export function RoomShell({ householdId, children }: { householdId: string; chil
         <RoomSkeleton />
       ) : !found ? (
         <Card className="motion-rise mx-auto mt-10 max-w-md p-6 text-center">
-          <h1 className="text-[1.15rem] font-semibold">{offline ? "We can't reach the live database" : "We can't find that household"}</h1>
-          <p className="mt-1.5 text-[0.88rem] leading-relaxed text-ink-2">
+          <h1 className="display text-h3">{offline ? "We can't reach the live database" : "We can't find that household"}</h1>
+          <p className="mt-1.5 text-body text-ink-2">
             {offline
               ? "This page fell back to offline demo data, which only has the sample households. Try again in a moment."
               : "It may have been reset. Your other households are on the log-in page, and the demo household is always open."}
           </p>
           <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
             {offline ? (
-              <button type="button" onClick={() => window.location.reload()} className="press inline-flex h-10 items-center justify-center rounded-md bg-brand px-4 text-[0.88rem] font-semibold text-brand-ink hover:bg-brand-strong">
+              <button type="button" onClick={() => window.location.reload()} className="press inline-flex h-10 items-center justify-center rounded-md bg-brand px-4 text-body font-semibold text-brand-ink hover:bg-brand-hover">
                 Try again
               </button>
             ) : null}
@@ -84,13 +84,13 @@ export function RoomShell({ householdId, children }: { householdId: string; chil
               href="/login"
               className={
                 offline
-                  ? "press inline-flex h-10 items-center justify-center rounded-md px-4 text-[0.88rem] font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink"
-                  : "press inline-flex h-10 items-center justify-center rounded-md bg-brand px-4 text-[0.88rem] font-semibold text-brand-ink hover:bg-brand-strong"
+                  ? "press inline-flex h-10 items-center justify-center rounded-md px-4 text-body font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink"
+                  : "press inline-flex h-10 items-center justify-center rounded-md bg-brand px-4 text-body font-semibold text-brand-ink hover:bg-brand-hover"
               }
             >
               Log in
             </Link>
-            <Link href={`/room/${DEMO_HOUSEHOLD_ID}`} className="press inline-flex h-10 items-center justify-center rounded-md px-4 text-[0.88rem] font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink">
+            <Link href={`/room/${DEMO_HOUSEHOLD_ID}`} className="press inline-flex h-10 items-center justify-center rounded-md px-4 text-body font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink">
               Open the demo household
             </Link>
           </div>

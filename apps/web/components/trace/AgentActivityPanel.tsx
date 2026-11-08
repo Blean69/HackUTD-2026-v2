@@ -60,7 +60,7 @@ export function AgentActivityPanel({ open, runId, onClose }: { open: boolean; ru
         {run ? (
           <div className="shrink-0 border-b border-line px-4 py-3">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[0.9rem] font-semibold">{WORKFLOW_LABEL[run.workflow]}</span>
+              <span className="text-body font-semibold">{WORKFLOW_LABEL[run.workflow]}</span>
               {running ? (
                 <Chip tone="brand"><span className="anim-blink h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />Running</Chip>
               ) : run.status === "error" ? (
@@ -69,18 +69,18 @@ export function AgentActivityPanel({ open, runId, onClose }: { open: boolean; ru
                 <Chip tone="good">Done</Chip>
               )}
             </div>
-            <dl className="mt-2 grid grid-cols-3 gap-2 text-[0.76rem]">
+            <dl className="mt-2 grid grid-cols-3 gap-2 text-caption">
               <div>
                 <dt className="text-ink-3">Steps</dt>
-                <dd className="num mt-0.5 text-[0.95rem] font-semibold">{events.length}<span className="ml-1 text-[0.72rem] font-normal text-ink-3">{toolCalls} tool calls</span></dd>
+                <dd className="num mt-0.5 text-lead font-semibold">{events.length}<span className="ml-1 text-caption font-normal text-ink-3">{toolCalls} tool calls</span></dd>
               </div>
               <div>
                 <dt className="text-ink-3">Model time</dt>
-                <dd className="num mt-0.5 text-[0.95rem] font-semibold">{totals.latency ? duration(totals.latency) : "—"}</dd>
+                <dd className="num mt-0.5 text-lead font-semibold">{totals.latency ? duration(totals.latency) : "—"}</dd>
               </div>
               <div>
                 <dt className="text-ink-3">Tokens</dt>
-                <dd className="num mt-0.5 text-[0.95rem] font-semibold">{tokens ? tokens.toLocaleString() : "—"}</dd>
+                <dd className="num mt-0.5 text-lead font-semibold">{tokens ? tokens.toLocaleString() : "—"}</dd>
               </div>
             </dl>
             {providers.length ? (
@@ -95,7 +95,7 @@ export function AgentActivityPanel({ open, runId, onClose }: { open: boolean; ru
           {events.length ? (
             <TraceTimeline events={events} running={running} autoScroll scrollRef={bodyRef} />
           ) : run ? (
-            <p className="py-6 text-center text-[0.84rem] text-ink-2" role="status">{stepsReady ? "Waiting for the first step…" : "Loading steps…"}</p>
+            <p className="py-6 text-center text-label text-ink-2" role="status">{stepsReady ? "Waiting for the first step…" : "Loading steps…"}</p>
           ) : (
             <Empty title="No agent run yet">
               Start Table Mode, run a what-if or ask {PRODUCT_NAME} a question. Every agent step lands here, live.

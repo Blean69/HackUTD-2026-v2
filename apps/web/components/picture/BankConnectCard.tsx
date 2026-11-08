@@ -77,7 +77,7 @@ export function BankConnectCard({ householdId, className }: { householdId: strin
       sub="Sandbox data only. Everyone in the room sees the new accounts."
     >
       {offline ? (
-        <p className="mb-3 rounded-md bg-surface-2 px-3 py-2 text-[0.82rem] text-ink-2" role="status">
+        <p className="mb-3 rounded-md bg-surface-2 px-3 py-2 text-label text-ink-2" role="status">
           Bank connection is offline. The agent worker isn&apos;t reachable right now.
         </p>
       ) : null}
@@ -92,7 +92,7 @@ export function BankConnectCard({ householdId, className }: { householdId: strin
         </Button>
       </div>
       {!offline ? (
-        <p className="mt-2 text-[0.78rem] text-ink-3">
+        <p className="mt-2 text-label text-ink-3">
           Plaid Link sandbox login: <code className="rounded bg-surface-2 px-1 font-mono">user_good</code> / <code className="rounded bg-surface-2 px-1 font-mono">pass_good</code>
         </p>
       ) : null}
@@ -106,11 +106,11 @@ export function BankConnectCard({ householdId, className }: { householdId: strin
             return (
               <li key={b.item_id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
                 <div className="min-w-0 flex-1 basis-40">
-                  <p className="truncate text-[0.88rem] font-medium">{b.institution_name}</p>
-                  <p className="num text-[0.76rem] text-ink-3">
+                  <p className="truncate text-body font-medium">{b.institution_name}</p>
+                  <p className="num text-caption text-ink-3">
                     {b.accounts_count} accounts · {b.txns_count.toLocaleString()} transactions{b.last_synced_at ? ` · synced ${relTime(b.last_synced_at)}` : ""}
                   </p>
-                  {b.error ? <p className="text-[0.76rem] text-risk">{b.error}</p> : null}
+                  {b.error ? <p className="text-caption text-risk">{b.error}</p> : null}
                 </div>
                 <Chip tone={s.tone}>
                   {working ? <Spinner size={10} /> : null}

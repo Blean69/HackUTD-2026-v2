@@ -25,18 +25,18 @@ export function WelcomeStep({ onContinue, onBack, headingRef }: { onContinue: ()
       <ul className="space-y-4">
         {READS.map(({ Icon, title, text }, i) => (
           <li key={title} className="motion-rise flex items-start gap-3.5" style={{ ["--i" as string]: i + 1 }}>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-strong">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-brand-strong">
               <Icon size={19} />
             </span>
             <span className="min-w-0 pt-0.5">
-              <span className="block text-[0.95rem] font-semibold leading-tight">{title}</span>
-              <span className="mt-0.5 block text-[0.88rem] leading-snug text-ink-2">{text}</span>
+              <span className="block text-lead font-semibold leading-tight">{title}</span>
+              <span className="mt-0.5 block text-body text-ink-2">{text}</span>
             </span>
           </li>
         ))}
       </ul>
 
-      <p className="mt-6 rounded-lg bg-surface-2 px-3.5 py-3 text-[0.86rem] leading-snug text-ink-2">
+      <p className="mt-6 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-label text-ink-2">
         <strong className="font-semibold text-ink">Sandbox only.</strong> The banks, accounts and people are synthetic test data. Nothing real is connected.
       </p>
 

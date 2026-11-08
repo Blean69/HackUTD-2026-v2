@@ -100,6 +100,37 @@ export interface CreditProfile {
   late_payments_24m: number;
 }
 
+/** One factor of the synthetic credit score (contracts.md section 9). `value` is 0-1; points = 550 x weight x value. */
+export interface CreditFactor {
+  key: string;
+  label: string;
+  value: number;
+  weight: number;
+  points: number;
+  max_points: number;
+  explanation: string;
+}
+
+/** `credit_score`: one row per member, written by `recompute_household`. `factors_json` is parsed into `factors`. */
+export interface CreditScore {
+  id: string;
+  household_id: string;
+  member_id: string;
+  score: number;
+  band: string;
+  factors: CreditFactor[];
+  updated_at: string;
+}
+
+/** `credit_score_history`: ~6 monthly points per member plus today's. */
+export interface CreditScoreHistory {
+  id: string;
+  household_id: string;
+  member_id: string;
+  date: string;
+  score: number;
+}
+
 export interface Obligation {
   id: string;
   household_id: string;
@@ -153,7 +184,8 @@ export interface ForecastPoint {
 }
 
 export type AlertSeverity = "info" | "warn" | "critical";
-export type AlertKind = "data_quality" | "fraud" | "scam" | "obligation" | "advisor" | "insight";
+/** `advisor` is legacy (the Advisor Console is gone, contracts.md section 11); `credit` is a score move of 15+ points (section 9). */
+export type AlertKind = "data_quality" | "fraud" | "scam" | "obligation" | "advisor" | "insight" | "credit";
 
 export interface Alert {
   id: string;

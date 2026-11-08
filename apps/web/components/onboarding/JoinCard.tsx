@@ -20,10 +20,10 @@ export function JoinCard({ householdName }: { householdName: string }) {
         <Avatar name={final} size={44} />
         <div className="min-w-0">
           <h1 className="text-[1.45rem] font-semibold leading-tight tracking-tight">Join {householdName}</h1>
-          <p className="text-[0.9rem] text-ink-2">A family member is setting this up. Add your name to watch it fill in, live.</p>
+          <p className="text-body text-ink-2">A family member is setting this up. Add your name to watch it fill in, live.</p>
         </div>
       </div>
-      <label htmlFor="join-name" className="mb-1.5 block text-[0.86rem] font-medium text-ink">
+      <label htmlFor="join-name" className="mb-1.5 block text-body font-medium text-ink">
         Your name
       </label>
       <input id="join-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={placeholder} maxLength={32} autoComplete="given-name" autoFocus className={fieldCls} />

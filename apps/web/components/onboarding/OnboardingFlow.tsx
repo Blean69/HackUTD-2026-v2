@@ -66,15 +66,15 @@ function Loading() {
 function NotFound({ offline }: { offline: boolean }) {
   return (
     <div>
-      <h1 className="text-[1.45rem] font-semibold leading-tight tracking-tight">We couldn&apos;t find that setup</h1>
-      <p className="mt-2 text-[0.95rem] leading-relaxed text-ink-2">
+      <h1 className="display text-h1">We couldn&apos;t find that setup</h1>
+      <p className="mt-2 text-lead leading-relaxed text-ink-2">
         {offline ? "The offline demo keeps setups only while the tab is open. Starting again takes about two minutes." : "The link may be mistyped, or the household was removed."}
       </p>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-        <Link href="/onboarding" className="press inline-flex h-12 items-center justify-center rounded-lg bg-brand px-5 text-[0.95rem] font-semibold text-brand-ink hover:bg-brand-strong">
+        <Link href="/onboarding" className="press inline-flex h-12 items-center justify-center rounded-lg bg-brand px-5 text-lead font-semibold text-brand-ink hover:bg-brand-hover">
           Start a new setup
         </Link>
-        <Link href="/login" className="press inline-flex h-12 items-center justify-center rounded-lg px-5 text-[0.95rem] font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink">
+        <Link href="/login" className="press inline-flex h-12 items-center justify-center rounded-lg px-5 text-lead font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink">
           Log in instead
         </Link>
       </div>
@@ -277,19 +277,19 @@ export function OnboardingFlow() {
   return (
     <div className="min-h-dvh bg-surface text-ink sm:bg-bg">
       <header className="mx-auto flex h-16 w-full max-w-xl items-center gap-3 px-4 sm:px-0">
-        <Link href="/" className="flex items-center gap-2 rounded-md" aria-label={`${PRODUCT_NAME} home`}>
+        <Link href="/" className="flex items-center gap-2.5 rounded-md" aria-label={`${PRODUCT_NAME} home`}>
           <BrandMark size={26} />
-          <span className="text-[1.05rem] font-semibold tracking-tight">{PRODUCT_NAME}</span>
+          <span className="display text-[1.08rem]">{PRODUCT_NAME}</span>
         </Link>
         <span className="flex-1" />
         {others.length ? (
-          <span className="flex items-center gap-2 text-[0.78rem] text-ink-3">
+          <span className="flex items-center gap-2 text-caption text-ink-3">
             <span className="hidden sm:inline">Here with you</span>
             <span className="flex -space-x-1.5">
               {others.slice(0, 3).map((p) => (
                 <Avatar key={p.identity} name={p.display_name} size={26} ring dot="online" />
               ))}
-              {others.length > 3 ? <span className="num relative flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-line px-1 text-[0.68rem] font-semibold text-ink-2 ring-2 ring-surface">+{others.length - 3}</span> : null}
+              {others.length > 3 ? <span className="num relative flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-surface-3 px-1 text-caption font-semibold text-ink-2 ring-2 ring-surface">+{others.length - 3}</span> : null}
             </span>
           </span>
         ) : null}
@@ -298,13 +298,13 @@ export function OnboardingFlow() {
       <div className="mx-auto w-full max-w-xl px-4 pb-10 sm:px-0">
         {showProgress ? <Stepper current={current} sub={step === "questions" ? q / QUESTION_COUNT : step === "done" && run?.status === "done" ? 1 : 0} /> : <div className="h-[1.65rem]" aria-hidden="true" />}
         <div ref={mainRef} className="mt-5 [overflow-x:clip] sm:mt-6 sm:overflow-visible">
-          <main id="main" className="sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:p-8">
+          <main id="main" className="sm:card sm:!rounded-xl sm:p-8">
             <StepTransition k={drive ? key : "watch"} dir={travel.dir}>
               {body}
             </StepTransition>
           </main>
         </div>
-        <p className="mt-5 text-center text-[0.76rem] leading-snug text-ink-3">
+        <p className="mt-5 text-center text-caption leading-snug text-ink-3">
           Synthetic sandbox data only.{mode === "mock" ? " Offline demo: your setup lives in this tab." : ""}
         </p>
       </div>

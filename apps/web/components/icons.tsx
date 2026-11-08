@@ -2,9 +2,10 @@ import type { SVGProps } from "react";
 
 type P = SVGProps<SVGSVGElement> & { size?: number };
 
+/** 24-px grid, round caps. 1.6 stroke at 18 px and up, 1.8 below so small icons keep their weight next to text. */
 function Svg({ size = 20, children, ...rest }: P) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...rest}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={size <= 16 ? 1.8 : 1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...rest}>
       {children}
     </svg>
   );
@@ -71,12 +72,20 @@ export const IconChart = (p: P) => <Svg {...p}><path d="M4 19V5M4 19h16M8 15l3.5
 export const IconVote = (p: P) => <Svg {...p}><rect x="4" y="12" width="16" height="8" rx="1.5" /><path d="M8 12V6.5L12 4l4 2.5V12M10 8.5h4" /></Svg>;
 export const IconThumb = (p: P) => <Svg {...p}><path d="M7 11v9H4.5a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5zM7 11l4-7c1.7 0 2.5 1.2 2.2 2.8L12.7 9H19a1.5 1.5 0 0 1 1.5 1.8l-1.3 7A2 2 0 0 1 17.2 19.5H7" /></Svg>;
 
+// ---- theme
+export const IconSun = (p: P) => <Svg {...p}><circle cx="12" cy="12" r="3.6" /><path d="M12 3.5v1.8M12 18.7v1.8M3.5 12h1.8M18.7 12h1.8M6 6l1.3 1.3M16.7 16.7 18 18M6 18l1.3-1.3M16.7 7.3 18 6" /></Svg>;
+export const IconMoon = (p: P) => <Svg {...p}><path d="M19.5 14.2A7.8 7.8 0 0 1 9.8 4.5a7.8 7.8 0 1 0 9.7 9.7z" /></Svg>;
+export const IconMonitor = (p: P) => <Svg {...p}><rect x="3.5" y="4.5" width="17" height="11.5" rx="2" /><path d="M9 20h6M12 16v4" /></Svg>;
+export const IconGauge = (p: P) => <Svg {...p}><path d="M4.2 16.5a8.5 8.5 0 1 1 15.6 0" /><path d="m12 13.5 4-4.5" /><circle cx="12" cy="14" r="1.3" fill="currentColor" /></Svg>;
+export const IconSearch = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.4-4.4" /></Svg>;
+
+/** The Cosign mark: a check made of two separate strokes, two people signing off together. Accent tile, white strokes. */
 export function BrandMark({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <path d="M16 2.5 28 9.25v13.5L16 29.5 4 22.75V9.25z" fill="#3fae7a" />
-      <path d="M16 2.5 28 9.25 16 16 4 9.25z" fill="#8fd6b0" />
-      <path d="M9.5 16.2 14 20.6l8.6-8.8" fill="none" stroke="#0b3a2c" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect width="32" height="32" rx="8" fill="var(--brand)" />
+      <path d="M8.6 16.8 12.6 20.8" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+      <path d="M16.4 19.4 23.6 11.2" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

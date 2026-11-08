@@ -11,7 +11,7 @@ full financial picture together and plan out loud.**
 | Surface | Route | Who | Track it wins |
 |---|---|---|---|
 | Family room | `/room/[householdId]` (`/me` → demo room) | Family members on their own phones, together | **PNC**: 360° Financial Health Navigator |
-| Advisor console | `/advisor` | A PNC advisor (bank-internal view) | PNC (bonus), Spacetime (multiplayer) |
+| Credit & Analytics | `/room/[id]/credit`, `/room/[id]/analytics` | The family | PNC |
 | Agent glass box | `/agents` + a trace drawer on every page | Judges, engineers | **NVIDIA**: Nemotron beyond a chatbot |
 | The whole app | — | — | **Spacetime**: every byte of state, the job queue, presence, the in-DB health/forecast math and live sync run on SpacetimeDB |
 

@@ -2,48 +2,59 @@
 import { Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { usd } from "@/lib/format";
 import type { CashMonth } from "@/lib/finance";
+import { ChartLegend, ChartTooltip } from "./parts";
+import { chartTheme, SERIES } from "./theme";
+
+const INCOME = SERIES[0];
+const SPEND = SERIES[1];
+const NET = "var(--ink)";
 
 function Tip({ active, payload }: { active?: boolean; payload?: { payload: CashMonth }[] }) {
   if (!active || !payload?.length) return null;
   const m = payload[0].payload;
   return (
-    <div className="rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.78rem]">
-      <p className="font-semibold">{m.label}{m.forecast ? " (forecast)" : ""}</p>
-      <p className="num text-ink-2">Income: <span className="font-semibold text-ink">{usd(m.income)}</span></p>
-      <p className="num text-ink-2">Expenses: <span className="font-semibold text-ink">{usd(m.expenses)}</span></p>
-      <p className="num text-ink-2">Net: <span className={m.net >= 0 ? "font-semibold text-good" : "font-semibold text-risk"}>{usd(m.net, { sign: true })}</span></p>
-    </div>
+    <ChartTooltip
+      title={`${m.label}${m.forecast ? " · projected" : ""}`}
+      rows={[
+        { label: "Income", value: usd(m.income), color: INCOME },
+        { label: "Expenses", value: usd(m.expenses), color: SPEND },
+        { label: "Net", value: usd(m.net, { sign: true }), color: NET, kind: "line", strong: true },
+      ]}
+    />
   );
 }
 
-/** Monthly income and expense bars with a net cash-flow line. Forecast months are lighter. */
+/** Monthly income and expense columns with a net cash-flow line. Projected months are lighter, behind a "projected" marker. */
 export function CashFlowChart({ months, height = 220 }: { months: readonly CashMonth[]; height?: number }) {
   if (!months.length) return <div className="skeleton" style={{ height }} aria-busy="true" />;
   const firstForecast = months.find((m) => m.forecast);
   const summary = months.map((m) => `${m.label}${m.forecast ? " forecast" : ""}: income ${usd(m.income)}, expenses ${usd(m.expenses)}`).join("; ");
   return (
     <div>
-      <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.72rem] text-ink-2" aria-hidden="true">
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--c1)]" /> Income</li>
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--c3)]" /> Expenses</li>
-        <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-ink" /> Net cash flow</li>
-        {firstForecast ? <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-line-strong bg-surface-2" /> Projected</li> : null}
-      </ul>
+      <ChartLegend
+        items={[
+          { label: "Income", color: INCOME },
+          { label: "Expenses", color: SPEND },
+          { label: "Net cash flow", color: NET, kind: "line" },
+          ...(firstForecast ? [{ label: "Projected (lighter)", color: "var(--chart-muted)", kind: "band" as const }] : []),
+        ]}
+      />
       <div style={{ height }} role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-          <ComposedChart data={months as CashMonth[]} margin={{ top: 8, right: 6, left: 0, bottom: 0 }} barGap={1} barCategoryGap="22%">
-            <CartesianGrid vertical={false} stroke="var(--line)" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--ink-3)" }} tickLine={false} axisLine={{ stroke: "var(--line-strong)" }} interval={0} />
-            <YAxis tickFormatter={(v: number) => usd(v, { compact: true })} tick={{ fontSize: 11, fill: "var(--ink-3)" }} tickLine={false} axisLine={false} width={44} />
-            <Tooltip content={<Tip />} cursor={{ fill: "var(--surface-2)" }} />
-            {firstForecast ? <ReferenceLine x={firstForecast.label} stroke="var(--line-strong)" strokeDasharray="3 3" /> : null}
-            <Bar dataKey="income" fill="var(--c1)" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-              {months.map((m) => <Cell key={m.key} fillOpacity={m.forecast ? 0.5 : 1} />)}
+          <ComposedChart data={months as CashMonth[]} margin={chartTheme.margin} barGap={2} barCategoryGap="24%">
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="label" {...chartTheme.axisX} interval={0} minTickGap={0} />
+            <YAxis tickFormatter={chartTheme.tickUsd} {...chartTheme.axisY} width={46} tickCount={5} />
+            <Tooltip content={<Tip />} cursor={chartTheme.cursorBand} isAnimationActive={false} />
+            <ReferenceLine y={0} stroke="var(--chart-axis)" />
+            {firstForecast ? <ReferenceLine x={firstForecast.label} stroke="var(--ink-3)" strokeOpacity={0.6} strokeDasharray="2 3" label={{ value: "Projected", position: "insideTopLeft", fill: "var(--ink-3)", fontSize: 10, offset: 6 }} /> : null}
+            <Bar dataKey="income" fill={INCOME} radius={[4, 4, 0, 0]} maxBarSize={18} isAnimationActive={false}>
+              {months.map((m) => <Cell key={m.key} fillOpacity={m.forecast ? 0.4 : 1} />)}
             </Bar>
-            <Bar dataKey="expenses" fill="var(--c3)" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-              {months.map((m) => <Cell key={m.key} fillOpacity={m.forecast ? 0.55 : 1} />)}
+            <Bar dataKey="expenses" fill={SPEND} radius={[4, 4, 0, 0]} maxBarSize={18} isAnimationActive={false}>
+              {months.map((m) => <Cell key={m.key} fillOpacity={m.forecast ? 0.4 : 1} />)}
             </Bar>
-            <Line type="monotone" dataKey="net" stroke="var(--ink)" strokeWidth={1.75} dot={{ r: 3, fill: "var(--surface)", stroke: "var(--ink)", strokeWidth: 1.5 }} isAnimationActive={false} />
+            <Line type="monotone" dataKey="net" stroke={NET} strokeWidth={2} dot={{ r: 3.5, fill: NET, stroke: "var(--surface)", strokeWidth: 2 }} activeDot={chartTheme.activeDot(NET)} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

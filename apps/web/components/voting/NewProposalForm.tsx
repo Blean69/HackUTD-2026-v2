@@ -95,7 +95,7 @@ export function NewProposalForm({ householdId, onDone, onCancel }: { householdId
         </div>
         </div>
       </Disclosure>
-      <p className="mt-2.5 flex items-start gap-1.5 text-[0.76rem] leading-snug text-ink-3"><IconBot size={14} className="mt-px shrink-0" /> An agent checks affordability against your accounts and posts its verdict here.</p>
+      <p className="mt-2.5 flex items-start gap-1.5 text-caption leading-snug text-ink-3"><IconBot size={14} className="mt-px shrink-0" /> An agent checks affordability against your accounts and posts its verdict here.</p>
       {err ? <ErrorNote className="mt-2 !py-2">{err}</ErrorNote> : null}
       <div className="mt-3 flex items-center gap-2">
         <Button type="submit" variant="dark" disabled={busy}>{busy ? <Spinner size={14} /> : null} Create proposal</Button>

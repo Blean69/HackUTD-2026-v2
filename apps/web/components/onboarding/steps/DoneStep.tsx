@@ -96,7 +96,7 @@ export function DoneStep({
       {/* Optional and skippable: a 5-digit code so Brian knows whose accounts to open when this household calls. */}
       <OnboardingCallBrian householdId={householdId} />
 
-      <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.84rem] text-ink-2">
+      <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-label text-ink-2">
         <span>Planning together?</span>
         <InviteButton householdId={householdId} householdName={householdName} />
       </div>

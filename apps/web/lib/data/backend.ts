@@ -4,13 +4,14 @@ import type { Goal, PresenceRole, ProposalDetails, VoteChoice } from "@/lib/type
 export type DataScope =
   | { kind: "lobby" }
   | { kind: "room"; householdId: string }
-  | { kind: "advisor" }
   | { kind: "agents" };
 
 /** Room tables a page can ask for on top of the base set (`useRoomTables` in hooks.ts). All are filtered by household_id. */
 export type RoomTable =
-  | "txn" | "obligation" | "forecast_point" | "goal" | "credit_profile" | "bank_connection" | "advisor_note"
+  | "txn" | "obligation" | "forecast_point" | "goal" | "credit_profile" | "bank_connection"
   | "conversation" | "transcript_line" | "scenario" | "coach_message" | "trace_event" | "proposal" | "vote"
+  /** Synthetic credit monitoring (contracts.md section 9); skipped quietly when the published module predates it. */
+  | "credit_score" | "credit_score_history"
   /** The steps of one agent run only: `trace_event@<run_id>`. Cheaper than the whole household's trace. */
   | `trace_event@${string}`;
 

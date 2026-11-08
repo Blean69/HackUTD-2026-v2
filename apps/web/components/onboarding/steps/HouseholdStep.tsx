@@ -36,7 +36,7 @@ export function HouseholdStep({
           <span className="motion-pop flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-good-soft text-good">
             <IconCheck size={18} strokeWidth={2.4} />
           </span>
-          <p className="min-w-0 truncate text-[1rem] font-semibold">{household.name}</p>
+          <p className="min-w-0 truncate text-lead font-semibold">{household.name}</p>
         </div>
         <StepFooter onBack={onBack}>
           <Button size="lg" onClick={onContinue}>

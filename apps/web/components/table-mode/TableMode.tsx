@@ -3,14 +3,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { IconMic, IconPlay, IconSend, IconShield, IconStop } from "@/components/icons";
 import { ProviderBadge, runProviders } from "@/components/trace/badges";
 import { TraceTimeline } from "@/components/trace/TraceTimeline";
-import { Avatar, Button, Chip, Disclosure, Empty, ErrorNote, LivePill, PageHeader, Panel, Skeleton, type Tone } from "@/components/ui";
+import { Avatar, Button, Chip, Disclosure, Empty, ErrorNote, LivePill, Notice, PageHeader, Panel, Skeleton, type Tone } from "@/components/ui";
 import { appendTranscript, endHuddle, startHuddle } from "@/lib/data/actions";
 import { useConversations, useGoals, useHuddle, useLatestRun, usePresence, useRoomTables, useTraceEvents, useTranscript } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
 import { cx, longDate, usd } from "@/lib/format";
 import { openTrace } from "@/lib/traceUi";
 import type { Conversation, Feasibility, Goal } from "@/lib/types";
-import { VoiceCapture, voiceSupport } from "@/lib/voice";
+import { pressTablePushToTalk, releaseTablePushToTalk, setTablePushToTalk, useTableVoice, VoiceCapture, voiceSupport } from "@/lib/voice";
+import { HOLD_TO_TALK_CLASS, holdToTalkProps } from "@/lib/voiceCall/hold";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -22,25 +23,25 @@ const FEAS: Record<Exclude<Feasibility, "">, { tone: Tone; label: string; hint: 
 };
 
 const textareaCls =
-  "w-full resize-y rounded-md border border-line-strong bg-surface p-3 text-[0.9rem] text-ink outline-none placeholder:text-ink-3 focus:border-brand disabled:bg-surface-2 disabled:opacity-70";
+  "w-full resize-y rounded-md border border-line-strong bg-surface p-3 text-body text-ink outline-none placeholder:text-ink-3 focus:border-brand disabled:bg-surface-2 disabled:opacity-70";
 
 function GoalCard({ g }: { g: Goal }) {
   const f = g.feasibility ? FEAS[g.feasibility] : null;
   return (
     <li className="anim-fade rounded-md border border-line bg-surface p-3">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-[0.92rem] font-semibold leading-snug">{g.title}</h3>
+        <h3 className="text-lead font-semibold leading-snug">{g.title}</h3>
         {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip>Checking…</Chip>}
       </div>
       {g.target_amount || g.target_date ? (
-        <p className="num mt-0.5 text-[0.84rem] text-ink-2">
+        <p className="num mt-0.5 text-label text-ink-2">
           {g.target_amount ? <span className="font-semibold text-ink">{usd(g.target_amount)}</span> : null}
           {g.target_amount && g.target_date ? " by " : null}
           {g.target_date ? longDate(g.target_date) : null}
         </p>
       ) : null}
       {g.evidence_quote ? (
-        <blockquote className="mt-2 line-clamp-2 border-l-2 border-line-strong pl-3 text-[0.8rem] italic leading-snug text-ink-2">“{g.evidence_quote}”</blockquote>
+        <blockquote className="mt-2 line-clamp-2 border-l-2 border-line-strong pl-3 text-label italic leading-snug text-ink-2">“{g.evidence_quote}”</blockquote>
       ) : null}
     </li>
   );
@@ -61,6 +62,7 @@ export function TableMode({ householdId }: { householdId: string }) {
   const events = useTraceEvents(run?.run_id);
   const allGoals = useGoals(householdId);
 
+  const voice = useTableVoice();
   const [capturing, setCapturing] = useState(false);
   const [interim, setInterim] = useState("");
   const [secs, setSecs] = useState(0);
@@ -231,8 +233,7 @@ export function TableMode({ householdId }: { householdId: string }) {
         sub="Talk it out together. The agents turn it into goals."
         right={
           <>
-            {live || capturing ? <LivePill /> : null}
-            <Chip tone={status.tone}>{status.text}</Chip>
+            {capturing ? <LivePill label="Recording" /> : live ? <LivePill /> : <Chip tone={status.tone}>{status.text}</Chip>}
           </>
         }
       />
@@ -240,8 +241,8 @@ export function TableMode({ householdId }: { householdId: string }) {
       <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
         {/* ------------------------------------------------------------ start */}
         <Panel id="table-start" title="Start a session">
-          <p className="flex items-start gap-2 text-[0.8rem] leading-snug text-ink-2">
-            <IconShield size={16} className="mt-0.5 shrink-0 text-brand" />
+          <p className="flex items-start gap-2 text-label text-ink-2">
+            <IconShield size={16} className="mt-0.5 shrink-0 text-brand-strong" />
             <span>
               Opt-in: nothing is heard until someone taps the mic
               {huddle?.consent_names.length ? <>. Recording: <span className="font-medium text-ink">{huddle.consent_names.join(", ")}</span></> : null}.
@@ -251,7 +252,7 @@ export function TableMode({ householdId }: { householdId: string }) {
 
           {/* Visible to EVERY phone in the room while a session is live. */}
           {live && huddle ? (
-            <div role="status" className="mt-3 flex items-start gap-2 rounded-md bg-risk-soft px-3 py-2 text-[0.82rem] font-medium leading-snug text-risk">
+            <div role="status" className="mt-3 flex items-start gap-2 rounded-md border border-risk/25 bg-risk-soft px-3 py-2 text-label font-medium text-risk">
               <span className="anim-blink mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-rec" aria-hidden="true" />
               <span>Table Mode is live, started by {huddle.started_by_name}. Everyone in the room sees this transcript.</span>
             </div>
@@ -265,8 +266,8 @@ export function TableMode({ householdId }: { householdId: string }) {
               aria-pressed={capturing}
               aria-label={capturing ? "Stop recording" : live ? "Add my microphone to Table Mode" : "Start Table Mode with my microphone"}
               className={cx(
-                "relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95 disabled:opacity-50",
-                capturing ? "anim-rec bg-rec text-white" : "bg-brand text-brand-ink hover:bg-brand-strong",
+                "press relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50",
+                capturing ? "anim-rec bg-rec text-white" : "bg-brand text-brand-ink hover:bg-brand-hover",
               )}
             >
               {capturing ? <IconStop size={30} /> : <IconMic size={32} />}
@@ -274,16 +275,16 @@ export function TableMode({ householdId }: { householdId: string }) {
             <div className="min-w-0 flex-1">
               {capturing ? (
                 <>
-                  <p className="flex items-center gap-2 text-[1rem] font-semibold text-rec">
+                  <p className="flex items-center gap-2 text-h3 font-semibold text-rec">
                     <span className="anim-blink h-2.5 w-2.5 rounded-full bg-rec" aria-hidden="true" />
                     Recording · <span className="num">{mmss(secs)}</span>
                   </p>
-                  <p className="mt-0.5 text-[0.82rem] text-ink-2">Tap to stop. {mode === "nvidia-asr" ? "Transcribed by NVIDIA ASR." : "Live captions from your browser."}</p>
+                  <p className="mt-0.5 text-label text-ink-2">Tap to stop. {mode === "nvidia-asr" ? "Transcribed by NVIDIA ASR." : "Live captions from your browser."}</p>
                 </>
               ) : (
                 <>
-                  <p className="text-[1rem] font-semibold">{live ? "Add my mic to this session" : analyzing ? "Agents are working…" : "Tap to talk"}</p>
-                  <p className="mt-0.5 text-[0.82rem] text-ink-2">
+                  <p className="text-h3 font-semibold">{live ? "Add my mic to this session" : analyzing ? "Agents are working…" : "Tap to talk"}</p>
+                  <p className="mt-0.5 text-label text-ink-2">
                     {analyzing ? "Goal cards appear as each one is checked." : live ? "Each phone can add its own mic." : "Say what you're planning, like “we want to open a second location”."}
                   </p>
                 </>
@@ -296,15 +297,58 @@ export function TableMode({ householdId }: { householdId: string }) {
             </div>
           </div>
 
+          {/* Hold to talk: for a noisy room or an echoing speaker. The mic only listens while the button is held. */}
+          <div className="mt-4 rounded-lg bg-surface-2 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="table-ptt" className="min-w-0 cursor-pointer">
+                <span className="block text-label font-medium text-ink">Noisy room? Hold to talk</span>
+                <span className="block text-caption text-ink-3">The mic listens only while you hold the button.</span>
+              </label>
+              <button
+                id="table-ptt"
+                type="button"
+                role="switch"
+                aria-checked={voice.pushToTalk}
+                onClick={() => setTablePushToTalk(!voice.pushToTalk)}
+                className={cx("press relative h-6 w-10 shrink-0 rounded-full transition-colors", voice.pushToTalk ? "bg-brand" : "bg-line-strong")}
+              >
+                <span className={cx("absolute top-0.5 h-5 w-5 rounded-full bg-surface transition-transform", voice.pushToTalk ? "translate-x-[1.125rem]" : "translate-x-0.5")} aria-hidden="true" />
+              </button>
+            </div>
+            {capturing ? (
+              <p className="mt-2.5 flex items-center gap-2 text-label font-medium" role="status" aria-live="polite">
+                <span className={cx("h-2.5 w-2.5 shrink-0 rounded-full", voice.micLive ? "anim-blink bg-rec" : "bg-ink-3")} aria-hidden="true" />
+                <span className={voice.micLive ? "text-rec" : "text-ink-2"}>{voice.micLive ? "Mic live: listening" : "Mic paused"}</span>
+              </p>
+            ) : null}
+            {voice.pushToTalk && capturing ? (
+              <button
+                type="button"
+                {...holdToTalkProps(pressTablePushToTalk, releaseTablePushToTalk)}
+                aria-pressed={voice.held}
+                className={cx(
+                  HOLD_TO_TALK_CLASS,
+                  "mt-3 flex h-20 w-full items-center justify-center gap-2.5 rounded-xl border-2 text-lead font-semibold transition-colors",
+                  voice.held ? "border-rec bg-rec text-white" : "border-brand bg-surface text-brand-strong hover:bg-brand-soft",
+                )}
+              >
+                <IconMic size={22} />
+                {voice.held ? "Listening… release to send" : "Hold to talk"}
+              </button>
+            ) : voice.pushToTalk ? (
+              <p className="mt-2 text-caption text-ink-3">Tap the mic to start; then hold the button that appears while you speak (Space works too).</p>
+            ) : null}
+          </div>
+
           {!sup.secure || (!sup.speech && !sup.recorder) ? (
-            <p className="mt-3 rounded-md bg-watch-soft px-3 py-2 text-[0.8rem] text-watch">
+            <Notice tone="warn" className="mt-3">
               {sup.secure ? "This browser can't capture voice." : "The mic needs HTTPS."} Play a sample below or type instead.
-            </p>
+            </Notice>
           ) : null}
           {error ? <ErrorNote className="mt-3">{error}</ErrorNote> : null}
 
           <div className="mt-5 border-t border-line pt-4">
-            <h3 className="text-[0.8rem] font-semibold text-ink-2">No mic? Play a sample conversation</h3>
+            <h3 className="text-label font-semibold text-ink-2">No mic? Play a sample conversation</h3>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               {!ready ? <Skeleton className="h-10 w-full sm:w-64" /> : null}
               {ready ? conversations.map((c) => (
@@ -319,7 +363,7 @@ export function TableMode({ householdId }: { householdId: string }) {
                   {playing === c.id ? <><IconStop size={14} /> Stop sample</> : <><IconPlay size={14} /> {c.title}</>}
                 </Button>
               )) : null}
-              {ready && !conversations.length ? <p className="text-[0.84rem] text-ink-3">No sample conversations for this household.</p> : null}
+              {ready && !conversations.length ? <p className="text-label text-ink-3">No sample conversations for this household.</p> : null}
             </div>
 
             <Disclosure summary="Or type what the family said" className="mt-4">
@@ -351,7 +395,7 @@ export function TableMode({ householdId }: { householdId: string }) {
         {/* ------------------------------------------------------------ live results */}
         <div className="space-y-3">
           {showTranscript ? (
-            <Panel id="table-transcript" title="Live transcript" right={<span className="num text-[0.76rem] text-ink-3">{lines.length} lines · {people.length} in room</span>}>
+            <Panel id="table-transcript" title="Live transcript" right={<span className="num text-caption text-ink-3">{lines.length} lines · {people.length} in room</span>}>
               <div
                 ref={logRef}
                 role="log"
@@ -360,7 +404,7 @@ export function TableMode({ householdId }: { householdId: string }) {
                 className="max-h-72 space-y-2.5 overflow-y-auto rounded-md bg-surface-2 p-3"
               >
                 {lines.map((l) => (
-                  <p key={l.id} className="anim-fade flex gap-2 text-[0.88rem] leading-snug">
+                  <p key={l.id} className="anim-fade flex gap-2 text-body leading-snug">
                     <Avatar name={l.speaker} size={24} className="mt-0.5" />
                     <span className="min-w-0">
                       <span className="font-semibold">{l.speaker === me ? `${l.speaker} (you)` : l.speaker}</span>{" "}
@@ -368,8 +412,8 @@ export function TableMode({ householdId }: { householdId: string }) {
                     </span>
                   </p>
                 ))}
-                {interim ? <p className="text-[0.86rem] italic text-ink-3">{interim}…</p> : null}
-                {!lines.length && !interim ? <p className="text-[0.84rem] text-ink-3">Listening… start talking.</p> : null}
+                {interim ? <p className="text-body italic text-ink-3">{interim}…</p> : null}
+                {!lines.length && !interim ? <p className="text-label text-ink-3">Listening… start talking.</p> : null}
               </div>
             </Panel>
           ) : null}
@@ -384,7 +428,7 @@ export function TableMode({ householdId }: { householdId: string }) {
                 <div className="-mt-1 mb-3 flex flex-wrap gap-1">{providers.map((e) => <ProviderBadge key={`${e.model}${e.provider}`} model={e.model} provider={e.provider} />)}</div>
               ) : null}
               <TraceTimeline events={events.slice(-4)} running={run.status === "running"} compact />
-              {events.length > 4 ? <p className="text-[0.76rem] text-ink-3">Latest 4 of {events.length} steps.</p> : null}
+              {events.length > 4 ? <p className="text-caption text-ink-3">Latest 4 of {events.length} steps.</p> : null}
             </Panel>
           ) : null}
 

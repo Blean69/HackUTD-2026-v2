@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { AdvisorConsole } from "@/components/advisor/AdvisorConsole";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Advisor console" };
-
+/** The Advisor Console is gone (docs/contracts.md section 11): the product is entirely end-user facing. Old links land home. */
 export default function AdvisorPage() {
-  return <AdvisorConsole />;
+  redirect("/");
 }

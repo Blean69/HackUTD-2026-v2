@@ -37,19 +37,19 @@ export function SlideOver({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50">
-      <button type="button" aria-label={`Close ${label}`} tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/30" />
+      <button type="button" aria-label={`Close ${label}`} tabIndex={-1} onClick={onClose} className="scrim absolute inset-0" />
       <section
         role="dialog"
         aria-modal="true"
         aria-label={label}
         style={{ ["--w" as string]: `${width}px` }}
-        className="anim-sheet md:anim-side absolute inset-x-0 bottom-0 top-12 flex flex-col rounded-t-xl border border-line bg-surface md:inset-y-0 md:left-auto md:right-0 md:top-0 md:w-[var(--w)] md:rounded-none md:border-y-0 md:border-r-0"
+        className="pop anim-sheet md:anim-side absolute inset-x-0 bottom-0 top-12 flex flex-col rounded-t-xl md:inset-y-2 md:left-auto md:right-2 md:top-2 md:w-[var(--w)] md:rounded-xl"
       >
         <header className="flex items-start gap-3 border-b border-line px-4 py-3">
-          {icon ? <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand-strong">{icon}</span> : null}
+          {icon ? <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface-2 text-brand-strong">{icon}</span> : null}
           <div className="min-w-0 flex-1">
-            <h2 className="text-[1rem] font-semibold leading-tight">{title}</h2>
-            {subtitle ? <div className="mt-0.5 text-[0.78rem] leading-snug text-ink-2">{subtitle}</div> : null}
+            <h2 className="text-lead font-semibold leading-tight">{title}</h2>
+            {subtitle ? <div className="mt-0.5 text-caption text-ink-3">{subtitle}</div> : null}
           </div>
           <button
             ref={closeRef}
@@ -61,8 +61,8 @@ export function SlideOver({
             <IconClose size={18} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-        {footer ? <footer className="pb-safe border-t border-line px-4 py-3 text-[0.8rem]">{footer}</footer> : null}
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
+        {footer ? <footer className="pb-safe border-t border-line px-4 py-3 text-caption">{footer}</footer> : null}
       </section>
     </div>
   );

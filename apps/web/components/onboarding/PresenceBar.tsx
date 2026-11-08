@@ -38,7 +38,7 @@ export function InviteButton({ householdId, householdName }: { householdId: stri
       <span className="sr-only" role="status" aria-live="polite">
         {state === "copied" ? "Invite link copied to the clipboard" : state === "failed" ? "Couldn't copy the link" : ""}
       </span>
-      {state === "failed" ? <span className="text-[0.78rem] text-risk">Copy the address from your browser instead.</span> : null}
+      {state === "failed" ? <span className="text-caption text-risk">Copy the address from your browser instead.</span> : null}
     </span>
   );
 }
@@ -49,15 +49,15 @@ export function PresenceBar({ householdId, householdName }: { householdId: strin
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border border-line bg-surface px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
-        <p className="text-[0.78rem] font-medium text-ink-2" id="presence-h">
+        <p className="text-caption font-medium text-ink-2" id="presence-h">
           {present.length > 1 ? "Setting up together" : "Here now"}
         </p>
         <ul className="flex min-w-0 flex-wrap items-center gap-1.5" aria-labelledby="presence-h">
-          {present.length === 0 ? <li className="text-[0.78rem] text-ink-3">just you</li> : null}
+          {present.length === 0 ? <li className="text-caption text-ink-3">just you</li> : null}
           {present.map((p) => (
             <li key={p.identity} className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-full border border-line bg-surface-2 py-0.5 pl-0.5 pr-2.5">
               <Avatar name={p.display_name} size={22} dot="online" />
-              <span className="truncate text-[0.78rem] font-medium">
+              <span className="truncate text-caption font-medium">
                 {p.display_name.split(" ")[0]}
                 {p.isMe ? <span className="font-normal text-ink-3"> (you)</span> : null}
               </span>

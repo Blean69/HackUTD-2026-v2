@@ -8,40 +8,45 @@ import { useConnection } from "@/lib/data/connection";
 import { useHousehold, useHuddle } from "@/lib/data/hooks";
 import { cx } from "@/lib/format";
 import { NAV, NAV_GROUPS } from "./nav";
+import { ThemeToggle } from "./ThemeToggle";
 
-/** One quiet line: where the data comes from and whether it is live. */
+/** One quiet line: whether the data is live. */
 function ConnectionLine() {
   const conn = useConnection();
   const down = conn.kind === "spacetime" && !conn.online;
   const ok = conn.status === "ready" && !down;
   return (
-    <p className="flex items-center gap-2 px-5 pb-4 text-[0.72rem] text-side-ink-2" role="status">
-      <span className={cx("h-1.5 w-1.5 rounded-full", !ok ? "anim-blink bg-white/40" : conn.kind === "spacetime" ? "bg-[#3fd18a]" : "bg-[#e0b04a]")} aria-hidden="true" />
-      {conn.status !== "ready" ? "Connecting" : down ? "Reconnecting" : conn.kind === "spacetime" ? "Live on SpacetimeDB" : "Offline demo data"}
+    <p className="flex min-w-0 items-center gap-2 text-caption text-ink-3" role="status">
+      <span className={cx("h-1.5 w-1.5 shrink-0 rounded-full", !ok ? "anim-blink bg-ink-3" : conn.kind === "spacetime" ? "bg-online" : "bg-watch")} aria-hidden="true" />
+      <span className="truncate">{conn.status !== "ready" ? "Connecting" : down ? "Reconnecting" : conn.kind === "spacetime" ? "Live" : "Offline demo data"}</span>
     </p>
   );
 }
 
+/**
+ * The sidebar: flush with the canvas and separated by a hairline, so the content is the brightest layer. The active item
+ * is a raised surface with an accent icon; groups are labelled with small caps.
+ */
 export function Sidebar({ householdId, onNavigate, className }: { householdId: string; onNavigate?: () => void; className?: string }) {
   const path = usePathname() ?? "/";
   const huddle = useHuddle(householdId);
   const household = useHousehold(householdId);
   const live = huddle?.status === "live";
   return (
-    <aside className={cx("flex h-full w-full flex-col bg-side text-side-ink", className)} aria-label="Sidebar">
-      <Link href="/" onClick={onNavigate} className="on-dark flex items-center gap-2.5 px-5 pb-5 pt-5" aria-label={`${PRODUCT_NAME} home`}>
-        <BrandMark size={30} />
+    <aside className={cx("flex h-full w-full flex-col border-r border-line bg-side text-ink-2", className)} aria-label="Sidebar">
+      <Link href="/" onClick={onNavigate} className="flex items-center gap-2.5 px-4 pb-5 pt-5" aria-label={`${PRODUCT_NAME} home`}>
+        <BrandMark size={28} />
         <span className="min-w-0 leading-tight">
-          <span className="block text-[1.1rem] font-semibold tracking-tight text-white">{PRODUCT_NAME}</span>
-          {household ? <span className="block truncate text-[0.78rem] text-side-ink-2">{household.name}</span> : null}
+          <span className="display block text-[1.05rem] text-ink">{PRODUCT_NAME}</span>
+          {household ? <span className="block truncate text-caption text-ink-3">{household.name}</span> : null}
         </span>
       </Link>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-3" aria-label="Primary">
+      <nav className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2.5 pb-3" aria-label="Primary">
         {NAV_GROUPS.map((g, gi) => (
           <div key={gi} className={cx(gi > 0 && "mt-5")}>
-            {g.label ? <p className="mb-1 px-3 text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-side-ink-2">{g.label}</p> : null}
-            <ul className="space-y-0.5">
+            {g.label ? <p className="eyebrow mb-1.5 px-2.5">{g.label}</p> : null}
+            <ul className="space-y-px">
               {g.keys.map((k) => {
                 const n = NAV.find((x) => x.key === k);
                 if (!n) return null;
@@ -53,13 +58,15 @@ export function Sidebar({ householdId, onNavigate, className }: { householdId: s
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={cx(
-                        "on-dark flex h-10 items-center gap-3 rounded-md px-3 text-[0.9rem] font-medium transition-colors",
-                        active ? "bg-side-2 text-white" : "text-side-ink hover:bg-white/5",
+                        "group flex h-9 items-center gap-2.5 rounded-md px-2.5 text-label font-medium transition-colors",
+                        active ? "bg-surface text-ink shadow-[0_0_0_1px_var(--line)]" : "text-ink-2 hover:bg-surface-3/70 hover:text-ink",
                       )}
                     >
-                      <n.Icon size={19} />
+                      <span className={cx("shrink-0 transition-colors", active ? "text-brand-strong" : "text-ink-3 group-hover:text-ink-2")}>
+                        <n.Icon size={18} />
+                      </span>
                       <span className="flex-1 truncate">{n.label}</span>
-                      {n.live && live ? <LivePill dark /> : null}
+                      {n.live && live ? <LivePill /> : null}
                     </Link>
                   </li>
                 );
@@ -69,7 +76,10 @@ export function Sidebar({ householdId, onNavigate, className }: { householdId: s
         ))}
       </nav>
 
-      <ConnectionLine />
+      <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
+        <ConnectionLine />
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }

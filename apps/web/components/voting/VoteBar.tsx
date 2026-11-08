@@ -13,15 +13,15 @@ export function VoteBar({ tally, eligible, className }: { tally: VoteTally; elig
           <>
             <span className="bg-good" style={{ width: `${(yes / total) * 100}%` }} />
             <span className="bg-risk" style={{ width: `${(no / total) * 100}%` }} />
-            <span className="bg-[#aab6b0]" style={{ width: `${(abstain / total) * 100}%` }} />
+            <span className="bg-chart-muted" style={{ width: `${(abstain / total) * 100}%` }} />
           </>
         ) : null}
       </div>
-      <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.8rem] text-ink-2">
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-label text-ink-2">
         {[
           { label: "yes", n: yes, dot: "bg-good" },
           { label: "no", n: no, dot: "bg-risk" },
-          { label: "abstain", n: abstain, dot: "bg-[#aab6b0]" },
+          { label: "abstain", n: abstain, dot: "bg-chart-muted" },
         ].map((x) => (
           <span key={x.label} className="inline-flex items-center gap-1.5">
             <span className={cx("h-2 w-2 rounded-full", x.dot)} aria-hidden="true" />

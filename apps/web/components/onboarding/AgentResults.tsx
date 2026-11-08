@@ -35,14 +35,14 @@ export function AgentResults({ householdId, waiting }: { householdId: string; wa
     <div className="space-y-6">
       <section aria-labelledby="agent-h">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 id="agent-h" className="text-[0.95rem] font-semibold">
+          <h2 id="agent-h" className="text-lead font-semibold">
             {failed ? "The agents hit a snag" : running ? "Your agents are at work" : "Your agents are done"}
           </h2>
-          {steps.length ? <span className="num text-[0.78rem] text-ink-3">{steps.length} steps</span> : null}
+          {steps.length ? <span className="num text-caption text-ink-3">{steps.length} steps</span> : null}
         </div>
         <ol className="mt-2.5 space-y-2" aria-live="polite" aria-label="Agent steps">
           {steps.length === 0 ? (
-            <li className="flex items-center gap-2.5 text-[0.88rem] text-ink-2">
+            <li className="flex items-center gap-2.5 text-body text-ink-2">
               <span className="anim-blink h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden="true" />
               {waiting ? "Waiting for the import to finish, so nothing is missed" : "Starting up"}
             </li>
@@ -51,7 +51,7 @@ export function AgentResults({ householdId, waiting }: { householdId: string; wa
             const last = e === steps[steps.length - 1];
             const active = last && running && !failed;
             return (
-              <li key={e.id} className="motion-fade flex items-start gap-2.5 text-[0.88rem] leading-snug">
+              <li key={e.id} className="motion-fade flex items-start gap-2.5 text-body leading-snug">
                 <span className="mt-[0.2rem] flex h-4 w-4 shrink-0 items-center justify-center">
                   {e.type === "error" ? (
                     <IconAlert size={14} className="text-risk" />
@@ -66,11 +66,11 @@ export function AgentResults({ householdId, waiting }: { householdId: string; wa
             );
           })}
         </ol>
-        {failed ? <p className="mt-2 text-[0.84rem] text-ink-2">Your dashboard is ready, and insights can be refreshed from there.</p> : null}
+        {failed ? <p className="mt-2 text-label text-ink-2">Your dashboard is ready, and insights can be refreshed from there.</p> : null}
       </section>
 
       <section aria-labelledby="insights-h">
-        <h2 id="insights-h" className="text-[0.95rem] font-semibold">
+        <h2 id="insights-h" className="text-lead font-semibold">
           First insights
         </h2>
         <ul className="mt-2.5 space-y-2" aria-live="polite">
@@ -78,8 +78,8 @@ export function AgentResults({ householdId, waiting }: { householdId: string; wa
             <li key={a.id} className="motion-rise flex gap-3 rounded-lg border border-line px-4 py-3">
               <span className={cx("mt-[0.45rem] h-2 w-2 shrink-0 rounded-full", DOT[a.severity] ?? "bg-info")} aria-hidden="true" />
               <div className="min-w-0">
-                <p className="text-[0.92rem] font-semibold leading-snug">{a.title}</p>
-                {a.detail ? <p className="mt-0.5 line-clamp-3 text-[0.85rem] leading-relaxed text-ink-2">{a.detail}</p> : null}
+                <p className="text-lead font-semibold leading-snug">{a.title}</p>
+                {a.detail ? <p className="mt-0.5 line-clamp-3 text-body leading-relaxed text-ink-2">{a.detail}</p> : null}
               </div>
             </li>
           ))}
@@ -89,13 +89,13 @@ export function AgentResults({ householdId, waiting }: { householdId: string; wa
               <Skeleton className="mt-2 h-3 w-11/12" />
             </li>
           ) : null}
-          {!running && insights.length === 0 ? <li className="text-[0.86rem] text-ink-2">No insights yet. They will appear on your dashboard.</li> : null}
+          {!running && insights.length === 0 ? <li className="text-body text-ink-2">No insights yet. They will appear on your dashboard.</li> : null}
         </ul>
       </section>
 
       {goals.length ? (
         <section aria-labelledby="goals-h">
-          <h2 id="goals-h" className="text-[0.95rem] font-semibold">
+          <h2 id="goals-h" className="text-lead font-semibold">
             Your goals
           </h2>
           <ul className="mt-2.5 divide-y divide-line rounded-lg border border-line">
@@ -103,7 +103,7 @@ export function AgentResults({ householdId, waiting }: { householdId: string; wa
               const f = g.feasibility === "" && !running ? { label: "Add an amount to check", tone: "neutral" as Tone } : (FEAS[g.feasibility] ?? FEAS[""]);
               return (
                 <li key={g.id} className="motion-fade flex items-center justify-between gap-3 px-4 py-3" style={{ ["--i" as string]: i }}>
-                  <span className="min-w-0 text-[0.9rem] font-medium">{g.title}</span>
+                  <span className="min-w-0 text-body font-medium">{g.title}</span>
                   <Chip tone={f.tone}>{f.label}</Chip>
                 </li>
               );

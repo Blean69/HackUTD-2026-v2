@@ -41,10 +41,10 @@ function ProfileCard({ p, checked, onPick, i, busy }: { p: SandboxProfile; check
           {checked ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.98rem] font-semibold leading-tight">{name}</span>
-          {about ? <span className="mt-0.5 block text-[0.86rem] leading-snug text-ink">{about}</span> : null}
-          {checked && p.summary ? <span className="motion-fade mt-1 block text-[0.82rem] leading-snug text-ink-2">{p.summary}</span> : null}
-          <span className="num mt-2 block text-[0.78rem] text-ink-3">
+          <span className="block text-lead font-semibold leading-tight">{name}</span>
+          {about ? <span className="mt-0.5 block text-body leading-snug text-ink">{about}</span> : null}
+          {checked && p.summary ? <span className="motion-fade mt-1 block text-label leading-snug text-ink-2">{p.summary}</span> : null}
+          <span className="num mt-2 block text-caption text-ink-3">
             {accountMix(p.accounts)}
             {p.txn_count ? ` · ${nf.format(p.txn_count)} transactions` : ""}
           </span>
@@ -130,8 +130,8 @@ export function ConnectStep({
             <IconCheck size={18} strokeWidth={2.4} />
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-[0.98rem] font-semibold">{bank.institution_name || "Sandbox bank"}</span>
-            <span className="num block text-[0.82rem] text-ink-2">
+            <span className="block truncate text-lead font-semibold">{bank.institution_name || "Sandbox bank"}</span>
+            <span className="num block text-label text-ink-2">
               {bank.accounts_count} {bank.accounts_count === 1 ? "account" : "accounts"} found
             </span>
           </span>
@@ -151,7 +151,7 @@ export function ConnectStep({
     <div>
       <StepHeading headingRef={headingRef} title="Connect your bank" sub="Pick a sample customer to connect through Plaid Sandbox. You choose which of their accounts to share next." />
 
-      <p className="mb-2.5 flex items-center gap-1.5 text-[0.8rem] font-medium text-ink-3">
+      <p className="mb-2.5 flex items-center gap-1.5 text-label font-medium text-ink-3">
         <IconBank size={15} />
         {source === "live" ? "Sample customers from PNC's HackUTD dataset" : source === "loading" ? "Loading sample customers…" : source === "default" ? "Plaid Sandbox customer" : "Sample customers (offline demo)"}
       </p>
@@ -184,7 +184,7 @@ export function ConnectStep({
           <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
             <span className="anim-blink absolute inset-0 rounded-full bg-brand" />
           </span>
-          <span className="text-[0.88rem] text-ink-2">
+          <span className="text-body text-ink-2">
             Connecting to <strong className="font-semibold text-ink">{bank?.institution_name || "the sandbox bank"}</strong> and finding accounts…
           </span>
         </div>
@@ -204,12 +204,12 @@ export function ConnectStep({
       ) : null}
 
       <div className="mt-5 text-center sm:text-left">
-        <button type="button" onClick={() => void startLink()} disabled={working} className="text-[0.86rem] font-medium text-brand-strong underline-offset-2 hover:underline disabled:opacity-50">
+        <button type="button" onClick={() => void startLink()} disabled={working} className="text-body font-medium text-brand-strong underline-offset-2 hover:underline disabled:opacity-50">
           {busy === "link" ? "Opening Plaid…" : "Or connect with Plaid Link"}
         </button>
         {busy === "link" || token ? (
-          <p className="mt-1 text-[0.8rem] text-ink-3">
-            Sandbox login: <code className="rounded bg-surface-2 px-1 font-mono text-[0.78rem] text-ink">user_good</code> / <code className="rounded bg-surface-2 px-1 font-mono text-[0.78rem] text-ink">pass_good</code>
+          <p className="mt-1 text-label text-ink-3">
+            Sandbox login: <code className="rounded bg-surface-2 px-1 font-mono text-caption text-ink">user_good</code> / <code className="rounded bg-surface-2 px-1 font-mono text-caption text-ink">pass_good</code>
           </p>
         ) : null}
       </div>

@@ -1,117 +1,59 @@
 "use client";
 import { useMemo, useState } from "react";
-import { IconAlert, IconBell, IconCheck, IconChevronDown, IconShield } from "@/components/icons";
-import { Avatar, Button, Chip, Empty, ErrorNote, PageHeader, Panel, Skeleton, TableScroll } from "@/components/ui";
+import { IconAlert, IconBell, IconCheck, IconChevronDown, IconShield, IconTrend } from "@/components/icons";
+import { Avatar, Button, Chip, Empty, ErrorNote, List, ListRow, PageHeader, Panel, PanelLink, Skeleton } from "@/components/ui";
 import { ackAlert } from "@/lib/data/actions";
-import { useAdvisorNotes, useAlerts, useCreditProfiles, useMembers, usePresence, useRoomTables } from "@/lib/data/hooks";
+import { useCredit } from "@/lib/data/credit-hooks";
+import { useAlerts, useMembers, usePresence } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
 import { cx, relTime, usd } from "@/lib/format";
 import type { Alert, AlertKind, AlertSeverity } from "@/lib/types";
 
 const first = (s: string) => s.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+const TONE_TEXT = { good: "text-good", watch: "text-watch", risk: "text-risk" } as const;
 
 // ------------------------------------------------------------------------------------------------ people
 
-function scoreBand(score: number): { label: string; cls: string } {
-  if (score >= 740) return { label: "Very good", cls: "text-good" };
-  if (score >= 670) return { label: "Good", cls: "text-good" };
-  if (score >= 580) return { label: "Fair", cls: "text-watch" };
-  return { label: "Poor", cls: "text-risk" };
-}
-const utilCls = (u: number) => (u > 50 ? "text-risk" : u > 30 ? "text-watch" : "");
-
-/** Members with their credit profile on the same row; a green dot marks who is in the room right now. */
-function PeoplePanel({ householdId }: { householdId: string }) {
-  const ready = useRoomTables(householdId, ["credit_profile"]);
+/** Members with their (simulated) credit score; a green dot marks who is in the room right now. */
+function PeoplePanel({ householdId, className }: { householdId: string; className?: string }) {
   const members = useMembers(householdId);
   const present = usePresence(householdId);
-  const profiles = useCreditProfiles(householdId);
+  const credit = useCredit(householdId, { withHistory: false });
   const rows = useMemo(() => {
     const used = new Set<string>();
     return members.map((m) => {
       const hit = present.find((p) => first(p.display_name) === first(m.name) && !used.has(p.identity));
       if (hit) used.add(hit.identity);
-      return { member: m, online: !!hit, credit: profiles.find((c) => c.member_id === m.id) };
+      return { member: m, online: !!hit, credit: credit.views.find((v) => v.member_id === m.id) };
     });
-  }, [members, present, profiles]);
+  }, [members, present, credit.views]);
   const income = members.reduce((s, m) => s + m.income_annual, 0);
+  const here = rows.filter((r) => r.online).length;
   return (
-    <Panel id="people" title="People" sub={members.length ? `${members.length} members · ${usd(income)} a year combined` : undefined} info="Credit scores and factors are synthetic.">
+    <Panel
+      id="people"
+      title={<>People <span className="num font-normal text-ink-3">{members.length}</span></>}
+      sub={members.length ? <span className="num">{usd(income)} a year combined{here ? ` · ${here} in the room now` : ""}</span> : undefined}
+      className={className}
+      flush
+      footer={credit.views.length ? <PanelLink href={`/room/${householdId}/credit`}>Credit monitoring</PanelLink> : undefined}
+    >
       {!members.length ? (
-        <Empty title="No members yet">People you add to this household show up here.</Empty>
-      ) : !ready ? (
-        <Skeleton className="h-40" />
+        <div className="px-4 pb-3"><Empty title="No members yet">People you add to this household show up here.</Empty></div>
       ) : (
-        <TableScroll>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th scope="col">Member</th>
-                <th scope="col" className="r hidden sm:table-cell">Income</th>
-                <th scope="col" className="r">Credit score</th>
-                <th scope="col" className="r">Utilization</th>
-                <th scope="col" className="r hidden md:table-cell">Inquiries (12 mo)</th>
-                <th scope="col" className="r hidden md:table-cell">Late (24 mo)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ member: m, online, credit }) => {
-                const band = credit ? scoreBand(credit.score) : null;
-                return (
-                  <tr key={m.id}>
-                    <td>
-                      <span className="flex items-center gap-2.5">
-                        <Avatar name={m.name} size={30} dot={online ? "online" : "off"} />
-                        <span className="min-w-0">
-                          <span className="block whitespace-nowrap font-medium">{m.name}</span>
-                          <span className="block text-[0.72rem] text-ink-3"><span className="capitalize">{m.role}</span>, {m.age}{m.income_annual > 0 ? <span className="num sm:hidden"> · {usd(m.income_annual, { compact: true })}</span> : null}</span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="r num hidden whitespace-nowrap sm:table-cell">{m.income_annual > 0 ? usd(m.income_annual) : <span className="text-ink-3">n/a</span>}</td>
-                    <td className="r">
-                      {credit && band ? <><span className="num font-semibold">{credit.score}</span> <span className={cx("text-[0.74rem]", band.cls)}>{band.label}</span></> : <span className="text-ink-3">n/a</span>}
-                    </td>
-                    <td className={cx("r num", credit && utilCls(credit.utilization_pct))}>{credit ? `${Math.round(credit.utilization_pct)}%` : <span className="text-ink-3">n/a</span>}</td>
-                    <td className={cx("r num hidden md:table-cell", credit && credit.hard_inquiries_12m > 3 && "text-watch")}>{credit ? credit.hard_inquiries_12m : "n/a"}</td>
-                    <td className={cx("r num hidden md:table-cell", credit && credit.late_payments_24m > 0 && "text-risk")}>{credit ? credit.late_payments_24m : "n/a"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </TableScroll>
-      )}
-    </Panel>
-  );
-}
-
-// ------------------------------------------------------------------------------------------------ advisor notes
-
-function NotesPanel({ householdId }: { householdId: string }) {
-  const ready = useRoomTables(householdId, ["advisor_note"]);
-  const notes = useAdvisorNotes(householdId);
-  return (
-    <Panel id="notes" title="Advisor notes">
-      {!ready ? (
-        <Skeleton className="h-20" />
-      ) : notes.length ? (
-        <ul className="divide-y divide-line">
-          {notes.slice(0, 15).map((n) => (
-            <li key={n.id} className="flex gap-2.5 py-2.5 first:pt-0 last:pb-0">
-              <Avatar name={n.author_name} size={28} />
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-baseline gap-x-2 text-[0.84rem]">
-                  <span className="font-semibold">{n.author_name}</span>
-                  <span className="num text-[0.74rem] text-ink-3">{relTime(n.created_at)}</span>
-                </p>
-                <p className="mt-0.5 whitespace-pre-wrap text-[0.86rem] leading-snug text-ink-2">{n.text}</p>
-              </div>
-            </li>
+        <List label="Household members">
+          {rows.map(({ member: m, online, credit: c }) => (
+            <ListRow
+              key={m.id}
+              leading={<Avatar name={m.name} size={34} dot={online ? "online" : "off"} />}
+              title={m.name}
+              sub={<><span className="capitalize">{m.role}</span>, {m.age}{m.income_annual > 0 ? <span className="num"> · {usd(m.income_annual)} a year</span> : null}</>}
+              trailing={c ? <span className="figure">{c.score}</span> : !credit.ready ? <Skeleton className="h-5 w-10" /> : undefined}
+              meta={c ? <span className={cx("font-medium", TONE_TEXT[c.band.tone])}>{c.band.label}</span> : undefined}
+              href={c ? `/room/${householdId}/credit` : undefined}
+            />
           ))}
-        </ul>
-      ) : (
-        <Empty title="No advisor notes yet">A note from your advisor shows up here live.</Empty>
+        </List>
       )}
     </Panel>
   );
@@ -120,17 +62,18 @@ function NotesPanel({ householdId }: { householdId: string }) {
 // ------------------------------------------------------------------------------------------------ alerts
 
 const SEV: Record<AlertSeverity, { label: string; edge: string; icon: string; text: string }> = {
-  critical: { label: "Critical", edge: "border-l-risk", icon: "text-risk", text: "text-risk" },
-  warn: { label: "Heads up", edge: "border-l-watch", icon: "text-watch", text: "text-watch" },
-  info: { label: "FYI", edge: "border-l-info", icon: "text-info", text: "text-ink-3" },
+  critical: { label: "Critical", edge: "before:bg-risk", icon: "text-risk", text: "text-risk" },
+  warn: { label: "Heads up", edge: "before:bg-watch", icon: "text-watch", text: "text-watch" },
+  info: { label: "FYI", edge: "before:bg-info", icon: "text-info", text: "text-ink-3" },
 };
 const KIND: Record<AlertKind, { label: string; Icon: typeof IconAlert }> = {
   fraud: { label: "Fraud", Icon: IconShield },
   scam: { label: "Scam check", Icon: IconShield },
   data_quality: { label: "Data quality", Icon: IconAlert },
   obligation: { label: "Upcoming", Icon: IconBell },
-  advisor: { label: "Advisor", Icon: IconBell },
+  advisor: { label: "Note", Icon: IconBell },
   insight: { label: "Insight", Icon: IconBell },
+  credit: { label: "Credit", Icon: IconTrend },
 };
 
 function AlertRow({ alert, me }: { alert: Alert; me: string }) {
@@ -139,7 +82,7 @@ function AlertRow({ alert, me }: { alert: Alert; me: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const sev = SEV[alert.severity];
-  const kind = KIND[alert.kind];
+  const kind = KIND[alert.kind] ?? KIND.insight;
   const panelId = `alert-${alert.id}`;
 
   async function ack() {
@@ -155,33 +98,33 @@ function AlertRow({ alert, me }: { alert: Alert; me: string }) {
   }
 
   return (
-    <li className={cx("rounded-md border border-l-[3px] border-line bg-surface", done ? "border-l-line-strong" : sev.edge)}>
+    <li className={cx("relative before:absolute before:inset-y-3 before:left-0 before:w-[3px] before:rounded-r-full", done ? "before:bg-line-strong" : sev.edge)}>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-11 w-full items-start gap-2.5 px-3 py-2.5 text-left"
+        className="press flex min-h-14 w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2"
       >
         <kind.Icon size={17} className={cx("mt-0.5 shrink-0", done ? "text-ink-3" : sev.icon)} />
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-x-1.5 text-[0.74rem] text-ink-3">
+          <span className="flex flex-wrap items-center gap-x-1.5 text-caption text-ink-3">
             <span className={cx("font-semibold", done ? "text-ink-3" : sev.text)}>{done ? "Handled" : sev.label}</span>
             <span aria-hidden="true">·</span>
             <span>{kind.label}</span>
             <span aria-hidden="true">·</span>
             <span className="num">{relTime(alert.created_at)}</span>
           </span>
-          <span className={cx("mt-1 block text-[0.88rem] font-semibold leading-snug", done && "text-ink-2")}>{alert.title}</span>
+          <span className={cx("mt-0.5 block text-body font-medium leading-snug", done && "text-ink-2")}>{alert.title}</span>
         </span>
         <IconChevronDown size={16} className={cx("mt-1 shrink-0 text-ink-3 transition-transform", open && "rotate-180")} />
       </button>
       {open ? (
-        <div id={panelId} className="px-3 pb-3 pl-[2.4rem]">
-          <p className="text-[0.84rem] leading-relaxed text-ink-2">{alert.detail}</p>
+        <div id={panelId} className="px-4 pb-3.5 pl-11">
+          <p className="text-label leading-relaxed text-ink-2">{alert.detail}</p>
           <div className="mt-2.5">
             {done ? (
-              <p className="inline-flex items-center gap-1.5 text-[0.8rem] text-ink-2">
+              <p className="inline-flex items-center gap-1.5 text-label text-ink-2">
                 <IconCheck size={14} className="text-good" /> Acknowledged by {alert.acknowledged_by}
               </p>
             ) : (
@@ -197,7 +140,7 @@ function AlertRow({ alert, me }: { alert: Alert; me: string }) {
   );
 }
 
-function AlertsPanel({ householdId }: { householdId: string }) {
+function AlertsPanel({ householdId, className }: { householdId: string; className?: string }) {
   const alerts = useAlerts(householdId);
   const ident = useLocalIdentity();
   const me = ident.name ?? "Someone";
@@ -205,13 +148,15 @@ function AlertsPanel({ householdId }: { householdId: string }) {
   return (
     <Panel
       id="alerts"
-      title="Alerts"
+      title={<>Alerts {alerts.length ? <span className="num font-normal text-ink-3">{alerts.length}</span> : null}</>}
       right={open ? <Chip tone="risk">{open} open</Chip> : alerts.length ? <Chip tone="good">All clear</Chip> : undefined}
+      className={className}
+      flush
     >
       {alerts.length ? (
-        <ul className="space-y-2">{alerts.map((a) => <AlertRow key={a.id} alert={a} me={me} />)}</ul>
+        <ul className="divide-y divide-line">{alerts.map((a) => <AlertRow key={a.id} alert={a} me={me} />)}</ul>
       ) : (
-        <Empty title="No alerts">Nothing has been flagged.</Empty>
+        <div className="px-4 pb-3"><Empty title="No alerts">Nothing has been flagged.</Empty></div>
       )}
     </Panel>
   );
@@ -221,15 +166,13 @@ function AlertsPanel({ householdId }: { householdId: string }) {
 
 export function HouseholdPage({ householdId }: { householdId: string }) {
   return (
-    <div>
-      <PageHeader title="Household" />
-      <div className="space-y-3">
-        <PeoplePanel householdId={householdId} />
-        <div className="grid items-start gap-3 lg:grid-cols-2">
-          <AlertsPanel householdId={householdId} />
-          <NotesPanel householdId={householdId} />
-        </div>
+    <>
+      <PageHeader title="Household" sub="Who is in it, and what needs someone's attention." />
+      <div className="grid grid-cols-12 items-start gap-3">
+        <PeoplePanel householdId={householdId} className="col-span-12 lg:col-span-6 xl:col-span-5" />
+        <AlertsPanel householdId={householdId} className="col-span-12 lg:col-span-6 xl:col-span-7" />
       </div>
-    </div>
+    </>
   );
 }
+

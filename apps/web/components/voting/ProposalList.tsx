@@ -46,7 +46,7 @@ export function ProposalList({ householdId }: { householdId: string }) {
           )}
           {past.length ? (
             <div className="rounded-lg border border-line bg-surface">
-              <h4 className="px-4 pt-3 text-[0.78rem] font-semibold text-ink-3">Past decisions</h4>
+              <h4 className="px-4 pt-3 text-label font-semibold text-ink-3">Past decisions</h4>
               <ul className="divide-y divide-line">
                 {past.map((p) => {
                   const t = tallyVotes(byProposal.get(p.id) ?? []);
@@ -56,8 +56,8 @@ export function ProposalList({ householdId }: { householdId: string }) {
                       <details className="group">
                         <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-2.5 hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
                           <IconChevron size={14} className="shrink-0 text-ink-3 transition-transform group-open:rotate-90" />
-                          <span className="min-w-0 flex-1 truncate text-[0.88rem] font-medium">{p.title}</span>
-                          <span className="num shrink-0 text-[0.8rem] text-ink-2">{usd(p.amount)}</span>
+                          <span className="min-w-0 flex-1 truncate text-body font-medium">{p.title}</span>
+                          <span className="num shrink-0 text-label text-ink-2">{usd(p.amount)}</span>
                           <Chip tone={!t.total ? "neutral" : approved ? "good" : "risk"}>{!t.total ? "No votes" : approved ? "Approved" : "Not approved"}</Chip>
                         </summary>
                         <div className={cx("px-4 pb-4 pt-1")}>

@@ -48,8 +48,8 @@ function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalPr
         <div className="flex items-start gap-3">
           <IconTile tone={tone} size={36}>{goalIcon(goal.title, 18)}</IconTile>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[0.95rem] font-semibold leading-snug">{goal.title}</h3>
-            <p className="num mt-0.5 text-[0.84rem] text-ink-2">
+            <h3 className="text-lead font-semibold leading-snug">{goal.title}</h3>
+            <p className="num mt-0.5 text-label text-ink-2">
               {target ? <span className="font-semibold text-ink">{usd(target)}</span> : <span className="text-ink-3">No target amount</span>}
               {goal.target_date ? <> by {longDate(goal.target_date)}</> : null}
             </p>
@@ -68,7 +68,7 @@ function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalPr
 
         {saved ? (
           <div className="mt-3">
-            <div className="flex items-baseline justify-between gap-2 text-[0.78rem]">
+            <div className="flex items-baseline justify-between gap-2 text-label">
               <span className="num text-ink-2"><span className="font-semibold text-ink">{usd(saved.saved)}</span> of {usd(target)}</span>
               <span className="num font-semibold">{Math.round(saved.pct)}%</span>
             </div>
@@ -78,11 +78,11 @@ function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalPr
 
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
           {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip title="The agents are checking this against your accounts">Checking</Chip>}
-          {goal.priority === "high" ? <span className="text-[0.76rem] font-medium text-ink-2">High priority</span> : null}
+          {goal.priority === "high" ? <span className="text-caption font-medium text-ink-2">High priority</span> : null}
         </div>
 
         {goal.evidence_quote ? (
-          <blockquote className="mt-3 line-clamp-2 border-l-2 border-line-strong pl-3 text-[0.82rem] italic leading-snug text-ink-2">&ldquo;{goal.evidence_quote}&rdquo;</blockquote>
+          <blockquote className="mt-3 line-clamp-2 border-l-2 border-line-strong pl-3 text-label italic leading-snug text-ink-2">&ldquo;{goal.evidence_quote}&rdquo;</blockquote>
         ) : null}
       </Card>
     </li>
@@ -169,12 +169,18 @@ export function GoalsPage({ householdId }: { householdId: string }) {
   const [adding, setAdding] = useState(false);
   const [all, setAll] = useState(false);
   const shown = useMemo(() => (all ? goals : goals.slice(0, SHOWN)), [all, goals]);
+  const summary = useMemo(() => {
+    const n = { on_track: 0, stretch: 0, off_track: 0, "": 0 };
+    for (const g of goals) n[g.feasibility || ""] += 1;
+    const parts = [n.on_track && `${n.on_track} on track`, n.stretch && `${n.stretch} a stretch`, n.off_track && `${n.off_track} off track`, n[""] && `${n[""]} being checked`].filter(Boolean);
+    return `${goals.length} ${goals.length === 1 ? "goal" : "goals"}, checked against your real balances${parts.length ? `: ${parts.join(", ")}` : ""}.`;
+  }, [goals]);
 
   return (
     <div>
       <PageHeader
         title="Goals"
-        sub="Checked against your real balances."
+        sub={ready && goals.length ? <span className="num">{summary}</span> : "Checked against your real balances."}
         right={
           <Button onClick={() => setAdding((a) => !a)} aria-expanded={adding} aria-controls="add-goal">
             {adding ? <IconClose size={16} /> : <IconPlus size={16} />}
@@ -201,7 +207,7 @@ export function GoalsPage({ householdId }: { householdId: string }) {
               <Button variant="secondary" size="sm" onClick={() => setAll((v) => !v)}>{all ? "Show fewer" : `Show all ${goals.length} goals`}</Button>
             </div>
           ) : null}
-          <p className="mt-3 text-[0.76rem] text-ink-3">Progress is estimated from a matching savings account, or from the goal&apos;s timeline.</p>
+          <p className="mt-3 text-caption text-ink-3">Progress is estimated from a matching savings account, or from the goal&apos;s timeline.</p>
         </>
       ) : (
         <Empty title="No goals yet">Add one, or run Table Mode and the agents will turn what you say into goals.</Empty>

@@ -2,9 +2,10 @@
  * Row mappers: generated SpacetimeDB binding rows (camelCase, option types, bigint ids, Timestamps, *Json strings)
  * to the UI row types in lib/types.ts. The only place that knows both shapes.
  */
+import { parseFactors } from "@/lib/credit-factors";
 import type * as B from "@/lib/module_bindings/types";
 import type {
-  Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, CreditProfile,
+  Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, CreditProfile, CreditScore, CreditScoreHistory,
   Feasibility, ForecastPoint, Goal, GoalPriority, HealthIndicator, Household, Huddle, Member, Obligation, Presence, PresenceRole,
   Proposal, ProposalAnalysis, ProposalDetails, ProposalVerdict, Provider, Scenario, ScenarioResult, TraceEvent, TraceType,
   Transaction, TranscriptLine, Vote, VoteChoice, Workflow,
@@ -152,4 +153,23 @@ export const mapProposal = (r: B.Proposal): Proposal => ({
 export const mapVote = (r: B.Vote): Vote => ({
   id: r.id, proposal_id: r.proposalId, household_id: r.householdId, voter_key: r.voterKey, voter_name: r.voterName,
   choice: (["yes", "no", "abstain"].includes(r.choice) ? r.choice : "abstain") as VoteChoice, updated_at: iso(r.updatedAt),
+});
+
+// ---------------------------------------------------------------- credit monitoring (contracts.md section 9)
+// Typed by hand from the contract so this compiles before and after the bindings are regenerated with these tables.
+
+export interface CreditScoreRow {
+  id: string; householdId: string; memberId: string; score: number; band: string; factorsJson: string; updatedAt: TimestampLike;
+}
+export interface CreditScoreHistoryRow {
+  id: string; householdId: string; memberId: string; date: string; score: number;
+}
+
+export const mapCreditScore = (r: CreditScoreRow): CreditScore => ({
+  id: r.id, household_id: r.householdId, member_id: r.memberId, score: Number(r.score), band: r.band ?? "",
+  factors: parseFactors(json<unknown>(r.factorsJson, [])), updated_at: r.updatedAt ? iso(r.updatedAt) : new Date().toISOString(),
+});
+
+export const mapCreditScoreHistory = (r: CreditScoreHistoryRow): CreditScoreHistory => ({
+  id: r.id, household_id: r.householdId, member_id: r.memberId, date: String(r.date).slice(0, 10), score: Number(r.score),
 });

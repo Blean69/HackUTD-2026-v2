@@ -50,18 +50,17 @@ export function TalkButton({ variant, className }: { variant: "header" | "card" 
         aria-label={aria}
         aria-disabled={down || undefined}
         aria-describedby={down ? tipId : undefined}
-        className={cx("relative flex h-14 w-full flex-col items-center justify-end gap-0.5 pb-1 text-[0.68rem] font-semibold", down ? "text-ink-3" : "text-brand-strong", className)}
+        className={cx("press relative flex h-14 w-full flex-col items-center justify-end gap-0.5 pb-1 text-2xs font-semibold", down ? "text-ink-3" : "text-ink", className)}
       >
         <span
           className={cx(
-            "on-dark absolute -top-4 flex h-[3.4rem] w-[3.4rem] items-center justify-center rounded-full border-4 border-surface",
-            down ? "bg-ink-3" : active ? "bg-dark" : "bg-brand",
-            "text-white",
+            "absolute -top-4 flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full border-[3px] border-surface shadow-[0_0_0_1px_var(--line)]",
+            down ? "bg-surface-3 text-ink-3" : active ? "bg-dark text-dark-ink" : "bg-brand text-brand-ink",
           )}
           aria-hidden="true"
         >
-          {active ? <IconPhone size={22} /> : <IconMic size={24} />}
-          {active ? <span className="anim-blink absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full border-2 border-dark bg-[#3fd18a]" /> : null}
+          {active ? <IconPhone size={21} /> : <IconMic size={22} />}
+          {active ? <span className="anim-blink absolute right-0.5 top-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-online" /> : null}
         </span>
         <span className="num">{active ? inCall : "Talk"}</span>
         {down ? <span id={tipId} className="sr-only">{VOICE_OFFLINE_TEXT}</span> : null}
@@ -69,15 +68,13 @@ export function TalkButton({ variant, className }: { variant: "header" | "card" 
     );
   }
 
-  const base = "inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold transition-colors";
+  const base = "press inline-flex shrink-0 items-center justify-center gap-2 rounded-md font-semibold tracking-[-0.005em] transition-colors";
   const tone = down
     ? "border border-line-strong bg-surface-2 text-ink-3"
     : active
-      ? "on-dark border border-dark bg-dark text-white hover:bg-[var(--dark-hover)]"
-      : variant === "card"
-        ? "on-dark border border-brand bg-brand text-brand-ink hover:bg-brand-strong"
-        : "border border-brand bg-surface text-brand-strong hover:bg-brand-soft";
-  const size = variant === "card" ? "h-10 px-4 text-[0.9rem]" : "h-10 px-3.5 text-[0.88rem]";
+      ? "bg-dark text-dark-ink hover:bg-[var(--dark-hover)]"
+      : "bg-brand text-brand-ink hover:bg-brand-hover";
+  const size = variant === "card" ? "h-10 px-4 text-body" : "h-9 px-3.5 text-body";
 
   return (
     <span className={cx("group relative", className ?? "inline-flex")}>
@@ -90,15 +87,15 @@ export function TalkButton({ variant, className }: { variant: "header" | "card" 
         title={down ? VOICE_OFFLINE_TEXT : undefined}
         className={cx(base, tone, size, down && "cursor-not-allowed")}
       >
-        {active ? <IconPhone size={17} /> : <IconMic size={17} />}
+        {active ? <IconPhone size={16} /> : <IconMic size={16} />}
         {active ? <>{call.phase === "live" ? "In call" : "Connecting"} {call.phase === "live" ? <CallClock startedAt={call.startedAt} /> : null}</> : label}
-        {active && call.phase === "live" ? <span className="anim-blink h-1.5 w-1.5 rounded-full bg-[#3fd18a]" aria-hidden="true" /> : null}
+        {active && call.phase === "live" ? <span className="anim-blink h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true" /> : null}
       </button>
       {down ? (
         <span
           id={tipId}
           role="tooltip"
-          className="on-dark pointer-events-none absolute right-0 top-full z-40 mt-1.5 hidden w-60 rounded-md bg-dark px-2.5 py-1.5 text-left text-[0.78rem] font-medium leading-snug text-white group-focus-within:block group-hover:block"
+          className="pop pointer-events-none absolute right-0 top-full z-40 mt-1.5 hidden w-60 rounded-md px-2.5 py-1.5 text-left text-caption font-medium text-ink-2 group-focus-within:block group-hover:block"
         >
           {VOICE_OFFLINE_TEXT}
         </span>

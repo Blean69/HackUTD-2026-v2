@@ -101,13 +101,13 @@ function Goals({ a, set }: { a: OnboardingAnswers; set: (p: Partial<OnboardingAn
               disabled={!on && full}
               onClick={() => toggle(p.key)}
               className={cx(
-                "press motion-fade inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-[0.9rem] font-medium disabled:cursor-not-allowed disabled:opacity-40",
-                on ? "border-brand bg-brand text-brand-ink" : "border-line-strong bg-surface text-ink hover:border-[#b5c2bb] hover:bg-surface-2",
+                "press motion-fade inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-body font-medium disabled:cursor-not-allowed disabled:opacity-40",
+                on ? "border-brand bg-brand text-brand-ink" : "border-line-strong bg-surface text-ink hover:border-ink-3/50 hover:bg-surface-2",
               )}
               style={{ ["--i" as string]: i }}
             >
               {on ? (
-                <span className="num motion-pop inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-[0.72rem]" aria-label={`priority ${idx + 1}`}>
+                <span className="num motion-pop inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-caption" aria-label={`priority ${idx + 1}`}>
                   {idx + 1}
                 </span>
               ) : null}
@@ -116,13 +116,13 @@ function Goals({ a, set }: { a: OnboardingAnswers; set: (p: Partial<OnboardingAn
           );
         })}
       </div>
-      <p className="num mt-3 text-[0.82rem] text-ink-3" aria-live="polite">
+      <p className="num mt-3 text-label text-ink-3" aria-live="polite">
         {a.priorities.length === 0 ? `Pick up to ${MAX_PRIORITIES}, most important first.` : full ? "That's three. Tap one to swap it out." : `${a.priorities.length} of ${MAX_PRIORITIES} picked.`}
       </p>
       <div className="mt-5">
         {own ? (
           <div>
-            <label htmlFor="own-goal" className="mb-1.5 block text-[0.86rem] font-medium">
+            <label htmlFor="own-goal" className="mb-1.5 block text-body font-medium">
               Your own goal
             </label>
             <textarea
@@ -197,7 +197,7 @@ function Comfort({ a, set }: { a: OnboardingAnswers; set: (p: Partial<Onboarding
         hint="Optional. Helps us check loan payments against what comes in."
       />
       <div>
-        <p id="risk-h" className="mb-1.5 text-[0.86rem] font-medium">
+        <p id="risk-h" className="mb-1.5 text-body font-medium">
           How do you feel about investment risk?
         </p>
         <ChoiceRow
@@ -205,9 +205,9 @@ function Comfort({ a, set }: { a: OnboardingAnswers; set: (p: Partial<Onboarding
           label="Comfort with investment risk"
           value={a.risk_comfort}
           onChange={(v) => set({ risk_comfort: v })}
-          options={RISK_LEVELS.map((r, i) => ({ value: r.value, label: <span className="text-[0.8rem] sm:text-[0.86rem]">{RISK_SHORT[i]}</span> }))}
+          options={RISK_LEVELS.map((r, i) => ({ value: r.value, label: <span className="text-label sm:text-body">{RISK_SHORT[i]}</span> }))}
         />
-        <p className="mt-2 min-h-[2.5em] text-[0.84rem] leading-snug text-ink-2" aria-live="polite">
+        <p className="mt-2 min-h-[2.5em] text-label leading-snug text-ink-2" aria-live="polite">
           <span className="font-semibold text-ink">{risk.label}.</span> {risk.hint}
         </p>
       </div>

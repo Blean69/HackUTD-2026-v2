@@ -3,6 +3,10 @@ import { useSyncExternalStore } from "react";
 import type { BotOutputData, DeviceError, Participant, PipecatClient, RTVIEventCallbacks, RTVIMessage, TranscriptData, TransportState, UserInputData } from "@pipecat-ai/client-js";
 import { PRODUCT_NAME, VOICE_URL } from "@/lib/constants";
 import { checkVoice } from "./health";
+import { exposeForDevTools, type MicProcessing } from "./audio";
+import { BOT_TAIL_MS, botStuckAfterMs, HOLD_FAILSAFE_MS, INTERRUPT_WINDOW_MS, micGateOpen, RELEASE_TAIL_MS } from "./gate";
+import { ConstrainedMicManager } from "./mediaManager";
+import { getVoicePrefs, setHalfDuplexPref, setPushToTalkPref, subscribeVoicePrefs } from "./prefs";
 
 /**
  * The browser side of a voice call: Pipecat SmallWebRTC against `POST {VOICE_URL}/api/offer`.
@@ -20,6 +24,17 @@ import { checkVoice } from "./health";
  *
  * Mobile notes: audio is unlocked inside the tap that starts the call (a muted-by-policy `<audio playsinline>` plus a
  * resumed AudioContext), and if the browser still refuses to play the bot, `soundBlocked` shows a "tap to turn sound on".
+ *
+ * Echo and noise (see audio.ts for the browser notes):
+ *   - the microphone is opened by our own `ConstrainedMicManager` with echoCancellation / noiseSuppression /
+ *     autoGainControl / channelCount 1 requested explicitly, and `track.getSettings()` is logged once in dev;
+ *   - the bot plays through exactly ONE `<audio playsinline>` bound to the WebRTC remote MediaStream. Web Audio only ever
+ *     *reads* that stream for the level meters (the analyser is not connected to the destination), so the browser's echo
+ *     canceller still sees the playout as its reference signal;
+ *   - hold-to-talk (`setPushToTalk` / `pressTalk` / `releaseTalk`) and the speakerphone guard (`setHalfDuplex`,
+ *     `interrupt`) gate the mic track with `track.enabled`. State: `pushToTalk, talkHeld, halfDuplex, botSpeaking, micLive`.
+ *   - client messages to the bot (server contract in docs/contracts.md section 8): `ptt` {state: enabled | disabled |
+ *     pressed | released} and `interrupt`.
  */
 
 export const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
@@ -72,6 +87,18 @@ export interface CallState {
   mic: MicPermission;
   /** A suggested prompt the person tapped, shown big so it is easy to read out. */
   hint: string | null;
+  /** Hold-to-talk is on: the mic is silent except while the talk button is held. Remembered between visits. */
+  pushToTalk: boolean;
+  /** The talk button is down right now (hold-to-talk only). */
+  talkHeld: boolean;
+  /** Speakerphone guard is on: the mic goes quiet while the assistant talks. Default on for phones; remembered. */
+  halfDuplex: boolean;
+  /** The assistant is speaking (RTVI bot-started/stopped-speaking, plus a short tail while the speaker drains). */
+  botSpeaking: boolean;
+  /** Sound is really reaching the assistant: call connecting/live, not muted, not gated by hold-to-talk or the guard. */
+  micLive: boolean;
+  /** What the browser reports it applied to the mic (`track.getSettings()`); null until the mic is open. */
+  processing: MicProcessing | null;
 }
 
 const INITIAL: CallState = {
@@ -90,7 +117,16 @@ const INITIAL: CallState = {
   notice: null,
   mic: "unknown",
   hint: null,
+  pushToTalk: false,
+  talkHeld: false,
+  halfDuplex: false,
+  botSpeaking: false,
+  micLive: false,
+  processing: null,
 };
+
+/** The per-call part of the voice-control state; reset whenever a call starts or ends. */
+const CALL_CONTROLS = { talkHeld: false, botSpeaking: false, micLive: false, processing: null } as const;
 
 let state: CallState = INITIAL;
 const listeners = new Set<() => void>();
@@ -118,6 +154,7 @@ export const isCallActive = (s: CallState = state) => s.phase === "connecting" |
 
 type Libs = {
   PipecatClient: typeof import("@pipecat-ai/client-js").PipecatClient;
+  DeviceError: typeof import("@pipecat-ai/client-js").DeviceError;
   SmallWebRTCTransport: typeof import("@pipecat-ai/small-webrtc-transport").SmallWebRTCTransport;
 };
 
@@ -131,6 +168,14 @@ let transportStarted = false;
 let deviceError: { type?: string; message?: string } | null = null;
 let abortConnect: ((e: unknown) => void) | null = null;
 let lastArgs: StartArgs | null = null;
+
+let micMgr: ConstrainedMicManager | null = null; // the call's microphone (null between calls)
+let gateHeld = false; // the talk button is down, or inside its short release tail
+let interruptOn = false; // "Interrupt" was tapped and its window is still open
+let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+let botTailTimer: ReturnType<typeof setTimeout> | undefined;
+let interruptTimer: ReturnType<typeof setTimeout> | undefined;
+let holdFailsafe: ReturnType<typeof setTimeout> | undefined;
 
 let audioEl: HTMLAudioElement | null = null;
 let remoteTrack: MediaStreamTrack | null = null;
@@ -170,7 +215,7 @@ export function openCallSheet(opts?: { prompt?: string }) {
 export function closeCallSheet() {
   if (state.phase === "explainer" || state.phase === "ended" || state.phase === "error") {
     // Nothing to keep: drop the captions so a transcript never outlives the window that showed it.
-    set({ ...INITIAL, mic: state.mic, sheetOpen: false });
+    set({ ...INITIAL, mic: state.mic, sheetOpen: false, pushToTalk: state.pushToTalk, halfDuplex: state.halfDuplex });
     return;
   }
   set({ sheetOpen: false });
@@ -183,7 +228,7 @@ export function setHint(hint: string | null) {
 /** Back to the start screen (after an error or a finished call). */
 export function resetCall() {
   if (isCallActive()) return;
-  set({ ...INITIAL, mic: state.mic, sheetOpen: state.sheetOpen, hint: state.hint });
+  set({ ...INITIAL, mic: state.mic, sheetOpen: state.sheetOpen, hint: state.hint, pushToTalk: state.pushToTalk, halfDuplex: state.halfDuplex });
 }
 
 async function refreshMic() {
@@ -217,7 +262,7 @@ function envProblem(): CallErrorKind | null {
 
 function fail(kind: CallErrorKind, detail?: string) {
   void cleanup();
-  set({ phase: "error", error: { kind, detail }, step: "", activity: "idle", muted: false });
+  set({ phase: "error", error: { kind, detail }, step: "", activity: "idle", muted: false, ...CALL_CONTROLS });
 }
 
 /**
@@ -254,9 +299,10 @@ async function connect(args: StartArgs) {
   sawUserInput = sawBotOutput = sawBotSentence = false;
   Object.assign(flags, { userSpeaking: false, botSpeaking: false, thinking: false, thinkingAt: 0, userLoudAt: 0, botLoudAt: 0 });
   cbLevels.user = cbLevels.bot = levels.user = levels.bot = 0;
+  resetGateTimers();
   set({
     phase: "connecting", step: "Checking the voice line", error: null, muted: false, activity: "idle", captions: [], runId: null,
-    startedAt: null, endedAt: null, endReason: null, soundBlocked: false, notice: null,
+    startedAt: null, endedAt: null, endReason: null, soundBlocked: false, notice: null, ...CALL_CONTROLS,
   });
   registerGlobalListeners();
 
@@ -273,8 +319,20 @@ async function connect(args: StartArgs) {
   }
   if (stale()) return;
 
+  // Our own media manager instead of the transport's default (Daily's): it is the only way to pass getUserMedia constraints in
+  // these package versions. See mediaManager.ts.
+  const micManager = new ConstrainedMicManager({
+    makeDeviceError: (type, message, cause) => new libs.DeviceError(["mic"], type, message, cause instanceof Error ? { sourceError: cause } : undefined),
+    onTrackReplaced: (track) => {
+      // updateMic() mid-call: hand the new track to the sender (the transport does this itself for its default manager).
+      const t = c.transport as unknown as { getAudioTransceiver?: () => RTCRtpTransceiver };
+      void t.getAudioTransceiver?.().sender.replaceTrack(track).catch(() => undefined);
+    },
+    gateOpen: micGateOpen(gateInput()), // hold-to-talk starts closed, so nothing leaks before the first press
+  });
+  micMgr = micManager;
   const c = new libs.PipecatClient({
-    transport: new libs.SmallWebRTCTransport({ iceServers: ICE_SERVERS, waitForICEGathering: true }),
+    transport: new libs.SmallWebRTCTransport({ iceServers: ICE_SERVERS, waitForICEGathering: true, mediaManager: micManager }),
     enableMic: true,
     enableCam: false,
     callbacks: callbacks(mine),
@@ -296,7 +354,8 @@ async function connect(args: StartArgs) {
     const [kind, detail] = micProblem(mic, deviceError);
     return fail(kind, detail);
   }
-  set({ mic: "granted" }); // some browsers cannot answer the Permissions API; a successful open is proof enough
+  set({ mic: "granted", processing: micManager.processing }); // some browsers cannot answer the Permissions API; a successful open is proof enough
+  applyMic();
   void refreshMic();
 
   // 4. Offer / answer, ICE, and the bot saying it is ready.
@@ -323,6 +382,7 @@ async function connect(args: StartArgs) {
   if (stale()) return;
 
   set({ phase: "live", step: "", startedAt: Date.now(), activity: "listening" });
+  if (state.pushToTalk) tellBot("ptt", { state: "enabled" }); // the bot must know from the first second that silence between presses is expected
   startLevelTimer();
   void keepAwake();
   void playRemote();
@@ -348,7 +408,7 @@ function loadLibs(): Promise<Libs> {
         /* private mode */
       }
       a.logger.setLevel(debug ? a.LogLevel.DEBUG : a.LogLevel.NONE);
-      return { PipecatClient: a.PipecatClient, SmallWebRTCTransport: b.SmallWebRTCTransport };
+      return { PipecatClient: a.PipecatClient, DeviceError: a.DeviceError, SmallWebRTCTransport: b.SmallWebRTCTransport };
     })
     .catch((e) => {
       libsPromise = null;
@@ -496,20 +556,24 @@ function callbacks(mine: number): RTVIEventCallbacks {
       flags.userSpeaking = false;
       flags.thinking = true;
       flags.thinkingAt = Date.now();
+      endInterrupt(); // the person has had their say: the speakerphone guard applies to the next answer again
     },
     onBotStartedSpeaking: () => {
-      flags.botSpeaking = true;
+      if (!live()) return;
       flags.botLoudAt = Date.now();
       flags.thinking = false;
+      setBotSpeaking(true);
     },
     onBotStoppedSpeaking: () => {
-      flags.botSpeaking = false;
+      if (!live()) return;
+      setBotSpeaking(false);
     },
     onBotLlmStarted: () => {
       flags.thinking = true;
       flags.thinkingAt = Date.now();
     },
     onBotInterrupted: () => {
+      if (live()) setBotSpeaking(false);
       const caps = state.captions;
       const last = caps[caps.length - 1];
       if (last?.role === "assistant" && !last.interrupted) set({ captions: [...caps.slice(0, -1), { ...last, interrupted: true }] });
@@ -636,12 +700,18 @@ function dropNode(n: { src: MediaStreamAudioSourceNode; an: AnalyserNode } | nul
   }
 }
 
+let playbackLogged = false;
 function attachRemote(track: MediaStreamTrack) {
   if (audioEl) {
     const cur = audioEl.srcObject instanceof MediaStream ? audioEl.srcObject.getAudioTracks()[0] : undefined;
     if (cur !== track) {
       audioEl.removeAttribute("src");
       audioEl.srcObject = new MediaStream([track]);
+    }
+    if (process.env.NODE_ENV !== "production" && !playbackLogged) {
+      playbackLogged = true;
+      // One element, playsinline, fed straight from the remote stream: the browser's echo canceller uses this playout as its reference.
+      console.info("[voice] playback", { audioElements: document.querySelectorAll("audio").length, playsInline: audioEl.hasAttribute("playsinline"), remoteStreamOnElement: audioEl.srcObject instanceof MediaStream, webAudioToDestination: false });
     }
   }
   dropNode(remoteNode);
@@ -703,6 +773,8 @@ function tick() {
   if (rawBot > 0.05) flags.botLoudAt = now;
   if (rawUser > 0.14 && !state.muted) flags.userLoudAt = now;
   if (flags.thinking && now - flags.thinkingAt > 20_000) flags.thinking = false;
+  // A lost bot-stopped-speaking must never leave the speakerphone guard holding the mic shut.
+  if (flags.botSpeaking && now - flags.botLoudAt > botStuckAfterMs(ctx?.state === "running" && !!remoteNode)) setBotSpeaking(false, true);
 
   const bot = rawBot > 0.06 || (flags.botSpeaking && now - flags.botLoudAt < 1500);
   const user = !state.muted && (rawUser > 0.2 || (flags.userSpeaking && now - flags.userLoudAt < 2500));
@@ -731,6 +803,7 @@ export function toggleMute() {
   try {
     client.enableMic(!next);
     set({ muted: next, activity: next && state.activity === "you" ? "listening" : state.activity });
+    applyMic();
   } catch {
     set({ notice: "Couldn't change the microphone. Hang up and call again." });
   }
@@ -742,7 +815,7 @@ export function hangUp() {
   if (state.phase === "connecting") {
     attempt++;
     void cleanup();
-    set({ phase: "idle", step: "", error: null, activity: "idle" });
+    set({ phase: "idle", step: "", error: null, activity: "idle", ...CALL_CONTROLS });
     return;
   }
   void endCall("user");
@@ -751,7 +824,7 @@ export function hangUp() {
 async function endCall(reason: EndReason) {
   if (state.phase !== "live") return;
   const mine = attempt;
-  set({ phase: "ended", endReason: reason, endedAt: Date.now(), activity: "idle", muted: false, soundBlocked: false });
+  set({ phase: "ended", endReason: reason, endedAt: Date.now(), activity: "idle", muted: false, soundBlocked: false, ...CALL_CONTROLS });
   await cleanup(mine);
 }
 
@@ -759,6 +832,10 @@ async function cleanup(only?: number) {
   const c = client;
   if (only !== undefined && only !== attempt) return;
   client = null;
+  const micManager = micMgr;
+  micMgr = null;
+  resetGateTimers();
+  set({ ...CALL_CONTROLS });
   stopLevelTimer();
   dropNode(remoteNode);
   dropNode(localNode);
@@ -786,6 +863,162 @@ async function cleanup(only?: number) {
   } catch {
     /* already disconnected */
   }
+  void micManager?.disconnect(); // idempotent; makes sure the mic is released even if the transport never got that far
+}
+
+// ------------------------------------------------------------------------------------------------ hold-to-talk + speakerphone guard
+
+function gateInput() {
+  return {
+    muted: state.muted,
+    pushToTalk: state.pushToTalk,
+    held: gateHeld,
+    halfDuplex: state.halfDuplex,
+    botSpeaking: state.botSpeaking,
+    interrupted: interruptOn,
+  };
+}
+
+/**
+ * The one place that decides whether sound may reach the assistant: Mute, hold-to-talk and the speakerphone guard all feed
+ * `micGateOpen`, and the result is applied to the mic track (`track.enabled`). Call it after changing any of them.
+ */
+function applyMic() {
+  const open = micGateOpen(gateInput());
+  micMgr?.setGate(open);
+  const live = isCallActive() && !!micMgr?.track && open;
+  if (live !== state.micLive) set({ micLive: live });
+}
+
+function resetGateTimers() {
+  clearTimeout(releaseTimer);
+  clearTimeout(botTailTimer);
+  clearTimeout(interruptTimer);
+  clearTimeout(holdFailsafe);
+  releaseTimer = botTailTimer = interruptTimer = holdFailsafe = undefined;
+  gateHeld = false;
+  interruptOn = false;
+  flags.botSpeaking = false;
+}
+
+/** Tell the voice agent about a hold-to-talk / interrupt moment (contract: docs/contracts.md section 8). Never throws. */
+function tellBot(type: "ptt" | "interrupt", data?: { state: "enabled" | "disabled" | "pressed" | "released" }) {
+  try {
+    if (client?.connected) client.sendClientMessage(type, data);
+  } catch {
+    /* data channel closed under us: the call is ending anyway */
+  }
+}
+
+/**
+ * The bot started or stopped talking. Starting closes the mic at once (half-duplex); stopping waits `BOT_TAIL_MS`, because
+ * the server says "stopped" when it has sent the last audio, and the speaker is still playing the last few hundred ms.
+ */
+function setBotSpeaking(speaking: boolean, now = false) {
+  flags.botSpeaking = speaking;
+  clearTimeout(botTailTimer);
+  botTailTimer = undefined;
+  if (speaking) {
+    if (!state.botSpeaking) set({ botSpeaking: true });
+    applyMic();
+    return;
+  }
+  const done = () => {
+    botTailTimer = undefined;
+    if (flags.botSpeaking) return; // it started again during the tail
+    if (state.botSpeaking) set({ botSpeaking: false });
+    applyMic();
+  };
+  if (now) done();
+  else botTailTimer = setTimeout(done, BOT_TAIL_MS);
+}
+
+function endInterrupt() {
+  clearTimeout(interruptTimer);
+  interruptTimer = undefined;
+  if (!interruptOn) return;
+  interruptOn = false;
+  applyMic();
+}
+
+/** Hold-to-talk: on = the mic is silent except while the talk button is held. Remembered in localStorage. */
+export function setPushToTalk(enabled: boolean) {
+  setPushToTalkPref(enabled); // persists, then onPrefsChanged() below does the work (also for other tabs)
+}
+
+/** Speakerphone guard: on = the mic goes quiet while the assistant talks. Remembered in localStorage. */
+export function setHalfDuplex(enabled: boolean) {
+  setHalfDuplexPref(enabled);
+}
+
+/** Talk button down. Bind to pointerdown (see `holdToTalkProps` in ./hold). Does nothing unless hold-to-talk is on and a call is active. */
+export function pressTalk() {
+  if (!state.pushToTalk || !isCallActive()) return;
+  clearTimeout(releaseTimer);
+  releaseTimer = undefined;
+  clearTimeout(holdFailsafe);
+  holdFailsafe = setTimeout(releaseTalk, HOLD_FAILSAFE_MS);
+  const wasOpen = gateHeld;
+  gateHeld = true;
+  if (!state.talkHeld) set({ talkHeld: true });
+  applyMic();
+  // Pressing while the assistant talks is a deliberate barge-in; the server may treat "pressed" as one.
+  if (!wasOpen) tellBot("ptt", { state: "pressed" });
+}
+
+/**
+ * Talk button up. The mic stays open for `RELEASE_TAIL_MS` so the last syllable is not clipped, then closes and the bot is
+ * told the person finished speaking (`ptt` / `released`), so it can answer now instead of waiting for silence detection.
+ */
+export function releaseTalk() {
+  if (!state.talkHeld) return;
+  clearTimeout(holdFailsafe);
+  holdFailsafe = undefined;
+  set({ talkHeld: false });
+  clearTimeout(releaseTimer);
+  releaseTimer = setTimeout(() => {
+    releaseTimer = undefined;
+    gateHeld = false;
+    applyMic();
+    tellBot("ptt", { state: "released" });
+  }, RELEASE_TAIL_MS);
+}
+
+/**
+ * "Interrupt" (shown while the assistant talks on a phone): turn the mic back on right now so the person can talk over the
+ * speakerphone guard. It stays live until they finish a turn, or for `INTERRUPT_WINDOW_MS`. Also sends `interrupt` to the
+ * bot, which may stop talking at once (best effort; a bot that does not know the message just hears the person next).
+ */
+export function interrupt() {
+  if (state.phase !== "live") return;
+  interruptOn = true;
+  clearTimeout(interruptTimer);
+  interruptTimer = setTimeout(endInterrupt, INTERRUPT_WINDOW_MS);
+  applyMic();
+  tellBot("interrupt");
+}
+
+/** Preferences changed (this tab, another tab, or first load). */
+function onPrefsChanged() {
+  const p = getVoicePrefs();
+  const pttChanged = p.pushToTalk !== state.pushToTalk;
+  if (pttChanged && !p.pushToTalk) {
+    // Leaving hold-to-talk while the button is down: let go.
+    clearTimeout(releaseTimer);
+    clearTimeout(holdFailsafe);
+    releaseTimer = holdFailsafe = undefined;
+    gateHeld = false;
+  }
+  set({ pushToTalk: p.pushToTalk, halfDuplex: p.halfDuplex, ...(pttChanged && !p.pushToTalk ? { talkHeld: false } : null) });
+  applyMic();
+  if (pttChanged) tellBot("ptt", { state: p.pushToTalk ? "enabled" : "disabled" });
+}
+
+if (typeof window !== "undefined") {
+  const p = getVoicePrefs();
+  state = { ...state, pushToTalk: p.pushToTalk, halfDuplex: p.halfDuplex };
+  subscribeVoicePrefs(onPrefsChanged);
+  exposeForDevTools({ call: { getCallState, setPushToTalk, setHalfDuplex, pressTalk, releaseTalk, interrupt, toggleMute, startCall, hangUp } });
 }
 
 // ------------------------------------------------------------------------------------------------ page lifecycle
@@ -818,6 +1051,7 @@ function registerGlobalListeners() {
   });
   // iOS suspends audio when the page is backgrounded; bring it back on return.
   document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") releaseTalk(); // never leave the mic open behind a backgrounded tab
     if (document.visibilityState !== "visible" || state.phase !== "live") return;
     void ctx?.resume().catch(() => undefined);
     void playRemote();

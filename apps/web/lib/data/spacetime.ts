@@ -6,7 +6,7 @@
  *   first URL you open to get a separate identity in the same browser (handy for testing two people in two tabs).
  * - Table callbacks map binding rows into the UI store (lib/data/spacetime-map.ts); components never see bindings.
  * - Pages declare what they need through a `DataScope`; we subscribe to just that slice (household-scoped queries for
- *   the room, runs and trace events for /agents, summaries for /advisor) and flip `connection.synced` when the first
+ *   the room, runs and trace events for /agents) and flip `connection.synced` when the first
  *   rows have been applied. A small base subscription (households + presence) lives as long as the connection.
  * - Every `Actions` method calls the matching reducer.
  * - Resolves `{ backend: null }` (never throws) when the database is unreachable or empty, so the runtime falls back
@@ -69,6 +69,8 @@ const BASE_ROOM_TABLES = ["account", "member", "health_indicator", "alert", "hud
 const ONBOARDING_EXTRA_TABLES = ["goal", "bank_connection", "trace_event"];
 /** Tables that only exist when the published module has the voting section of contracts.md. */
 const VOTING_TABLES = ["proposal", "vote"];
+/** Credit monitoring (section 9). Until the module and bindings have them, the UI derives the score itself. */
+const CREDIT_TABLES = ["credit_score", "credit_score_history"];
 
 /** One on-demand room table; `trace_event@<run_id>` narrows the steps to a single run. */
 function roomTableQuery(householdId: string, table: string): string {
@@ -84,9 +86,6 @@ export function queriesFor(scope: DataScope): string[] {
       const tables = scope.householdId.startsWith("hh_onb_") ? [...BASE_ROOM_TABLES, ...ONBOARDING_EXTRA_TABLES] : BASE_ROOM_TABLES;
       return tables.map((t) => `SELECT * FROM ${t} WHERE household_id = '${id}'`);
     }
-    case "advisor":
-      // The console lists the latest runs, not their steps: no trace_event here.
-      return ["health_indicator", "alert", "goal", "account", "advisor_note", "agent_run"].map((t) => `SELECT * FROM ${t}`);
     case "agents":
       // Runs only; the wall loads the steps of the runs on screen (`useRunTraces`).
       return ["SELECT * FROM agent_run"];
@@ -110,6 +109,14 @@ function supportsVoting(conn: DbConnection): boolean {
   const db = conn.db as unknown as Record<string, unknown>;
   return !!db.proposal && !!db.vote;
 }
+
+/** True when these bindings know the credit tables (the generated accessors are camelCase). */
+function supportsCredit(conn: DbConnection): boolean {
+  const db = conn.db as unknown as Record<string, unknown>;
+  return !!db.creditScore && !!db.creditScoreHistory;
+}
+/** Whether the live connection reads the module's credit tables (false in mock mode or against an older module). */
+export const liveCreditTables = (): boolean => !!liveConn && supportsCredit(liveConn);
 
 function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () => void, me: () => string): void {
   const wire = <R, T extends TableName>(tbl: unknown, name: T, map: (r: R) => TableRows[T], onGone?: (row: TableRows[T]) => void) => {
@@ -148,6 +155,11 @@ function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () 
   if (supportsVoting(conn)) {
     wire(db.proposal, "proposal", M.mapProposal);
     wire(db.vote, "vote", M.mapVote);
+  }
+  if (supportsCredit(conn)) {
+    const any = db as unknown as Record<string, unknown>;
+    wire(any.creditScore, "credit_score", M.mapCreditScore);
+    wire(any.creditScoreHistory, "credit_score_history", M.mapCreditScoreHistory);
   }
 }
 
@@ -284,6 +296,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
   // Live reducers + tables when the module has them; otherwise an in-browser stand-in (seeded demo proposals, local
   // votes, a deterministic quick check instead of the agent) so the card still works against an older module.
   const voting = supportsVoting(conn);
+  const credit = supportsCredit(conn);
   // The stand-in is only loaded for a module without the voting tables, so the normal path does not ship it.
   let local: ReturnType<(typeof import("./mock/proposals"))["createLocalProposalActions"]> | null = null;
   if (!voting) {
@@ -411,7 +424,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       },
       subscribeRoomTables: (householdId, tables, onApplied) => {
         const id = safeId(householdId);
-        const wanted = tables.filter((t) => voting || !VOTING_TABLES.includes(t));
+        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)));
         if (!wanted.length) {
           queueMicrotask(onApplied);
           return () => undefined;

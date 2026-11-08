@@ -29,14 +29,14 @@ export function SyncStatus({ bank, expectedAccounts, expectedTxns = 220, compact
     const short = done ? "Imported" : failed ? "Import failed" : "Importing";
     return (
       <div className="rounded-lg bg-surface-2 px-3.5 py-2.5" role="status" aria-live="polite" aria-label={`${title}. ${accN} of ${want} accounts, ${bank.txns_count} transactions`}>
-        <div className="flex items-center justify-between gap-3 text-[0.8rem]">
+        <div className="flex items-center justify-between gap-3 text-label">
           <span className={cx("flex min-w-0 items-center gap-1.5 font-medium", done ? "text-good" : failed ? "text-risk" : "text-ink")}>
             {done ? <IconCheck size={14} strokeWidth={2.6} /> : failed ? <IconAlert size={14} /> : <span className="anim-blink h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />}
             <span className="truncate">{short}</span>
           </span>
           <span className="shrink-0 text-ink-3">{counts}</span>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-line" aria-hidden="true">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
           <div className={cx("bar-fill h-full rounded-full", done ? "bg-good" : "bg-brand", !done && !failed && "motion-sheen")} style={{ transform: `scaleX(${pct})` }} />
         </div>
       </div>
@@ -46,24 +46,24 @@ export function SyncStatus({ bank, expectedAccounts, expectedTxns = 220, compact
   return (
     <section className="rounded-lg border border-line p-4" role="status" aria-live="polite" aria-label={title}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className={cx("text-[0.95rem] font-semibold", done ? "text-good" : failed ? "text-risk" : "text-ink")}>{title}</h2>
-        <span className="shrink-0 text-[0.8rem] text-ink-3">{bank.institution_name}</span>
+        <h2 className={cx("text-lead font-semibold", done ? "text-good" : failed ? "text-risk" : "text-ink")}>{title}</h2>
+        <span className="shrink-0 text-label text-ink-3">{bank.institution_name}</span>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-3" aria-hidden="true">
         <div className={cx("bar-fill h-full rounded-full", done ? "bg-good" : "bg-brand", !done && !failed && "motion-sheen")} style={{ transform: `scaleX(${pct})` }} />
       </div>
-      <p className="mt-2 text-[0.82rem] text-ink-2">{counts}</p>
+      <p className="mt-2 text-label text-ink-2">{counts}</p>
       {arrived.length ? (
         <ul className="mt-3 grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
           {arrived.map((a, i) => (
-            <li key={a.id} className="motion-fade flex min-w-0 items-center gap-2 text-[0.84rem]" style={{ ["--i" as string]: i }}>
+            <li key={a.id} className="motion-fade flex min-w-0 items-center gap-2 text-label" style={{ ["--i" as string]: i }}>
               <IconCheck size={14} strokeWidth={2.6} className="shrink-0 text-good" />
               <span className="truncate">{a.nickname}</span>
             </li>
           ))}
         </ul>
       ) : null}
-      {bank.error ? <p className="mt-2 text-[0.82rem] text-risk">{bank.error}</p> : null}
+      {bank.error ? <p className="mt-2 text-label text-risk">{bank.error}</p> : null}
     </section>
   );
 }

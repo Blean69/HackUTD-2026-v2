@@ -18,19 +18,19 @@ function Row({ o, checked, onToggle, disabled, i }: { o: AccountOption; checked:
           aria-hidden="true"
           className={cx(
             "flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--focus)]",
-            checked ? "border-brand bg-brand text-white" : "border-line-strong bg-surface",
+            checked ? "border-brand bg-brand text-brand-ink" : "border-line-strong bg-surface",
           )}
         >
           {checked ? <IconCheck size={13} strokeWidth={3} /> : null}
         </span>
         <span className="min-w-0 flex-1">
-          <span className={cx("block truncate text-[0.94rem] font-medium leading-tight", !checked && "text-ink-2")}>{o.name}</span>
-          <span className="mt-0.5 block text-[0.8rem] text-ink-3">
+          <span className={cx("block truncate text-lead font-medium leading-tight", !checked && "text-ink-2")}>{o.name}</span>
+          <span className="mt-0.5 block text-label text-ink-3">
             {k.label}
             {o.mask ? <span className="num"> ••{o.mask}</span> : null}
           </span>
         </span>
-        <span className={cx("num shrink-0 text-right text-[0.94rem] font-semibold", !checked && "text-ink-3")}>
+        <span className={cx("num shrink-0 text-right text-lead font-semibold", !checked && "text-ink-3")}>
           {k.debt ? "−" : ""}
           {money(o.balance)}
         </span>
@@ -110,7 +110,7 @@ export function AccountsStep({
   const group = (title: string, rows: AccountOption[], offset: number) =>
     rows.length ? (
       <section aria-label={title}>
-        <h2 className="mb-1.5 text-[0.8rem] font-semibold text-ink-3">{title}</h2>
+        <h2 className="mb-1.5 text-label font-semibold text-ink-3">{title}</h2>
         <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
           {rows.map((o, i) => (
             <Row key={o.id} o={o} i={offset + i} checked={isOn(o)} onToggle={() => toggle(o)} disabled={imported || busy} />
@@ -132,26 +132,26 @@ export function AccountsStep({
         sub={imported ? "These accounts are on their way in." : `Everything at ${bank.institution_name || "your bank"} starts selected. Untick anything you would rather keep out.`}
       />
 
-      <div className="mb-5 grid grid-cols-3 rounded-lg bg-surface-2 py-3 text-center" role="status" aria-live="polite" aria-label="Totals for the selected accounts">
+      <div className="mb-5 grid grid-cols-3 rounded-lg border border-line bg-surface-2 py-3 text-center" role="status" aria-live="polite" aria-label="Totals for the selected accounts">
         <div>
-          <p className="text-[0.74rem] text-ink-3">Assets</p>
-          <CountUp value={totals.assets} format={money} className="mt-0.5 block text-[1.02rem] font-semibold" />
+          <p className="eyebrow">Assets</p>
+          <CountUp value={totals.assets} format={money} className="figure mt-1 block text-[1.05rem]" />
         </div>
         <div className="border-x border-line">
-          <p className="text-[0.74rem] text-ink-3">Debts</p>
-          <CountUp value={totals.debts} format={money} className="mt-0.5 block text-[1.02rem] font-semibold" />
+          <p className="eyebrow">Debts</p>
+          <CountUp value={totals.debts} format={money} className="figure mt-1 block text-[1.05rem]" />
         </div>
         <div>
-          <p className="text-[0.74rem] text-ink-3">Net</p>
-          <CountUp value={totals.net} format={money} className="mt-0.5 block text-[1.02rem] font-semibold" />
+          <p className="eyebrow">Net</p>
+          <CountUp value={totals.net} format={money} className="figure mt-1 block text-[1.05rem]" />
         </div>
       </div>
 
-      {totals.net < 0 ? <p className="-mt-3 mb-5 text-[0.8rem] text-ink-3">Bank accounts only. Your home and car are added in a moment.</p> : null}
+      {totals.net < 0 ? <p className="-mt-3 mb-5 text-label text-ink-3">Bank accounts only. Your home and car are added in a moment.</p> : null}
 
       {!imported ? (
         <div className="mb-2 flex items-center justify-between">
-          <p className="num text-[0.84rem] text-ink-2">
+          <p className="num text-label text-ink-2">
             {totals.count} of {options.length} selected
           </p>
           <Button variant="ghost" size="sm" onClick={() => setTouched(Object.fromEntries(options.map((o) => [o.account_id, !allOn])))}>

@@ -52,7 +52,7 @@ function StatusText({ s }: { s: Scenario }) {
 function ResultSkeleton({ status }: { status: Scenario["status"] }) {
   return (
     <div aria-busy="true" aria-live="polite">
-      <p className="flex items-center gap-2 text-[0.88rem] font-medium text-ink-2">
+      <p className="flex items-center gap-2 text-body font-medium text-ink-2">
         <Spinner size={15} /> {status === "queued" ? "Queued. Waiting for an agent…" : "Simulating your next 90 days…"}
       </p>
       <Skeleton className="mt-3 h-14" />
@@ -69,9 +69,9 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
     <div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <StatusChip s={s} />
-        <span className="text-[0.76rem] text-ink-3">{s.requested_by_name} · {relTime(s.created_at)}</span>
+        <span className="text-caption text-ink-3">{s.requested_by_name} · {relTime(s.created_at)}</span>
       </div>
-      <h3 className="mt-1.5 text-[1.05rem] font-semibold leading-snug">“{s.prompt}”</h3>
+      <h3 className="mt-1.5 text-h3 font-semibold leading-snug">“{s.prompt}”</h3>
 
       {pending ? (
         <div className="mt-3"><ResultSkeleton status={s.status} /></div>
@@ -83,12 +83,12 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
             <div className={cx("mt-3 flex items-start gap-2.5 rounded-md border px-3 py-2.5", v.banner)} role="status">
               <span className="mt-0.5 shrink-0" aria-hidden="true">{r.verdict === "fine" ? <IconCheck size={18} /> : <IconAlert size={18} />}</span>
               <div className="min-w-0">
-                <p className="text-[0.95rem] font-semibold leading-tight">{v.label}</p>
-                {r.summary ? <p className="mt-0.5 text-[0.86rem] leading-snug text-ink">{r.summary}</p> : null}
+                <p className="text-lead font-semibold leading-tight">{v.label}</p>
+                {r.summary ? <p className="mt-0.5 text-body leading-snug text-ink">{r.summary}</p> : null}
               </div>
             </div>
           ) : r.summary ? (
-            <p className="mt-3 text-[0.9rem] leading-relaxed text-ink-2">{r.summary}</p>
+            <p className="mt-3 text-body leading-relaxed text-ink-2">{r.summary}</p>
           ) : null}
 
           {r.metrics?.length ? (
@@ -97,17 +97,17 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
                 const changed = m.before !== undefined && m.after !== m.before;
                 const worse = changed && m.before !== undefined && (m.label.toLowerCase().includes("payments") ? m.after > m.before : m.after < m.before);
                 return (
-                  <div key={m.label} className="rounded-md bg-surface-2 px-3 py-2.5">
-                    <dt className="text-[0.76rem] leading-tight text-ink-3">{m.label}</dt>
+                  <div key={m.label} className="rounded-lg bg-surface-2 px-3 py-2.5">
+                    <dt className="text-caption leading-tight text-ink-3">{m.label}</dt>
                     <dd className="num mt-1 flex flex-wrap items-center gap-x-1.5">
                       {m.before !== undefined ? (
                         <>
-                          <span className="text-[0.84rem] text-ink-3">{metric(m.before, m.unit)}</span>
+                          <span className="text-label text-ink-3">{metric(m.before, m.unit)}</span>
                           <span className="sr-only">changes to</span>
                           <IconArrowRight size={13} className="text-ink-3" />
                         </>
                       ) : null}
-                      <span className={cx("text-[1.2rem] font-semibold leading-tight", !changed ? "text-ink" : worse ? "text-watch" : "text-good")}>{metric(m.after, m.unit)}</span>
+                      <span className={cx("figure text-[1.125rem] leading-6 sm:text-kpi-sm", !changed ? "text-ink" : worse ? "text-watch" : "text-good")}>{metric(m.after, m.unit)}</span>
                     </dd>
                   </div>
                 );
@@ -117,7 +117,7 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
 
           {r.series?.length ? (
             <div className="mt-4">
-              <h4 className="mb-2 text-[0.8rem] font-semibold text-ink-2">Cash balance, with and without this change</h4>
+              <h4 className="mb-2 text-label font-semibold text-ink-2">Cash balance, with and without this change</h4>
               <ScenarioChart series={r.series} lowPoint={r.low_point} verdict={r.verdict} />
             </div>
           ) : null}
@@ -126,8 +126,8 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
             <div className="mt-3 flex items-start gap-2.5 rounded-md bg-brand-soft p-3 text-brand-strong">
               <IconSpark size={16} className="mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[0.76rem] font-semibold">Suggestion</p>
-                <p className="mt-0.5 text-[0.88rem] leading-snug">{r.suggestion}</p>
+                <p className="text-caption font-semibold">Suggestion</p>
+                <p className="mt-0.5 text-body leading-snug">{r.suggestion}</p>
               </div>
             </div>
           ) : null}
@@ -206,7 +206,7 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
               type="button"
               disabled={busy}
               onClick={() => void submit(c)}
-              className="min-h-9 rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-[0.8rem] font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
+              className="press min-h-9 rounded-full border border-line bg-surface px-3 py-1.5 text-label font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
             >
               {c}
             </button>
@@ -240,8 +240,8 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
                         aria-current={on ? "true" : undefined}
                         className={cx("-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-2.5 text-left transition-colors", on ? "bg-brand-soft" : "hover:bg-surface-2")}
                       >
-                        <span className="line-clamp-2 text-[0.86rem] font-medium leading-snug">{s.prompt}</span>
-                        <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[0.76rem] text-ink-3">
+                        <span className="line-clamp-2 text-body font-medium leading-snug">{s.prompt}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 text-caption text-ink-3">
                           <StatusText s={s} />
                           <span>{s.requested_by_name} · {relTime(s.created_at)}</span>
                         </span>

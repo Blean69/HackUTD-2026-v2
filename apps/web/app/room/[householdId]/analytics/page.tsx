@@ -1,7 +1,9 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { AnalyticsPage } from "@/components/analytics/AnalyticsPage";
 
-/** Folded into My Picture (one home for accounts, bills and spending). Old links and bookmarks land on the right tab. */
+export const metadata: Metadata = { title: "Analytics" };
+
 export default async function Page({ params }: { params: Promise<{ householdId: string }> }) {
   const { householdId } = await params;
-  redirect(`/room/${householdId}/picture?tab=spending`);
+  return <AnalyticsPage householdId={decodeURIComponent(householdId)} />;
 }

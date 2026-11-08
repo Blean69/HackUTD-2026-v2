@@ -30,13 +30,13 @@ const CallPill = dynamic(() => import("@/components/voice/CallSheet").then((m) =
 const CallBrianPanel = dynamic(() => import("@/components/phone/CallBrianPanel").then((m) => m.CallBrianPanel), { ssr: false });
 
 /** Header button that opens the Agent activity panel; pulses while a run is in flight. */
-export function AgentActivityButton({ householdId, className, dark }: { householdId?: string; className?: string; dark?: boolean }) {
+export function AgentActivityButton({ householdId, className, bordered }: { householdId?: string; className?: string; dark?: boolean; bordered?: boolean }) {
   const latest = useLatestRun(householdId);
   const running = latest?.status === "running";
   return (
-    <IconButton label="Agent activity" onClick={() => openTrace()} className={cx(dark && "text-white hover:bg-white/10 hover:text-white", className)}>
-      <IconActivity size={19} />
-      {running ? <span className="anim-blink absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand" aria-label="An agent is running" /> : null}
+    <IconButton label="Agent activity" onClick={() => openTrace()} className={cx(bordered && "border border-line-strong bg-surface hover:bg-surface-2", className)}>
+      <IconActivity size={18} />
+      {running ? <span className="anim-blink absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand ring-2 ring-surface" aria-label="An agent is running" /> : null}
     </IconButton>
   );
 }
@@ -51,10 +51,10 @@ function Drawer({ open, onClose, householdId }: { open: boolean; onClose: () => 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 md:hidden">
-      <button type="button" aria-label="Close menu" tabIndex={-1} onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div role="dialog" aria-modal="true" aria-label="Menu" className="anim-drawer absolute inset-y-0 left-0 w-[17.5rem] max-w-[85vw]">
-        <Sidebar householdId={householdId} onNavigate={onClose} />
-        <button type="button" onClick={onClose} aria-label="Close menu" className="on-dark absolute right-2 top-3 inline-flex h-9 w-9 items-center justify-center rounded-md text-side-ink hover:bg-white/10">
+      <button type="button" aria-label="Close menu" tabIndex={-1} onClick={onClose} className="scrim absolute inset-0" />
+      <div role="dialog" aria-modal="true" aria-label="Menu" className="anim-drawer absolute inset-y-0 left-0 w-[17.5rem] max-w-[85vw] shadow-[var(--shadow-pop)]">
+        <Sidebar householdId={householdId} onNavigate={onClose} className="bg-bg" />
+        <button type="button" onClick={onClose} aria-label="Close menu" className="absolute right-2 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md text-ink-2 hover:bg-surface-3 hover:text-ink">
           <IconClose size={18} />
         </button>
       </div>
@@ -63,7 +63,7 @@ function Drawer({ open, onClose, householdId }: { open: boolean; onClose: () => 
 }
 
 /**
- * Chrome shared by every signed-in page: deep-green sidebar (md and up), a top bar + bottom tab bar on phones, and
+ * Chrome shared by every signed-in page: a canvas-flush sidebar (md and up), a top bar + bottom tab bar on phones, and
  * the two slide-over panels ("Ask Cosign" and "Agent activity") that any page can open.
  */
 export function AppShell({ householdId, header, children }: { householdId: string; header?: ReactNode; children: ReactNode }) {
@@ -108,21 +108,21 @@ export function AppShell({ householdId, header, children }: { householdId: strin
       </div>
 
       {/* phones: top bar */}
-      <div className="on-dark sticky top-0 z-30 flex h-[52px] items-center gap-1 bg-side px-2 text-white md:hidden">
-        <button type="button" onClick={() => setMenu(true)} aria-label="Open menu" aria-expanded={menu} className="inline-flex h-10 w-10 items-center justify-center rounded-md hover:bg-white/10">
-          <IconMenu size={22} />
-        </button>
+      <div className="sticky top-0 z-30 flex h-[52px] items-center gap-0.5 border-b border-line bg-bg px-2 text-ink md:hidden">
+        <IconButton label="Open menu" onClick={() => setMenu(true)} aria-expanded={menu} className="h-10 w-10 text-ink">
+          <IconMenu size={21} />
+        </IconButton>
         <Link href="/" className="flex items-center gap-2 rounded-md px-1" aria-label={`${PRODUCT_NAME} home`}>
-          <BrandMark size={26} />
-          <span className="text-[1.05rem] font-semibold tracking-tight">{PRODUCT_NAME}</span>
+          <BrandMark size={24} />
+          <span className="display text-[1.02rem]">{PRODUCT_NAME}</span>
         </Link>
         <span className="flex-1" />
-        <IconButton label={`Ask ${PRODUCT_NAME}`} onClick={openCoach} className="text-white hover:bg-white/10 hover:text-white">
-          <IconSpark size={20} />
+        <IconButton label={`Ask ${PRODUCT_NAME}`} onClick={openCoach}>
+          <IconSpark size={19} />
         </IconButton>
         <CallBrianButton variant="top" />
-        <AgentActivityButton householdId={householdId} dark />
-        <NotificationsBell householdId={householdId} me={me} dark />
+        <AgentActivityButton householdId={householdId} />
+        <NotificationsBell householdId={householdId} me={me} compact />
       </div>
 
       <div style={{ ["--sb" as string]: `${SIDEBAR_W}px` }} className="md:pl-[var(--sb)]">
@@ -145,8 +145,9 @@ export function AppShell({ householdId, header, children }: { householdId: strin
                 {/* The call button sits in the middle of the bar, raised, so it is the first thing a thumb finds. */}
                 {i === 2 ? <li><TalkButton variant="tab" /></li> : null}
                 <li>
-                  <Link href={n.href(householdId)} aria-current={active ? "page" : undefined} className={cx("flex h-14 flex-col items-center justify-center gap-0.5 text-[0.68rem] font-medium", active ? "text-brand-strong" : "text-ink-3")}>
-                    <n.Icon size={21} />
+                  <Link href={n.href(householdId)} aria-current={active ? "page" : undefined} className={cx("relative flex h-14 flex-col items-center justify-center gap-1 text-2xs font-medium transition-colors", active ? "text-ink" : "text-ink-3")}>
+                    {active ? <span className="absolute inset-x-4 top-0 h-0.5 rounded-b-full bg-brand" aria-hidden="true" /> : null}
+                    <span className={active ? "text-brand-strong" : undefined}><n.Icon size={20} /></span>
                     {t.label}
                   </Link>
                 </li>
@@ -154,8 +155,8 @@ export function AppShell({ householdId, header, children }: { householdId: strin
             );
           })}
           <li>
-            <button type="button" onClick={() => setMenu(true)} className="flex h-14 w-full flex-col items-center justify-center gap-0.5 text-[0.68rem] font-medium text-ink-3">
-              <IconMore size={21} />
+            <button type="button" onClick={() => setMenu(true)} className="flex h-14 w-full flex-col items-center justify-center gap-1 text-2xs font-medium text-ink-3">
+              <IconMore size={20} />
               More
             </button>
           </li>

@@ -30,7 +30,7 @@ obligations, a "what if" simulator, or something nobody has thought of yet.
 | *Something new* | **Table Mode**: the family plans out loud on their own phones; agents turn the talk into goals checked against real balances | Verified (huddle workflow); rename and UI building | Goal cards with feasibility chips on every phone; transcript purged after analysis |
 | *Something new* | **Family vote**: a member proposes a purchase, everyone votes live, an agent attaches a fine / tight / risky affordability check | Building | Five seeded proposals and 12 seeded votes (`data/seed/proposals.json`, `votes.json`). The check is the `what_if` workflow with the proposal as subject |
 | *Something new* | **Scam check**: catches elder-fraud patterns in the conversation and the transactions | Verified | The Nguyens' "grandson in jail" call is linked to $2,000 of gift cards (four $500 purchases, Oct 21) |
-| *Something new* | **Advisor Console**: a PNC advisor sees consenting families' health and can drop a note into their room live | Verified; redesign building | `/advisor` |
+| *Something new* | **Credit monitoring**: a simulated 300–850 score per family member, driven mostly by the household's financial health, with a 6-month trend, the factors behind it and alerts on big moves. **Brian calls you back** about 15 s after a call with a critical alert from your own data | Built tonight |
 | *Something new* | **Phone line**: call a number, a human-sounding voice explains the household's finances and runs a what-if by voice | **Planned. Not built.** | Constraints are set in contracts.md section 8: same tools as the coach, traced as `phone` runs, caller matched by phone number plus PIN, spoken AI disclosure on every call |
 
 Judge pitch: *"Families already plan out loud at the table. {{NAME}} joins only when they ask, and checks every plan against their real accounts."*
@@ -66,7 +66,7 @@ code on GitHub is required to win. Free Maincloud credit: code `HACKUTD2026` (on
 |---|---|---|
 | Primary functionality on Spacetime | 100% of app state lives in SpacetimeDB tables. There is no other database and no REST data API. The worker is an ordinary SpacetimeDB client | Verified |
 | Server logic in the DB | Eight health indicators, the 90-day forecast and the data-quality rules run as reducers inside the module. A scheduled reducer (`tick_recompute`) recomputes every 60 s. Rules caught card testing 7/7, garbled 10/10, impossible values 3/3, duplicates 10/11, with zero false positives on the seed | Verified |
-| Multiplayer by default | A family room on several phones: presence, live Table Mode transcript, goal cards, simulations and advisor notes sync instantly to everyone | Verified; redesign building |
+| Multiplayer by default | A family room on several phones: presence, live Table Mode transcript, goal cards, simulations and votes sync instantly to everyone | Verified; redesign building |
 | Family vote | `proposal` and `vote` tables; one vote per identity, changeable until closed; every phone sees the tally move. The agent verdict is written back to the same row | Building |
 | Onboarding as shared state | Every onboarding step (`household_profile`, `bank_connection`, `bank_account_option`) is a row, so a second family member can join mid-flow and watch progress | Building [verify the join path in the UI] |
 | Not just glue | The AI job queue *is* a table: reducers enqueue, the worker claims atomically (`claim_job`), trace events stream back as rows | Verified |

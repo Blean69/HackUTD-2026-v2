@@ -96,7 +96,7 @@ export function CallBrianCard({ householdId, bare, className }: { householdId: s
     statusLine = (
       <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
         <Chip tone="good"><IconCheck size={12} strokeWidth={2.6} /> Code set</Chip>
-        {access.updatedAt ? <span className="text-[0.78rem] text-ink-3">changed {relTime(access.updatedAt)}</span> : null}
+        {access.updatedAt ? <span className="text-caption text-ink-3">changed {relTime(access.updatedAt)}</span> : null}
       </span>
     );
   else statusLine = <Chip tone="watch">No code yet</Chip>;
@@ -108,21 +108,21 @@ export function CallBrianCard({ householdId, bare, className }: { householdId: s
           <div className="flex items-start gap-3">
             <IconTile size={40}><IconPhone size={20} /></IconTile>
             <div className="min-w-0 flex-1">
-              <h2 className="text-[0.95rem] font-semibold leading-tight tracking-tight">Call Brian by phone</h2>
-              <p className="mt-0.5 text-[0.84rem] leading-snug text-ink-2">Prefer a phone? Brian answers the same questions out loud, on any phone.</p>
+              <h2 className="text-lead font-semibold leading-tight tracking-tight">Call Brian by phone</h2>
+              <p className="mt-0.5 text-label leading-snug text-ink-2">Prefer a phone? Brian answers the same questions out loud, on any phone.</p>
             </div>
           </div>
         )}
 
         <div className={cx("flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-lg bg-surface-2 px-3.5 py-3", !bare && "mt-3")}>
           <div className="min-w-0 flex-1 basis-44">
-            <p className="text-[0.76rem] text-ink-3">Phone number</p>
+            <p className="text-caption text-ink-3">Phone number</p>
             <p className="num text-[1.25rem] font-semibold leading-tight tracking-tight">{PHONE_DISPLAY}</p>
           </div>
           <a
             href={PHONE_HREF}
             aria-label={`Call Brian at ${PHONE_DISPLAY}`}
-            className="press inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-brand px-4 text-[0.88rem] font-semibold text-brand-ink hover:bg-brand-strong"
+            className="press inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-brand px-4 text-body font-semibold text-brand-ink hover:bg-brand-hover"
           >
             <IconPhone size={16} /> Tap to call
           </a>
@@ -131,8 +131,8 @@ export function CallBrianCard({ householdId, bare, className }: { householdId: s
         <div className="mt-4">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="min-w-0">
-              <p className="text-[0.84rem] font-medium">Your {PIN_LENGTH}-digit code</p>
-              <div className="mt-1 min-h-6 text-[0.86rem]" aria-live="polite">{statusLine}</div>
+              <p className="text-label font-medium">Your {PIN_LENGTH}-digit code</p>
+              <div className="mt-1 min-h-6 text-body" aria-live="polite">{statusLine}</div>
             </div>
             {canEdit && !editing ? (
               <Button data-opener variant={access.hasPin ? "secondary" : "primary"} onClick={() => { setSaved(null); setEditing(true); }}>
@@ -142,35 +142,35 @@ export function CallBrianCard({ householdId, bare, className }: { householdId: s
           </div>
 
           {saved && !editing ? (
-            <p role="status" className="mt-2 inline-flex items-center gap-1.5 text-[0.84rem] font-medium text-good">
+            <p role="status" className="mt-2 inline-flex items-center gap-1.5 text-label font-medium text-good">
               <IconCheck size={15} strokeWidth={2.6} /> {saved === "set" ? "Code saved. It works on your next call." : "Code removed. Callers can't use it any more."}
             </p>
           ) : null}
 
           {!demo && access.phase === "ready" && household && !isOwner ? (
-            <p className="mt-2 text-[0.82rem] leading-snug text-ink-3">Only the person who set up this household can change its code.</p>
+            <p className="mt-2 text-label leading-snug text-ink-3">Only the person who set up this household can change its code.</p>
           ) : null}
 
           {editing && canEdit ? (
             <form onSubmit={save} className="anim-fade mt-3 rounded-lg border border-line p-3.5" aria-label={access.hasPin ? "Change your phone code" : "Set your phone code"}>
-              <p id="pin-new-h" className="mb-2 text-[0.84rem] font-medium">{access.hasPin ? "New code" : "Choose a code"}</p>
+              <p id="pin-new-h" className="mb-2 text-label font-medium">{access.hasPin ? "New code" : "Choose a code"}</p>
               <PinBoxes label="New code" digits={digits} onChange={setDigits} show={show} autoFocus invalid={!!weak} disabled={!!busy} describedBy={weak ? "pin-weak" : undefined} />
-              {weak ? <p id="pin-weak" role="alert" className="mt-1.5 text-[0.82rem] text-risk">{weak}</p> : null}
+              {weak ? <p id="pin-weak" role="alert" className="mt-1.5 text-label text-risk">{weak}</p> : null}
 
-              <p className="mb-2 mt-3.5 text-[0.84rem] font-medium">Type it again to confirm</p>
+              <p className="mb-2 mt-3.5 text-label font-medium">Type it again to confirm</p>
               <PinBoxes label="Confirm code" digits={again} onChange={setAgain} show={show} invalid={mismatch} disabled={!!busy} describedBy={mismatch ? "pin-mismatch" : undefined} />
-              {mismatch ? <p id="pin-mismatch" role="alert" className="mt-1.5 text-[0.82rem] text-risk">The two codes don&apos;t match.</p> : null}
+              {mismatch ? <p id="pin-mismatch" role="alert" className="mt-1.5 text-label text-risk">The two codes don&apos;t match.</p> : null}
 
               <button
                 type="button"
                 onClick={() => setShow((s) => !s)}
                 aria-pressed={show}
-                className="mt-3 rounded text-[0.84rem] font-medium text-brand-strong hover:underline"
+                className="mt-3 rounded text-label font-medium text-brand-strong hover:underline"
               >
                 {show ? "Hide digits" : "Show digits"}
               </button>
 
-              {error ? <p role="alert" className="mt-2 rounded-lg bg-risk-soft px-3 py-2 text-[0.84rem] leading-snug text-risk">{error}</p> : null}
+              {error ? <p role="alert" className="mt-2 rounded-lg bg-risk-soft px-3 py-2 text-label leading-snug text-risk">{error}</p> : null}
 
               <div className="mt-3.5 flex flex-wrap items-center gap-2">
                 <Button type="submit" disabled={!canSave}>
@@ -186,7 +186,7 @@ export function CallBrianCard({ householdId, bare, className }: { householdId: s
             </form>
           ) : null}
 
-          <p className="mt-3 flex items-start gap-1.5 text-[0.8rem] leading-snug text-ink-3">
+          <p className="mt-3 flex items-start gap-1.5 text-label leading-snug text-ink-3">
             <IconLock size={14} className="mt-0.5 shrink-0" />
             <span>Brian will ask for this code when you call. Only a scrambled version is stored, never the code itself.</span>
           </p>

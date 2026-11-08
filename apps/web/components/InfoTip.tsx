@@ -84,7 +84,7 @@ export function InfoTip({ text, label }: { text: string; label?: string }) {
         onBlur={() => {
           if (!pinned) setOpen(false);
         }}
-        className="-m-1 inline-flex rounded p-1 align-middle text-ink-3 hover:text-ink-2 focus-visible:text-ink-2 focus-visible:outline-2 focus-visible:outline-brand"
+        className="-m-1 inline-flex rounded p-1 align-middle text-ink-3 transition-colors hover:text-ink focus-visible:text-ink"
       >
         <IconInfo size={14} />
       </button>
@@ -94,7 +94,7 @@ export function InfoTip({ text, label }: { text: string; label?: string }) {
           id={id}
           role="tooltip"
           style={pos ? { top: pos.top, left: pos.left, width: pos.width } : { top: -9999, left: -9999, width: MAX_W }}
-          className="fixed z-50 rounded-md border border-line-strong bg-surface px-3 py-2 text-left text-[0.8rem] font-normal normal-case leading-snug tracking-normal text-ink-2 shadow-sm"
+          className="pop anim-pop-in fixed z-50 rounded-md px-3 py-2 text-left text-label font-normal normal-case tracking-normal text-ink-2"
         >
           {text}
         </div>

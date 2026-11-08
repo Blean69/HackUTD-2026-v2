@@ -74,7 +74,7 @@ export function TraceTimeline({
             <span className={cx("absolute left-0 top-0 flex h-5 w-5 items-center justify-center rounded-full", meta.marker)} aria-hidden="true">
               <meta.Icon size={11} strokeWidth={2} />
             </span>
-            <div className="flex flex-wrap items-center gap-x-1.5 text-[0.76rem] leading-5 text-ink-3">
+            <div className="flex flex-wrap items-center gap-x-1.5 text-caption leading-5 text-ink-3">
               <span className="font-semibold capitalize text-ink">{agentName(e.agent)}</span>
               <span aria-hidden="true">·</span>
               <span>{meta.label}</span>
@@ -83,40 +83,40 @@ export function TraceTimeline({
             <p
               className={cx(
                 "mt-0.5 break-words leading-snug",
-                compact ? "text-[0.82rem]" : "text-[0.86rem]",
+                compact ? "text-label" : "text-body",
                 e.type === "thought" ? "text-ink-2" : "text-ink",
                 e.type === "final" && "font-medium",
                 e.type === "error" && "text-risk",
-                e.type === "tool_call" && "font-mono text-[0.78rem]",
+                e.type === "tool_call" && "font-mono text-label",
               )}
             >
               {e.title}
             </p>
             {steps ? (
-              <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-[0.8rem] text-ink-2 marker:text-ink-3">
+              <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-label text-ink-2 marker:text-ink-3">
                 {steps.map((s) => <li key={s}>{s}</li>)}
               </ol>
             ) : null}
             {e.provider || e.model || e.latency_ms || e.tokens ? (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 {compact ? null : <ProviderBadge model={e.model} provider={e.provider} />}
-                {e.latency_ms ? <span className="num text-[0.72rem] text-ink-3">{duration(e.latency_ms)}</span> : null}
-                {e.tokens ? <span className="num text-[0.72rem] text-ink-3">{e.tokens.in} in · {e.tokens.out} out tokens</span> : null}
+                {e.latency_ms ? <span className="num text-caption text-ink-3">{duration(e.latency_ms)}</span> : null}
+                {e.tokens ? <span className="num text-caption text-ink-3">{e.tokens.in} in · {e.tokens.out} out tokens</span> : null}
               </div>
             ) : null}
             {hasData && !compact ? (
               <details className="group mt-1">
-                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-[0.74rem] font-medium text-ink-3 hover:text-ink [&::-webkit-details-marker]:hidden">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-caption font-medium text-ink-3 hover:text-ink [&::-webkit-details-marker]:hidden">
                   <IconChevron size={12} className="transition-transform group-open:rotate-90" /> Raw data
                 </summary>
-                <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-line bg-surface-2 p-2 font-mono text-[0.72rem] leading-relaxed text-ink-2">{pretty(e.data)}</pre>
+                <pre className="mt-1 max-h-48 overflow-auto rounded-md border border-line bg-surface-2 p-2 font-mono text-caption leading-relaxed text-ink-2">{pretty(e.data)}</pre>
               </details>
             ) : null}
           </li>
         );
       })}
       {running ? (
-        <li ref={endRef} className="relative pb-1 pl-8 text-[0.82rem] text-ink-2">
+        <li ref={endRef} className="relative pb-1 pl-8 text-label text-ink-2">
           <span className="absolute left-0 top-0 flex h-5 w-5 items-center justify-center" aria-hidden="true">
             <span className="anim-blink h-2 w-2 rounded-full bg-brand" />
           </span>

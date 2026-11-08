@@ -46,7 +46,8 @@ Then there is the call nobody plans for. In our synthetic data, a retired couple
 - **Scam check and data quality.** Rules inside the database catch duplicates, garbled merchants, impossible values and card testing. Agents link the Nguyens' "grandson in jail" call to the $2,000 of gift cards.
 - **Agent Trail.** Every plan, tool call, result, model, provider, latency and token count for every run, streaming live from every session.
 - **Ask {{NAME}}.** A coach panel that answers by calling tools on the family's own data, with each call visible in the trail.
-- **Advisor Console.** An advisor sees households ordered by urgency and can drop a note that appears live in the family's room.
+- **Credit monitoring.** A simulated 300–850 score per family member, mostly driven by the household's financial health, with the factors explained, a 6-month trend and alerts on big moves.
+- **Brian calls you back.** About 15 seconds after a phone call, Brian rings back with a critical alert from your own accounts and stays on the line.
 
 All data is synthetic or Plaid Sandbox. There is no real customer information anywhere.
 

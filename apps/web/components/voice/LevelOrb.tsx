@@ -58,7 +58,7 @@ export function LevelOrb({ activity, muted, live, size = 120 }: { activity: Acti
       <span
         ref={ring}
         aria-hidden="true"
-        className={cx("absolute inset-0 rounded-full border-2 opacity-0 transition-transform duration-75", talking ? "border-dark" : "border-brand")}
+        className={cx("absolute inset-0 rounded-full border-2 opacity-0 transition-transform duration-75", talking ? "border-ink-2" : "border-brand")}
       />
       <span
         aria-hidden="true"
@@ -67,10 +67,10 @@ export function LevelOrb({ activity, muted, live, size = 120 }: { activity: Acti
           muted
             ? "border-line-strong bg-surface-2 text-ink-3"
             : talking
-              ? "on-dark border-dark bg-dark text-white"
+              ? "border-dark bg-dark text-dark-ink"
               : you
-                ? "on-dark border-brand bg-brand text-brand-ink"
-                : "border-transparent bg-brand-soft text-brand-strong",
+                ? "border-brand bg-brand text-brand-ink"
+                : "border-line bg-surface-2 text-brand-strong",
         )}
         style={{ width: core, height: core }}
       >

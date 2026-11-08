@@ -43,8 +43,8 @@ export function WatchPanel({
           const done = i < step || (finished && i === step);
           const active = i === step && !finished;
           return (
-            <li key={st.key} className={cx("flex items-center gap-2.5 text-[0.92rem]", active ? "font-semibold text-ink" : done ? "text-ink-2" : "text-ink-3")} aria-current={active ? "step" : undefined}>
-              <span className={cx("flex h-5 w-5 items-center justify-center rounded-full border text-[0.68rem]", done ? "border-brand bg-brand text-white" : active ? "border-brand" : "border-line-strong")}>
+            <li key={st.key} className={cx("flex items-center gap-2.5 text-lead", active ? "font-semibold text-ink" : done ? "text-ink-2" : "text-ink-3")} aria-current={active ? "step" : undefined}>
+              <span className={cx("flex h-5 w-5 items-center justify-center rounded-full border text-caption", done ? "border-brand bg-brand text-brand-ink" : active ? "border-brand" : "border-line-strong")}>
                 {done ? <IconCheck size={12} strokeWidth={3} /> : active ? <span className="anim-blink h-1.5 w-1.5 rounded-full bg-brand" /> : <span className="num">{i + 1}</span>}
               </span>
               {st.label}

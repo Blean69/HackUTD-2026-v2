@@ -102,7 +102,7 @@ export function PinBoxes({
           className={cx(
             "num h-14 w-11 min-w-0 flex-1 rounded-lg border bg-surface text-center text-[1.35rem] font-semibold text-ink outline-none transition-colors sm:w-12 sm:flex-none",
             "focus:border-brand focus:ring-2 focus:ring-brand/15 disabled:bg-surface-2 disabled:opacity-70",
-            invalid ? "border-risk" : d ? "border-line-strong" : "border-line-strong hover:border-[#b5c2bb]",
+            invalid ? "border-risk" : d ? "border-line-strong" : "border-line-strong hover:border-ink-3/50",
           )}
         />
       ))}

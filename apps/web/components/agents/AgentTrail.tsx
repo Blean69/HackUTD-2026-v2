@@ -33,10 +33,10 @@ function RunBody({ run, events }: { run: AgentRun; events: readonly TraceEvent[]
   return (
     <div id={`${runDomId(run.run_id)}-body`} className="border-t border-line bg-surface-2">
       <div ref={ref} className="max-h-[32rem] overflow-y-auto px-4 py-4">
-        {events.length ? <TraceTimeline events={events} running={running} autoScroll={running} scrollRef={ref} /> : <p className="text-[0.84rem] text-ink-3">Waiting for the first step…</p>}
+        {events.length ? <TraceTimeline events={events} running={running} autoScroll={running} scrollRef={ref} /> : <p className="text-label text-ink-3">Waiting for the first step…</p>}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-2">
-        <p className="text-[0.74rem] text-ink-3">Run <span className="num">{run.run_id}</span></p>
+        <p className="text-caption text-ink-3">Run <span className="num">{run.run_id}</span></p>
         <Button size="sm" variant="secondary" onClick={() => openTrace(run.run_id)}>Open in side panel</Button>
       </div>
     </div>
@@ -61,23 +61,23 @@ const RunRow = memo(function RunRow({
   return (
     <li
       id={runDomId(run.run_id)}
-      className={cx("scroll-mt-20 border-l-[3px]", linked ? "border-l-brand bg-brand-soft" : "border-l-transparent")}
+      className={cx("relative scroll-mt-20", linked && "bg-brand-soft before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-brand")}
     >
       <button
         type="button"
         aria-expanded={open}
         aria-controls={`${runDomId(run.run_id)}-body`}
         onClick={() => onToggle(run.run_id)}
-        className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-surface-2"
+        className="press flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2"
       >
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-[0.9rem] font-semibold">{WORKFLOW_LABEL[run.workflow]}</span>
+            <span className="text-body font-semibold text-ink">{WORKFLOW_LABEL[run.workflow]}</span>
             <RunStatus status={run.status} />
-            <span className="text-[0.84rem] text-ink-2">{household}</span>
-            <span className="num text-[0.76rem] text-ink-3">{relTime(run.started_at, now)}</span>
+            <span className="text-label text-ink-2">{household}</span>
+            <span className="num text-caption text-ink-3">{relTime(run.started_at, now)}</span>
           </span>
-          <span className="num mt-1 block text-[0.78rem] text-ink-2">
+          <span className="num mt-1 block font-mono text-caption text-ink-3">
             {events.length
               ? `${events.length} steps · ${toolCalls} tool calls${totals.latency ? ` · ${duration(totals.latency)} model time` : ""}${tokens ? ` · ${tokens.toLocaleString()} tokens` : ""}`
               : run.status === "running" ? "Waiting for the first step…" : "Loading steps…"}
@@ -163,11 +163,11 @@ function TrailBody() {
         right={live ? <LivePill label={`${live} live now`} /> : undefined}
       />
 
-      <p className="num mb-3 text-[0.84rem] text-ink-2" aria-label="Agent run totals">
-        <b className="font-semibold text-ink">{all.length}</b> runs{provText ? <> · runs by provider: {provText}</> : null}
+      <p className="num mb-3 text-label text-ink-2" aria-label="Agent run totals">
+        <span className="figure text-lead text-ink">{all.length}</span> runs{provText ? <span className="text-ink-3"> · by provider: {provText}</span> : null}
       </p>
 
-      <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by workflow">
+      <div className="no-scrollbar -mx-4 mb-3 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0" role="group" aria-label="Filter by workflow">
         {(["all", ...WORKFLOWS] as const).filter((w) => w === "all" || w === wf || (counts[w] ?? 0) > 0).map((w) => (
           <button
             key={w}
@@ -175,12 +175,12 @@ function TrailBody() {
             aria-pressed={wf === w}
             onClick={() => { setWf(w); setLimit(PAGE); }}
             className={cx(
-              "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[0.8rem] font-medium transition-colors",
-              wf === w ? "on-dark border-dark bg-dark text-white" : "border-line-strong bg-surface text-ink-2 hover:text-ink",
+              "press inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-label font-medium transition-colors",
+              wf === w ? "border-transparent bg-dark text-dark-ink" : "border-line bg-surface text-ink-2 hover:border-line-strong hover:text-ink",
             )}
           >
             {w === "all" ? "All" : WORKFLOW_LABEL[w]}
-            <span className={cx("num text-[0.72rem]", wf === w ? "text-white/70" : "text-ink-3")}>{counts[w] ?? 0}</span>
+            <span className={cx("num text-caption", wf === w ? "opacity-70" : "text-ink-3")}>{counts[w] ?? 0}</span>
           </button>
         ))}
       </div>

@@ -1,23 +1,23 @@
 "use client";
 import type { ReactNode, Ref } from "react";
-import { IconAlert, IconChevron, IconInfo } from "@/components/icons";
-import { Button, Spinner } from "@/components/ui";
+import { IconChevron } from "@/components/icons";
+import { Button, Notice, Spinner } from "@/components/ui";
 import { cx } from "@/lib/format";
 
 /* Shared building blocks for the wizard. Inputs are 16px on phones so iOS never zooms on focus. */
 
 export const fieldCls =
-  "h-12 w-full rounded-lg border border-line-strong bg-surface px-3.5 text-base text-ink outline-none transition-colors placeholder:text-[#94a39b] hover:border-[#b5c2bb] focus:border-brand focus:ring-2 focus:ring-brand/15 disabled:bg-surface-2 disabled:opacity-70";
+  "field-focus h-12 w-full rounded-lg border border-line-strong bg-surface px-3.5 text-base text-ink outline-none transition-colors placeholder:text-ink-3/70 hover:border-ink-3/50 disabled:bg-surface-2 disabled:opacity-70";
 
 export function Field({ label, htmlFor, hint, children, className }: { label: ReactNode; htmlFor: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <label htmlFor={htmlFor} className="mb-1.5 block text-[0.86rem] font-medium text-ink">
+      <label htmlFor={htmlFor} className="mb-1.5 block text-label font-medium text-ink">
         {label}
       </label>
       {children}
       {hint ? (
-        <p id={`${htmlFor}-hint`} className="mt-1.5 text-[0.8rem] leading-snug text-ink-3">
+        <p id={`${htmlFor}-hint`} className="mt-1.5 text-caption text-ink-3">
           {hint}
         </p>
       ) : null}
@@ -111,15 +111,15 @@ export function ChoiceRow<T extends string | number>({
   return (
     <fieldset className={className}>
       <legend className="sr-only">{label}</legend>
-      <div className="grid gap-1 rounded-lg bg-surface-2 p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      <div className="grid gap-1 rounded-lg bg-surface-3 p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
         {options.map((o) => {
           const on = o.value === value;
           return (
             <label
               key={String(o.value)}
               className={cx(
-                "press flex min-h-11 cursor-pointer items-center justify-center rounded-md px-2 text-center text-[0.9rem] font-medium leading-tight has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-[var(--focus)]",
-                on ? "bg-surface text-ink shadow-[0_1px_2px_rgb(11_58_44/0.12)]" : "text-ink-2 hover:text-ink",
+                "press flex min-h-11 cursor-pointer items-center justify-center rounded-md px-2 text-center text-body font-medium leading-tight has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-[var(--focus)]",
+                on ? "bg-surface text-ink shadow-[0_0_0_1px_var(--line-strong)]" : "text-ink-3 hover:text-ink",
               )}
             >
               <input type="radio" name={name} value={String(o.value)} checked={on} onChange={() => onChange(o.value)} className="sr-only" />
@@ -143,17 +143,17 @@ export function Switch({ id, checked, onChange, label, hint }: { id: string; che
         aria-checked={checked}
         aria-describedby={hint ? `${id}-hint` : undefined}
         onClick={() => onChange(!checked)}
-        className={cx("relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors", checked ? "bg-brand" : "bg-line-strong")}
+        className={cx("relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors", checked ? "bg-brand" : "bg-surface-3 shadow-[inset_0_0_0_1px_var(--line-strong)]")}
       >
         <span className="sr-only">{checked ? "On" : "Off"}</span>
         <span aria-hidden="true" className={cx("inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200", checked ? "translate-x-[1.5rem]" : "translate-x-[0.25rem]")} />
       </button>
       <div className="min-w-0">
-        <label htmlFor={id} className="block cursor-pointer text-[0.92rem] font-medium leading-snug text-ink">
+        <label htmlFor={id} className="block cursor-pointer text-body font-medium text-ink">
           {label}
         </label>
         {hint ? (
-          <p id={`${id}-hint`} className="mt-0.5 text-[0.8rem] leading-snug text-ink-2">
+          <p id={`${id}-hint`} className="mt-0.5 text-caption text-ink-2">
             {hint}
           </p>
         ) : null}
@@ -165,11 +165,11 @@ export function Switch({ id, checked, onChange, label, hint }: { id: string; che
 export function StepHeading({ title, sub, headingRef, eyebrow }: { title: string; sub?: ReactNode; headingRef?: Ref<HTMLHeadingElement>; eyebrow?: ReactNode }) {
   return (
     <div className="mb-6">
-      {eyebrow ? <p className="mb-1.5 text-[0.8rem] font-semibold text-brand-strong">{eyebrow}</p> : null}
-      <h1 ref={headingRef} tabIndex={-1} className="text-[1.45rem] font-semibold leading-tight tracking-[-0.015em] outline-none sm:text-[1.7rem]">
+      {eyebrow ? <p className="eyebrow mb-2 text-brand-strong">{eyebrow}</p> : null}
+      <h1 ref={headingRef} tabIndex={-1} className="display text-[1.5rem] leading-[1.15] text-ink outline-none sm:text-h1">
         {title}
       </h1>
-      {sub ? <p className="mt-2 text-[0.95rem] leading-relaxed text-ink-2">{sub}</p> : null}
+      {sub ? <p className="mt-2 text-lead text-ink-2">{sub}</p> : null}
     </div>
   );
 }
@@ -181,7 +181,7 @@ export function StepHeading({ title, sub, headingRef, eyebrow }: { title: string
 export function StepFooter({ onBack, children, note, backLabel = "Back" }: { onBack?: () => void; children?: ReactNode; note?: ReactNode; backLabel?: string }) {
   return (
     <div className="pb-safe sticky bottom-0 z-10 -mx-4 mt-8 border-t border-line bg-surface px-4 pt-3 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-0">
-      {note ? <div className="mb-2.5 text-[0.82rem] leading-snug text-ink-3">{note}</div> : null}
+      {note ? <div className="mb-2.5 text-caption text-ink-3">{note}</div> : null}
       <div className="flex items-center gap-2">
         {onBack ? (
           <Button variant="ghost" size="lg" onClick={onBack} className="-ml-2 px-3 sm:-ml-3">
@@ -194,22 +194,8 @@ export function StepFooter({ onBack, children, note, backLabel = "Back" }: { onB
   );
 }
 
-export function Notice({ tone = "info", children, live = "polite", action }: { tone?: "info" | "warn" | "error" | "good"; children: ReactNode; live?: "polite" | "assertive" | "off"; action?: ReactNode }) {
-  const cls = {
-    info: "bg-surface-2 text-ink-2",
-    warn: "bg-watch-soft text-watch",
-    error: "bg-risk-soft text-risk",
-    good: "bg-good-soft text-good",
-  }[tone];
-  const Icon = tone === "info" || tone === "good" ? IconInfo : IconAlert;
-  return (
-    <div role={tone === "error" ? "alert" : "status"} aria-live={tone === "error" ? undefined : live} className={cx("flex items-start gap-2.5 rounded-lg px-3.5 py-3 text-[0.86rem] leading-snug", cls)}>
-      <Icon size={17} className="mt-0.5 shrink-0" />
-      <div className="min-w-0 flex-1">{children}</div>
-      {action ? <div className="shrink-0 self-center">{action}</div> : null}
-    </div>
-  );
-}
+/** Moved to the UI kit; re-exported so the wizard steps keep their imports. */
+export { Notice };
 
 export function BusyLabel({ busy, children, busyText }: { busy: boolean; children: ReactNode; busyText?: string }) {
   return (

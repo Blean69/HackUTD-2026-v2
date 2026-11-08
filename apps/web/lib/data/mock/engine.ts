@@ -3,7 +3,7 @@
  *
  * It implements the same `Backend` interface as the real adapter and writes into the same `store`, so every
  * component works unchanged in both modes. To make multiplayer feel real without a server it also simulates other
- * people (presence, an advisor note) and other judges' agent runs on the /agents wall.
+ * people (presence) and other judges' agent runs on the /agents wall.
  */
 import type { Actions, Backend } from "../backend";
 import type { DataStore } from "../store";
@@ -243,10 +243,6 @@ class MockEngine {
     };
     put("peer_marisol", "Marisol", "family");
     this.after(7000, () => put("peer_daniel", "Daniel", "family"));
-    this.after(24000, () => put("peer_priya", "Priya (PNC advisor)", "advisor"));
-    this.after(41000, () => {
-      this.addNote(hid, "Priya (PNC advisor)", "Saw your Visa at 55% utilization. Paying it below 30% could lift your score by about 25 points before you apply for the SBA loan.");
-    });
   }
 
   private addNote(hid: string, author: string, text: string): void {

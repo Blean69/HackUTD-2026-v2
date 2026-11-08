@@ -29,7 +29,7 @@ function ToolCalls({ events, running }: { events: readonly TraceEvent[]; running
         <li
           key={e.id}
           className={cx(
-            "flex items-start gap-1.5 rounded-md border px-2 py-1 text-[0.74rem] leading-snug",
+            "flex items-start gap-1.5 rounded-md border px-2 py-1 text-caption leading-snug",
             e.type === "tool_call" ? "border-line-strong bg-surface font-mono text-ink" : "border-transparent bg-surface text-ink-2",
           )}
         >
@@ -38,11 +38,32 @@ function ToolCalls({ events, running }: { events: readonly TraceEvent[]; running
         </li>
       ))}
       {running ? (
-        <li className="flex items-center gap-2 px-0.5 pt-0.5 text-[0.78rem] text-ink-2">
+        <li className="flex items-center gap-2 px-0.5 pt-0.5 text-label text-ink-2">
           <span className="anim-blink h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" /> {PRODUCT_NAME} is checking your accounts…
         </li>
       ) : null}
     </ul>
+  );
+}
+
+/**
+ * The model answers in light markdown: **bold** and 【tool】 source tags. Render bold as bold and the tags as a quiet
+ * mono label, instead of showing the raw asterisks and brackets. Everything else stays plain text (no HTML is parsed).
+ */
+function RichText({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*\n]+\*\*|【[^】\n]{1,40}】)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.startsWith("**") && p.endsWith("**") && p.length > 4 ? (
+          <strong key={i} className="font-semibold text-ink">{p.slice(2, -2)}</strong>
+        ) : p.startsWith("【") && p.endsWith("】") ? (
+          <span key={i} className="mx-0.5 rounded-sm bg-surface-3 px-1 font-mono text-2xs text-ink-3">{p.slice(1, -1).replace(/_/g, " ")}</span>
+        ) : (
+          p.replace(/\*\*/g, "")
+        ),
+      )}
+    </>
   );
 }
 
@@ -53,13 +74,13 @@ function Bubble({ m, me }: { m: CoachMessage; me: string }) {
     <li className={cx("anim-fade flex gap-2", mine && "flex-row-reverse")}>
       {mine ? <Avatar name={m.author_name} size={28} /> : <AssistantMark />}
       <div className={cx("max-w-[88%] rounded-lg px-3 py-2", mine ? "bg-brand text-brand-ink" : "border border-line bg-surface-2")}>
-        <p className={cx("mb-0.5 text-[0.72rem] font-semibold", mine ? "text-brand-ink/80" : "text-ink-3")}>
+        <p className={cx("mb-0.5 text-caption font-semibold", mine ? "text-brand-ink/80" : "text-ink-3")}>
           {mine ? (m.author_name === me ? "You" : m.author_name) : PRODUCT_NAME}
         </p>
         {!mine ? <ToolCalls events={events} /> : null}
-        <p className="whitespace-pre-wrap break-words text-[0.88rem] leading-relaxed">{m.text}</p>
+        <p className="whitespace-pre-wrap break-words text-body leading-relaxed">{mine ? m.text : <RichText text={m.text} />}</p>
         {!mine && m.run_id ? (
-          <button type="button" onClick={() => openTrace(m.run_id)} className="mt-1.5 rounded text-[0.76rem] font-medium text-brand-strong hover:underline">
+          <button type="button" onClick={() => openTrace(m.run_id)} className="mt-1.5 rounded text-caption font-medium text-brand-strong hover:underline">
             How I got this
           </button>
         ) : null}
@@ -117,11 +138,11 @@ export function CoachPanel({ householdId, me }: { householdId: string; me: strin
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4" role="log" aria-live="polite" aria-label={`Conversation with ${PRODUCT_NAME}`}>
-        {!ready ? <p className="py-6 text-center text-[0.82rem] text-ink-3" role="status">Loading the conversation…</p> : null}
+        {!ready ? <p className="py-6 text-center text-label text-ink-3" role="status">Loading the conversation…</p> : null}
         {ready && messages.length === 0 && !pending ? (
           <div className="rounded-md border border-dashed border-line-strong px-4 py-5 text-center">
-            <p className="text-[0.88rem] font-medium">Ask about your money</p>
-            <p className="mt-1 text-[0.8rem] text-ink-2">Pick a question below. The whole household sees the answer.</p>
+            <p className="text-body font-medium">Ask about your money</p>
+            <p className="mt-1 text-label text-ink-2">Pick a question below. The whole household sees the answer.</p>
           </div>
         ) : null}
         <ul className="space-y-3">
@@ -130,7 +151,7 @@ export function CoachPanel({ householdId, me }: { householdId: string; me: strin
             <li className="flex gap-2">
               <AssistantMark />
               <div className="max-w-[88%] rounded-lg border border-line bg-surface-2 px-3 py-2">
-                <p className="mb-0.5 text-[0.72rem] font-semibold text-ink-3">{PRODUCT_NAME}</p>
+                <p className="mb-0.5 text-caption font-semibold text-ink-3">{PRODUCT_NAME}</p>
                 <ToolCalls events={events} running />
               </div>
             </li>
@@ -146,13 +167,13 @@ export function CoachPanel({ householdId, me }: { householdId: string; me: strin
               type="button"
               disabled={locked}
               onClick={() => void send(s)}
-              className="rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-left text-[0.78rem] font-medium leading-snug text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
+              className="rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-left text-label font-medium leading-snug text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
             >
               {s}
             </button>
           ))}
         </div>
-        {err ? <p role="alert" className="mt-2 text-[0.8rem] text-risk">{err}</p> : null}
+        {err ? <p role="alert" className="mt-2 text-label text-risk">{err}</p> : null}
         <form className="mt-2.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
           <label htmlFor="coach-in" className="sr-only">Ask {PRODUCT_NAME}</label>
           <input id="coach-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={`Ask ${PRODUCT_NAME}…`} autoComplete="off" className={cx(inputCls, "min-w-0 flex-1")} />
