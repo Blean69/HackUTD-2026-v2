@@ -88,7 +88,7 @@ describe('cache_first replay', () => {
     expect(a).toMatchObject({ status: 'done', replayed: false });
     const finish = first.sink.of('finishRun')[0]!;
     const result = JSON.parse(String(finish[3]));
-    expect(result.cache_key).toMatch(/^what_if:hh_test:/);
+    expect(result.cache_key).toMatch(/^what_if@e[0-9]+:hh_test:/);
     expect(result.effects.some((e: { kind: string }) => e.kind === 'scenario')).toBe(true);
 
     // pretend those events were stored in SpacetimeDB with real-time gaps of 3 s

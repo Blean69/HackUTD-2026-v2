@@ -188,7 +188,7 @@ describe('proposal check: failures, cache and what_if unaffected', () => {
     const first = deps(data);
     expect(await runJob(proposalJob(p), first.d)).toMatchObject({ status: 'done', replayed: false });
     const result = JSON.parse(String(first.sink.of('finishRun')[0]![3]));
-    expect(result.cache_key).toMatch(/^what_if:hh_test:/);
+    expect(result.cache_key).toMatch(/^what_if@e[0-9]+:hh_test:/);
     expect(result.effects.some((e: { kind: string }) => e.kind === 'proposal')).toBe(true);
     const stored: CachedTraceEvent[] = first.sink.traces.map((t, i) => ({ seq: t.seq, tsMs: i * 1000, agent: t.agent, type: t.type, title: t.title, dataJson: t.dataJson, model: t.model, provider: t.provider, latencyMs: t.latencyMs }));
     const history: RunHistory = { findCompletedRun: async (_w, key) => (key === result.cache_key ? { runId: 'run_old', effects: result.effects, result } : null), traceEvents: async () => stored };
