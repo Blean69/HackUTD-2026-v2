@@ -2,7 +2,6 @@
 import { useMemo, useState } from "react";
 import { Donut } from "@/components/charts/Donut";
 import { SERIES } from "@/components/charts/theme";
-import { Mascot, Peek, type MascotMood } from "@/components/Mascot";
 import { CountUp } from "@/components/motion";
 import { BENTO, Panel, TONE_TEXT, type Tone } from "@/components/ui";
 import type { RoomFinance } from "@/lib/data/finance-hooks";
@@ -18,9 +17,7 @@ function RingTile({ label, value, pct, tone, sub, i }: { label: string; value: R
   return (
     <div className={cx("card motion-rise @container relative p-4 transition-transform duration-200 hover:-translate-y-0.5", BENTO.quarter)} style={{ ["--i" as string]: i }}>
       <div className="flex flex-col items-start gap-2.5 @min-[12rem]:flex-row @min-[12rem]:items-center @min-[12rem]:gap-3">
-        <Donut size={76} thickness={9} total={100} slices={[{ key: "v", value: Math.max(2, Math.min(100, pct)), color, label }]} label={`${label}: ${sub}`}>
-          <Mascot mood={tone === "risk" ? "worried" : tone === "good" ? "cheer" : "happy"} size={30} />
-        </Donut>
+        <Donut size={76} thickness={9} total={100} slices={[{ key: "v", value: Math.max(2, Math.min(100, pct)), color, label }]} label={`${label}: ${sub}`} />
         <div className="min-w-0">
           <p className="text-caption font-medium text-ink-3">{label}</p>
           <p className={cx("figure whitespace-nowrap text-kpi-sm", TONE_TEXT[tone])}>{value}</p>
@@ -44,7 +41,6 @@ export function InsightCards({ fin }: { fin: RoomFinance }) {
   const sr = indicator("savings_rate") ?? sum.savingsRate;
   const srTone: Tone = sr === null ? "watch" : sr >= 15 ? "good" : sr >= 5 ? "watch" : "risk";
   const rwTone: Tone = runway === null ? "watch" : runway >= 6 ? "good" : runway >= 3 ? "watch" : "risk";
-  const mood: MascotMood = srTone === "risk" || rwTone === "risk" ? "worried" : srTone === "good" && rwTone === "good" ? "cheer" : "happy";
   const [hot, setHot] = useState<string | null>(null);
   const slices = spend.categories.map((c, i) => ({ key: c.category, value: c.value, color: SERIES[i % SERIES.length], label: categoryLabel(c.category) }));
 
@@ -53,7 +49,6 @@ export function InsightCards({ fin }: { fin: RoomFinance }) {
       <RingTile i={0} label="Savings rate" value={sr === null ? "n/a" : <CountUp value={sr} format={(n) => `${n.toFixed(1)}%`} />} pct={sr ?? 0} tone={srTone} sub="of income kept" />
       <RingTile i={1} label="Cash runway" value={runway === null ? "n/a" : <CountUp value={runway} format={(n) => `${n.toFixed(1)} mo`} />} pct={runway === null ? 0 : (runway / 12) * 100} tone={rwTone} sub="at current spending" />
       <Panel id="spending-mix" title="Where the money went" sub="Last 90 days" className={cx("relative", BENTO.half)}>
-        <Peek mood={mood} />
         {slices.length ? (
           <div className="flex items-center gap-4">
             <Donut slices={slices} size={116} thickness={14} label="Spending by category, last 90 days" format={(n) => usd(n, { compact: true })} active={hot} onActive={setHot}>

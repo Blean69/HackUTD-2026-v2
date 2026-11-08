@@ -8,7 +8,8 @@ import { CashFlowChart } from "@/components/charts/lazy";
 import { HealthCard, TrendCard } from "./AnalysisCards";
 import { KpiTiles } from "./KpiRow";
 import { AssetCard, InsightCards } from "./InsightCards";
-import { AccountsCard, GoalsCard, UpcomingCard } from "./ListCards";
+import { GoalsCard, ProductStrip, UpcomingCard } from "./ListCards";
+import { NextMoveCard } from "./NextMove";
 
 const S = BENTO;
 
@@ -46,6 +47,9 @@ export function Dashboard({ householdId }: { householdId: string }) {
 
   return (
     <div className="grid grid-cols-12 gap-3">
+      {/* PNC's brief in order: see the whole picture (six products), make sense of it (KPIs, health), the next move. */}
+      <NextMoveCard fin={fin} householdId={householdId} className="col-span-12" />
+      <ProductStrip fin={fin} householdId={householdId} className="col-span-12" />
       <KpiTiles fin={fin} householdId={householdId} />
 
       <TrendCard fin={fin} householdId={householdId} className="col-span-12 xl:col-span-6" />
@@ -61,7 +65,6 @@ export function Dashboard({ householdId }: { householdId: string }) {
       {/* Phones: the family vote (the live, multiplayer card) comes right after health; from md it closes the grid beside Goals. */}
       <FamilyVotingCard householdId={householdId} className={`${S.half} md:order-2`} />
 
-      <AccountsCard fin={fin} householdId={householdId} className="col-span-12 xl:col-span-4" />
       {hasBills ? <UpcomingCard fin={fin} householdId={householdId} className={S.half} /> : null}
       <CreditTile householdId={householdId} className={hasBills ? S.half : "col-span-12 xl:col-span-8"} />
 

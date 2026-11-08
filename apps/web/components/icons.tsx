@@ -49,7 +49,9 @@ export const IconMore = (p: P) => <Svg {...p}><circle cx="5.5" cy="12" r="1.4" f
 // ---- domain
 export const IconHome = (p: P) => <Svg {...p}><path d="M4 11 12 4l8 7v8.5a.5.5 0 0 1-.5.5H15v-5.5H9V20H4.5a.5.5 0 0 1-.5-.5z" /></Svg>;
 export const IconCar = (p: P) => <Svg {...p}><path d="M5 16.5V13l1.8-4.6A1.5 1.5 0 0 1 8.2 7.5h7.6a1.5 1.5 0 0 1 1.4.9L19 13v3.5" /><path d="M4 13h16v3.5a.5.5 0 0 1-.5.5H4.5a.5.5 0 0 1-.5-.5z" /><circle cx="8" cy="17.5" r="1.5" /><circle cx="16" cy="17.5" r="1.5" /></Svg>;
-export const IconCard = (p: P) => <Svg {...p}><rect x="3" y="5.5" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h3" /></Svg>;
+export const IconWallet = (p: P) => <Svg {...p}><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3" /><rect x="4" y="8" width="16" height="11" rx="2" /><path d="M16 13.5h.01" /></Svg>;
+export const IconPiggy = (p: P) => <Svg {...p}><path d="M19 11.5c0-3.3-3.1-5.5-7-5.5S5 8.2 5 11.5c0 1.9 1 3.5 2.5 4.5V19h2.5v-2h4v2h2.5v-3c.8-.5 1.4-1.2 1.8-2H20v-3h-1.2z" /><path d="M9.5 5.5 11 3l1 3M15 10.5v.01" /></Svg>;
+export const IconCard =(p: P) => <Svg {...p}><rect x="3" y="5.5" width="18" height="13" rx="2" /><path d="M3 10h18M7 15h3" /></Svg>;
 export const IconBank = (p: P) => <Svg {...p}><path d="M3 9.5 12 4l9 5.5M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" /></Svg>;
 export const IconCap = (p: P) => <Svg {...p}><path d="m2.5 9.5 9.5-5 9.5 5-9.5 5z" /><path d="M6.5 12v4.5c1.5 1.5 3.4 2 5.5 2s4-.5 5.5-2V12M21.5 9.5V15" /></Svg>;
 export const IconShield = (p: P) => <Svg {...p}><path d="M12 3 4.5 6v5.5c0 4.5 3 8 7.5 9.5 4.5-1.5 7.5-5 7.5-9.5V6z" /><path d="m9 12 2.2 2.2L15.5 10" /></Svg>;

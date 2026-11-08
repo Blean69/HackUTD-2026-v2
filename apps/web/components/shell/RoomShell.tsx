@@ -96,7 +96,10 @@ export function RoomShell({ householdId, children }: { householdId: string; chil
           </div>
         </Card>
       ) : (
-        children
+        <>
+          {children}
+          <p className="mt-6 pb-2 text-center text-caption text-ink-3">Educational guidance, not financial advice. Demo households use synthetic data.</p>
+        </>
       )}
       {ready && !name ? <NamePrompt context={found ? `You're joining ${household?.name ?? "a household"}. Everyone here sees your name next to what you say and do.` : undefined} /> : null}
     </AppShell>

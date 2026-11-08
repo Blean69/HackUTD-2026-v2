@@ -4,13 +4,13 @@ import Link from "next/link";
 import { Panel, PanelLink, Progress, TONE_TEXT } from "@/components/ui";
 import type { RoomFinance } from "@/lib/data/finance-hooks";
 import { cx, usd } from "@/lib/format";
+import { GOOD_AT } from "@/lib/nextMoves";
 
 export function TrendCard({ fin, householdId, className }: { fin: RoomFinance; householdId: string; className?: string }) {
   const end = fin.trend.forecastEnd;
   return (
     <Panel
       id="net-worth-trend"
-      mascot="happy"
       title="Net worth and 90-day forecast"
       sub={end !== undefined ? <span className="num">About {usd(end)} by the end of the forecast</span> : undefined}
       className={className}
@@ -33,7 +33,7 @@ const keepTogether = (s: string) => s.replace(/\(([^)]*)\)/g, (m) => m.replace(/
 export function HealthCard({ fin, householdId, className }: { fin: RoomFinance; householdId: string; className?: string }) {
   const hm = fin.healthModel;
   return (
-    <Panel id="financial-health" mascot={(hm.score ?? 60) >= 70 ? "cheer" : (hm.score ?? 60) < 55 ? "worried" : "happy"} title="Household health" info="Each indicator is computed inside the database from your accounts, transactions and credit profile, then scored 0 to 100. The score is their average." className={className}>
+    <Panel id="financial-health" title="Household health" info="Each indicator is computed inside the database from your accounts, transactions and credit profile, then scored 0 to 100. The score is their average." className={className}>
       <div className="flex items-center justify-between gap-3">
         <p className="figure shrink-0 text-kpi-sm">{hm.score ?? "n/a"}<span className="text-label font-normal text-ink-3"> / 100</span></p>
         <Link
@@ -65,6 +65,23 @@ export function HealthCard({ fin, householdId, className }: { fin: RoomFinance; 
           {!hm.rows.length ? <li className="text-label text-ink-3 @min-[26rem]:col-span-2">Indicators are being calculated.</li> : null}
         </ul>
       </div>
+      {hm.rows.length ? (
+        <details className="group mt-3 border-t border-line pt-2">
+          <summary className="cursor-pointer list-none text-label font-medium text-brand-strong hover:text-ink">
+            Show the math <span className="text-ink-3 group-open:hidden">· how each number is computed</span>
+          </summary>
+          <dl className="mt-2 space-y-2.5">
+            {hm.rows.map((r) => (
+              <div key={r.key}>
+                <dt className="text-label font-semibold text-ink">{r.label}</dt>
+                <dd className="text-caption text-ink-2">{r.explanation}</dd>
+                {GOOD_AT[r.key] ? <dd className="num text-caption text-ink-3">{GOOD_AT[r.key].text}</dd> : null}
+              </div>
+            ))}
+          </dl>
+          <p className="mt-2.5 text-caption text-ink-3">Computed inside SpacetimeDB from your accounts and transactions; each indicator is scored 0–100 and the health score is their average. Brian and the agents read these same numbers.</p>
+        </details>
+      ) : null}
     </Panel>
   );
 }

@@ -1,4 +1,5 @@
 "use client";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { IconAlert, IconArrowRight, IconCheck, IconSend, IconSpark } from "@/components/icons";
 import { ScenarioChart } from "@/components/charts/lazy";
@@ -168,7 +169,9 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
   const chips = householdId === DEMO_HOUSEHOLD_ID || household?.template_id === DEMO_HOUSEHOLD_ID ? DEMO_CHIPS : CHIPS;
   const scenarios = useScenarios(householdId);
   const runs = useRuns({ householdId, workflow: "what_if" });
-  const [prompt, setPrompt] = useState("");
+  // "Simulate it" on the Dashboard's next move links here with ?q=; prefill only, the family still presses Run.
+  const q = useSearchParams().get("q");
+  const [prompt, setPrompt] = useState(() => q?.slice(0, 300) ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);

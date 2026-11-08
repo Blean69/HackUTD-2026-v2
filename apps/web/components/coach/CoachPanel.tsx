@@ -149,9 +149,15 @@ function Bubble({ m, me }: { m: CoachMessage; me: string }) {
         {!mine ? <ToolCalls events={events} /> : null}
         {mine ? <p className="whitespace-pre-wrap break-words text-body leading-relaxed">{m.text}</p> : <div className="whitespace-pre-wrap break-words text-body leading-relaxed"><Answer text={m.text} /></div>}
         {!mine && m.run_id ? (
-          <button type="button" onClick={() => openTrace(m.run_id)} className="mt-1.5 rounded text-caption font-medium text-brand-strong hover:underline">
-            How I got this
-          </button>
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
+            {/* The advice guard (worker advice_guard.ts) writes "Advice check (...): ..." into the run; show its verdict. */}
+            {events.some((e) => /^Advice check \([^)]*\): passed/.test(e.title)) ? (
+              <span className="inline-flex items-center gap-1 font-medium text-good"><IconCheck size={13} />Checked against your accounts</span>
+            ) : null}
+            <button type="button" onClick={() => openTrace(m.run_id)} className="rounded font-medium text-brand-strong hover:underline">
+              How I got this
+            </button>
+          </p>
         ) : null}
       </div>
     </li>
