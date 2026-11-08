@@ -14,7 +14,7 @@ import { CHALLENGE_NOTE, PRODUCT_NAME, SYNTHETIC_NOTE } from "@/lib/constants";
 const at = (i: number): CSSProperties => ({ ["--i" as string]: i });
 
 const STEPS = [
-  { n: "01", title: "Connect a sandbox bank", text: "Pick a sample customer or use Plaid Link." },
+  { n: "01", title: "Connect a sandbox bank", text: "Link a sandbox bank with Plaid, or use the demo bank." },
   { n: "02", title: "Choose what to share", text: "Tick the accounts your household should see." },
   { n: "03", title: "Answer three questions", text: "Goals, home and comfort with risk." },
 ];

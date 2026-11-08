@@ -239,15 +239,17 @@ synthetic data only; the first thing spoken is a disclosure that it is an AI ass
 ## 7b. Sandbox bank profiles (PNC dataset → Plaid Sandbox custom users)
 
 The demo bank offers several realistic customers built from PNC's HackUTD 2026 dataset, each a Plaid Sandbox custom user
-(`data/plaid/profiles/<profile_id>.json`, plus `data/plaid/profiles/index.json`). The user picks which customer to connect,
-then which of that customer's accounts to include (existing `bank_account_option` step).
+(`data/plaid/profiles/<profile_id>.json`, plus `data/plaid/profiles/index.json`). They live on the **Log in** page, not in
+sign-up: tapping a customer creates a household and runs the wizard's steps automatically (`start_onboarding` →
+`sandbox_connect {profile_id}` → select all accounts → wait for the sync → `save_onboarding_answers` → `finish_onboarding`),
+then opens the dashboard. The sign-up wizard offers only Plaid Link (primary, sandbox login shown) and a one-tap "demo bank"
+(`sandbox_connect` without `profile_id` = `family_demo`), then the existing `bank_account_option` step.
 
 | Method | Path | Returns / does |
 |---|---|---|
 | GET | `/plaid/sandbox_profiles` | `[{profile_id, display_name, summary, accounts: [{name, type, subtype, mask, balance}], txn_count}]` (no secrets) |
 | POST | `/plaid/sandbox_connect` | `{household_id, profile_id?, select: true}` → creates the item from that profile's custom-user JSON (default: the existing family profile), writes account options, status `selecting` |
 
-The Plaid Link path (real sandbox UI) stays available as a secondary option.
 
 As built (worker): `GET /plaid/sandbox_profiles` serves `data/plaid/profiles/index.json` as is (an array, family demo first, then `pnc_c001`..`pnc_c030`; each entry may carry
 extra fields such as `persona`, `first_name`, `monthly_income`, `cash`, `debts`, `window` and per-account `rate_pct` / `monthly_payment` / `keystone_type`), cached with `Cache-Control: max-age=300`,

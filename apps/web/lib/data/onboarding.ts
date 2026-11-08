@@ -212,8 +212,14 @@ export interface SandboxProfile {
   summary: string;
   accounts: SandboxProfileAccount[];
   txn_count: number;
+  /** Extra fields the worker's index carries for the PNC customers (absent on older workers and the offline stand-ins). */
+  first_name?: string;
+  monthly_income?: number;
 }
+/** The demo bank: what the wizard's one-tap connect gives you (the worker's default when `profile_id` is left out). */
 export const DEFAULT_PROFILE_ID = "family_demo";
+/** The sample customers (PNC's HackUTD dataset) are everything except the demo bank. They live on the Log in page. */
+export const isSampleCustomer = (p: { profile_id: string }): boolean => p.profile_id !== DEFAULT_PROFILE_ID;
 
 /**
  * Stand-ins shaped exactly like the worker's response, used when the worker (or its profiles route) is not reachable.
@@ -301,11 +307,40 @@ function asProfiles(v: unknown): SandboxProfile[] {
       summary: str(p.summary),
       accounts: (Array.isArray(p.accounts) ? p.accounts : []).map((a: Rec) => ({ name: str(a.name), type: str(a.type), subtype: str(a.subtype), mask: str(a.mask), balance: num(a.balance) })),
       txn_count: num(p.txn_count),
+      first_name: str(p.first_name) || undefined,
+      monthly_income: num(p.monthly_income) || undefined,
     }));
 }
 
-/** live: the worker's list. default: a worker without the profiles route (it only knows its default customer). */
-export type ProfilesSource = "loading" | "live" | "default" | "mock";
+/** "Maya, early-career nurse, saving for a first home" -> ["Maya", "Early-career nurse, saving for a first home"] */
+export function splitProfileName(display: string): [string, string] {
+  const i = display.indexOf(",");
+  if (i < 0) return [display.trim(), ""];
+  const rest = display.slice(i + 1).trim();
+  return [display.slice(0, i).trim(), rest.charAt(0).toUpperCase() + rest.slice(1)];
+}
+/** "Maya" (or "Whitfield family"): what the customer is called in one or two words. */
+export const profileFirstName = (p: SandboxProfile): string => p.first_name?.trim() || splitProfileName(p.display_name)[0] || p.profile_id;
+const possessive = (n: string): string => `${n}'s`;
+export const profilePossessive = (p: SandboxProfile): string => possessive(profileFirstName(p));
+/** Household name for an automatic setup: "Maya's household", "The Whitfield family". */
+export function sampleHouseholdName(p: SandboxProfile): string {
+  const name = profileFirstName(p);
+  return /\bfamily$/i.test(name) ? `The ${name}` : `${possessive(name)} household`;
+}
+/** The people in the household, from the profile's name ("Ruth and Harold" is two people). */
+export function sampleMemberNames(p: SandboxProfile): string[] {
+  const name = profileFirstName(p);
+  if (/\bfamily$/i.test(name)) return [name];
+  const people = name.split(/\s*(?:,|&|\band\b)\s*/i).map((n) => n.trim()).filter(Boolean);
+  return (people.length ? people : [name]).slice(0, 4);
+}
+
+/**
+ * live: the worker's list. default: a worker without the profiles route (it only knows its default customer).
+ * mock: the offline demo's stand-ins. offline: the worker should answer but does not (nothing to offer yet).
+ */
+export type ProfilesSource = "loading" | "live" | "default" | "mock" | "offline";
 interface ProfilesState {
   source: ProfilesSource;
   profiles: SandboxProfile[];
@@ -320,8 +355,9 @@ function setProfiles(p: ProfilesState): void {
 
 /**
  * Loads the sandbox customers once (and again on later calls until the live list has arrived, so a worker that comes
- * up mid-demo is picked up). Mock mode, or a worker that does not answer, uses MOCK_PROFILES. A live worker without
- * the profiles route only knows its default customer, so then only that one is offered.
+ * up mid-demo is picked up). The offline demo (no database) uses MOCK_PROFILES. A live worker without the profiles route
+ * only knows its default customer, so then only that one exists. A live worker that does not answer leaves the list
+ * empty ("offline"): the stand-ins would name customers the worker has never heard of.
  */
 export function loadSandboxProfiles(mode: OnboardingMode): Promise<void> {
   if (profilesNow.source === "live" || mode === "detecting") return Promise.resolve();
@@ -330,6 +366,7 @@ export function loadSandboxProfiles(mode: OnboardingMode): Promise<void> {
     return Promise.resolve();
   }
   if (profilesInflight) return profilesInflight;
+  if (profilesNow.source !== "loading") setProfiles({ source: "loading", profiles: [] });
   profilesInflight = (async () => {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 2500);
@@ -338,9 +375,9 @@ export function loadSandboxProfiles(mode: OnboardingMode): Promise<void> {
       const list = res.ok ? asProfiles(await res.json()) : [];
       if (list.length) setProfiles({ source: "live", profiles: list });
       else if (res.status === 404) setProfiles({ source: "default", profiles: MOCK_PROFILES.slice(0, 1) });
-      else setProfiles({ source: "mock", profiles: MOCK_PROFILES });
+      else setProfiles({ source: "offline", profiles: [] });
     } catch {
-      setProfiles({ source: "mock", profiles: MOCK_PROFILES });
+      setProfiles({ source: "offline", profiles: [] });
     } finally {
       clearTimeout(t);
       profilesInflight = null;
@@ -588,14 +625,18 @@ export function useAccountOptions(householdId: string | undefined): AccountOptio
 const ORDER: AccountType[] = ["checking", "savings", "cd", "ira", "credit_card", "auto_loan", "personal_loan", "mortgage"];
 const accountOrder = (o: AccountOption) => ORDER.indexOf(accountKind(o).type);
 
+/** The bank connection the account options belong to when a household has several, else the newest. */
+function pickBank<T extends { item_id: string }>(conns: readonly T[], opts: readonly { item_id: string }[]): T | undefined {
+  return conns.find((c) => opts.some((o) => o.item_id === c.item_id)) ?? conns[conns.length - 1];
+}
+
 /** The household's bank connection (the one the account options belong to when there are several). */
 export function useOnboardingBank(householdId: string | undefined): OnboardingBank | undefined {
   const conns = useBankConnections(householdId ?? "");
   const opts = useAccountOptions(householdId);
   return useMemo(() => {
     if (!householdId || !conns.length) return undefined;
-    const pick = conns.find((c) => opts.some((o) => o.item_id === c.item_id)) ?? conns[conns.length - 1];
-    return pick as unknown as OnboardingBank;
+    return pickBank(conns, opts) as unknown as OnboardingBank;
   }, [conns, opts, householdId]);
 }
 
@@ -709,6 +750,7 @@ export function friendlyError(e: unknown, fallback = "Something went wrong. Plea
   }
   if (m.includes("plaid_unconfigured")) return "The bank connector isn't set up on this server yet. You can skip this step and add accounts later.";
   if (m.includes("unknown_household") || m.includes("no household")) return "We're still setting up your household. Give it a few seconds and try again.";
+  if (m.includes("unknown_profile")) return "That sample customer isn't available on this server.";
   if (m.includes("sandbox_only")) return "The demo bank only works in the Plaid sandbox.";
   if (m.includes("plaid_error")) return "Plaid couldn't complete that. Please try again.";
   if (/^\d{3}$/.test(raw)) return `The bank connector answered with an error (${raw}). Please try again.`;
@@ -770,10 +812,13 @@ export const onboarding = {
     await worker("/plaid/exchange", { household_id: householdId, public_token: publicToken, select: true });
   },
 
-  /** Step 3, main path: connect one of the sandbox customers (section 7b). */
-  async connectDemo(householdId: string, profileId: string = DEFAULT_PROFILE_ID): Promise<void> {
-    if ((await ensureOnboardingMode()) === "mock") return mock.connect(householdId, profileId);
-    await worker("/plaid/sandbox_connect", { household_id: householdId, profile_id: profileId, select: true });
+  /**
+   * Step 3, one tap: the sandbox bank. Without a `profile_id` the worker connects its default customer (`family_demo`,
+   * the demo bank). A `profile_id` picks one of the PNC sample customers (section 7b); only the Log in page does that.
+   */
+  async connectDemo(householdId: string, profileId?: string): Promise<void> {
+    if ((await ensureOnboardingMode()) === "mock") return mock.connect(householdId, profileId ?? DEFAULT_PROFILE_ID);
+    await worker("/plaid/sandbox_connect", profileId ? { household_id: householdId, profile_id: profileId, select: true } : { household_id: householdId, select: true });
   },
 
   /** `select_bank_accounts` */
@@ -794,6 +839,246 @@ export const onboarding = {
     await callReducer("finishOnboarding", { householdId });
   },
 };
+
+// ------------------------------------------------------------------------------------------------ automatic setup (Log in page)
+//
+// The PNC sample customers are not part of the sign-up wizard. On the Log in page, tapping one runs the wizard's own steps
+// for you with the functions above (`onboarding.start` -> `connectDemo` -> `select` -> wait for the sync -> `save` ->
+// `finish`), and resolves to the new household's id. Every step looks at the stored state first, so running it again on
+// the same household (Retry, or tapping the customer after a Cancel) picks up where it stopped instead of starting over.
+
+/** Which device already set up which sample customer: `{ [profile_id]: household_id }`, in this browser only. */
+const SETUPS_KEY = "app.sampleSetups";
+const NO_SETUPS: Readonly<Record<string, string>> = {};
+let setupsCache: Readonly<Record<string, string>> | null = null;
+const setupListeners = new Set<() => void>();
+
+function readSetups(): Readonly<Record<string, string>> {
+  if (setupsCache) return setupsCache;
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(SETUPS_KEY) || "null");
+    setupsCache = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, string>) : NO_SETUPS;
+  } catch {
+    setupsCache = NO_SETUPS;
+  }
+  return setupsCache;
+}
+/** Remember that this device made `householdId` for `profileId` (also while the setup is still running, so Retry reuses it). */
+export function rememberSampleSetup(profileId: string, householdId: string): void {
+  setupsCache = { ...readSetups(), [profileId]: householdId };
+  try {
+    localStorage.setItem(SETUPS_KEY, JSON.stringify(setupsCache));
+  } catch {
+    /* private mode: remembered until the page closes */
+  }
+  for (const l of setupListeners) l();
+}
+export function useSampleSetups(): Readonly<Record<string, string>> {
+  return useSyncExternalStore(
+    (cb) => {
+      setupListeners.add(cb);
+      return () => {
+        setupListeners.delete(cb);
+      };
+    },
+    readSetups,
+    () => NO_SETUPS,
+  );
+}
+
+/** What the person sees, in order. */
+export type SamplePhase = "household" | "bank" | "accounts" | "sync" | "finish";
+export const SAMPLE_PHASES: readonly SamplePhase[] = ["household", "bank", "accounts", "sync", "finish"];
+
+/** offline: the bank connector (worker) is not answering. slow: nothing has moved for minutes. failed: anything else. */
+export type SampleFailure = "offline" | "slow" | "failed";
+export class SampleSetupError extends Error {
+  kind: SampleFailure;
+  constructor(message: string, kind: SampleFailure) {
+    super(message);
+    this.name = "SampleSetupError";
+    this.kind = kind;
+  }
+}
+export class SampleSetupCancelled extends Error {
+  constructor() {
+    super("cancelled");
+    this.name = "SampleSetupCancelled";
+  }
+}
+
+/** Nothing moved for this long: say it is slow (and keep waiting). */
+const STALL_MS = 20_000;
+/** Nothing moved for this long: give up and offer Retry. The worker's own Plaid polling lasts under a minute. */
+const GIVE_UP_MS = 180_000;
+const POLL_MS = 250;
+
+function nap(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new SampleSetupCancelled());
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new SampleSetupCancelled());
+    };
+    const t = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/** Run one wizard action; failures become a SampleSetupError (with "offline" when the worker could not be reached). */
+async function attempt<T>(signal: AbortSignal, fallback: string, fn: () => Promise<T>): Promise<T> {
+  if (signal.aborted) throw new SampleSetupCancelled();
+  try {
+    const v = await fn();
+    if (signal.aborted) throw new SampleSetupCancelled();
+    return v;
+  } catch (e) {
+    if (e instanceof SampleSetupCancelled || e instanceof SampleSetupError) throw e;
+    const raw = e instanceof Error ? e.message : "";
+    throw new SampleSetupError(friendlyError(e, fallback), /failed to fetch|networkerror|load failed|aborted|fetch failed/i.test(raw) ? "offline" : "failed");
+  }
+}
+
+const optionsOf = (hid: string): AccountOption[] => options.rows().filter((o) => o.household_id === hid);
+const bankOf = (hid: string): OnboardingBank | undefined =>
+  pickBank(store.rows("bank_connection").filter((b) => b.household_id === hid), optionsOf(hid)) as unknown as OnboardingBank | undefined;
+const profileOf = (hid: string): HouseholdProfile | undefined => profiles.rows().find((p) => p.household_id === hid);
+/** Anything that changes while the import is alive: accounts, transactions, the worker's trace and its run. */
+const pulseOf = (hid: string): string => {
+  const b = bankOf(hid);
+  const n = (rows: readonly { household_id: string }[]) => rows.filter((r) => r.household_id === hid).length;
+  return [b?.status, b?.accounts_count, b?.txns_count, optionsOf(hid).length, n(store.rows("account")), n(store.rows("txn")), n(store.rows("trace_event")), n(store.rows("agent_run"))].join(":");
+};
+
+/** Sensible answers for a customer nobody can ask: the people in the profile's name, their income if the profile has it, no priorities. */
+export function sampleAnswers(p: SandboxProfile, selected: readonly AccountOption[], creatorMemberId?: string): OnboardingAnswers {
+  const names = sampleMemberNames(p);
+  const est = answerDefaults(selected);
+  return {
+    ...defaultAnswers(names[0] ?? profileFirstName(p)),
+    members: names.map((name, i) => ({
+      // The household's first member is the person who made it: rename that row rather than adding a second one.
+      ...(i === 0 && creatorMemberId ? { id: creatorMemberId } : {}),
+      name,
+      role: "parent" as MemberRole,
+      age: 0,
+      income_annual: i === 0 && p.monthly_income ? Math.round(p.monthly_income * 12) : 0,
+    })),
+    own_home: est.own_home,
+    home_value: est.home_value,
+    vehicle_value: est.vehicle_value,
+    priorities: [],
+  };
+}
+
+export interface SampleSetupOptions {
+  profile: SandboxProfile;
+  /** The stored device name, or "Guest". */
+  displayName: string;
+  /** Pick up an unfinished setup on this household instead of making a new one. */
+  householdId?: string;
+  /** Retry: ask for the import again even if one looks to be running. */
+  force?: boolean;
+  signal: AbortSignal;
+  onHousehold(householdId: string): void;
+  onPhase(phase: SamplePhase): void;
+  /** True once nothing has moved for a while, false again as soon as something does. */
+  onStall(stalled: boolean): void;
+}
+
+/** Resolves to the household id once `finish_onboarding` has been called. Rejects with SampleSetupError or SampleSetupCancelled. */
+export async function runSampleSetup(o: SampleSetupOptions): Promise<string> {
+  const { profile, signal } = o;
+  const check = () => {
+    if (signal.aborted) throw new SampleSetupCancelled();
+  };
+
+  // 1. The household (`start_onboarding`).
+  let hid = o.householdId;
+  if (!hid) {
+    o.onPhase("household");
+    hid = await attempt(signal, "We couldn't create the household. Please try again.", () => onboarding.start(sampleHouseholdName(profile), o.displayName));
+    rememberSampleSetup(profile.profile_id, hid);
+  }
+  o.onHousehold(hid);
+  if (profileOf(hid)?.status === "done") return hid;
+
+  // 2. The bank (`/plaid/sandbox_connect` with the profile). The worker reuses the item when this household has it already.
+  o.onPhase("bank");
+  // The call runs alongside the wait below, so a connector that never answers shows up as "slow" instead of a frozen screen.
+  let refused: unknown = null;
+  /** An old `error` row stays in the store until the new connect has rewritten it: do not read it as a new failure. */
+  let staleUntil = 0;
+  const existing = bankOf(hid);
+  if (!existing || existing.status === "error") {
+    staleUntil = Infinity;
+    void attempt(signal, "We couldn't reach the sandbox bank. Please try again.", () => onboarding.connectDemo(hid, profile.profile_id))
+      .catch((e: unknown) => {
+        refused = e;
+      })
+      .finally(() => {
+        staleUntil = Date.now() + 3000;
+      });
+  }
+
+  // 3 and 4. Wait for the account options, choose all of them, wait for the import.
+  let phase: SamplePhase = "bank";
+  const show = (next: SamplePhase) => {
+    if (next !== phase) o.onPhase((phase = next));
+  };
+  let chose = false;
+  let pulse = "";
+  let moved = Date.now();
+  let stalled = false;
+  const setStalled = (v: boolean) => {
+    if (v !== stalled) o.onStall((stalled = v));
+  };
+  for (;;) {
+    check();
+    if (refused) throw refused;
+    const bank = bankOf(hid);
+    if (bank?.status === "error" && Date.now() > staleUntil) throw new SampleSetupError(bank.error || "The bank import failed.", "failed");
+    if (bank?.status === "ok") break;
+    const offered = optionsOf(hid);
+
+    // `selecting` is where the worker leaves us. On Retry a stuck `syncing` is nudged once as well (the module queues a new
+    // import only when none is waiting, so this cannot pile up).
+    if (bank && offered.length && !chose && (bank.status === "selecting" || (o.force && bank.status === "syncing"))) {
+      chose = true;
+      show("accounts");
+      await attempt(signal, "We couldn't import those accounts. Please try again.", () =>
+        onboarding.select(hid, bank.item_id, offered.map((x) => x.account_id)),
+      );
+      moved = Date.now();
+    } else {
+      show(!bank || bank.status === "linking" || bank.status === "error" ? "bank" : bank.status === "selecting" ? "accounts" : "sync");
+    }
+
+    const now = pulseOf(hid);
+    if (now !== pulse) {
+      pulse = now;
+      moved = Date.now();
+      setStalled(false);
+    } else if (Date.now() - moved > GIVE_UP_MS) {
+      throw new SampleSetupError("The bank import has not moved for a few minutes.", "slow");
+    } else if (Date.now() - moved > STALL_MS) {
+      setStalled(true);
+    }
+    await nap(POLL_MS, signal);
+  }
+  setStalled(false);
+
+  // 5. Answers and finish. Both are safe to repeat.
+  o.onPhase("finish");
+  const chosen = optionsOf(hid).filter((x) => x.selected);
+  const creator = store.rows("member").filter((m) => m.household_id === hid).sort((a, b) => a.id.localeCompare(b.id))[0];
+  await attempt(signal, "We couldn't save the details. Please try again.", () => onboarding.save(hid, sampleAnswers(profile, chosen.length ? chosen : optionsOf(hid), creator?.id)));
+  await attempt(signal, "We couldn't finish the setup. Please try again.", () => onboarding.finish(hid));
+  return hid;
+}
 
 // ================================================================================================ mock
 
