@@ -1,98 +1,93 @@
-# Demo script: 3 minutes per judge panel
+# Demo script: judging, Sunday 1–4 PM
 
-`[verify]` marks a step or label to check on the deployed build before judging; fix the script, not the judge.
+Three minutes, two people. **Driver** runs the laptop; **Caller** holds the phone and calls Brian on speaker.
+Words in quotes are what we say. Everything else is what we tap.
 
-Hand out the QR code first, so judges hold the app while we talk. Every path opens the same way (the onboarding opener),
-then splits by track. Each path works on its own. Close with the 20-second kicker.
+## The table
 
-**Names to use out loud.** Table Mode (was Huddle), What-If Studio, Agent Trail (was the glass box), Credit, Analytics,
-Ask Brianotron (the coach panel). Code and tables still say `huddle`, so a Table Mode run shows `workflow: huddle` in the
-Agent Trail and in SQL. Say so if a judge asks.
+| What | Setup |
+|---|---|
+| **Laptop, between judges** | Our video, full screen, looping, muted. It pulls people over. |
+| **Laptop, when a judge sits down** | Switch to the live app, because live beats video. Chrome, dark mode, tabs in this order (Ctrl+1…4): **1** Rivera dashboard `brianotron.us/me` · **2** Kids & Teens · **3** What-If Studio · **4** Agent Trail. It must be the shared Rivera room, not a private copy: Brian's phone changes land there. |
+| **Caller's phone** | Speaker on, volume up. Brian's callback number **+1 (945) 403-0355** saved as a contact named "Brian", so Call Screen doesn't eat the callback. The family code memorised (never on a slide). |
+| **Printed QR card** | Points to `brianotron.us/me`, so judges watch the same room on their own phone. Card text: "Call Brian: +1 (844) 468-1795". |
 
-**Where things are.** Side nav: Dashboard, Table Mode, What-If Studio, Goals, Credit, Analytics, Agent Trail. The Family voting
-card is on the Dashboard (and under Goals). `/me` opens the Riveras' room. Onboarding is `https://brianotron.us/onboarding`. [verify all labels after the redesign lands]
+## The 3-minute script
 
-## Opener, all paths (0:00 to 0:55): a judge links the demo bank on their own phone
+**0:00 Hook (Driver, laptop on the dashboard)**
+> "Americans get fewer than half of basic money questions right: 47%, the lowest in ten years. For Gen Z, us, it's 38%.
+> The problem isn't a lack of advice. Your money is scattered across six apps, and the real decisions happen out loud,
+> at the dinner table, where nobody has the numbers. Brianotron puts the whole family's financial picture in one live room,
+> and gives you Brian, an AI you can just call."
 
-One judge only. A second live onboarding in the same minute can push runs onto the fallback model (see hygiene).
+**0:25 The big picture (Driver)**
+- Point at the top row: "The Riveras: **$344,800** net worth across six banks, **+$1,177** a month left over, a health score of **79 out of 100**. Their cash dips to about **$40k** on November 24 when bills stack up."
+- "Every number is computed once, inside SpacetimeDB, so the dashboard, the agents and Brian always say the same figure."
+- Hand a judge the QR card: "That's the same room on your phone. It's live."
 
-1. **0:00** Judge scans the QR and lands on onboarding. Welcome and consent: "We read balances, transactions and liabilities. Sandbox data only." They name the household.
-2. **0:10** They tap **Use the demo bank**. No login needed. If the judge wants the real flow, tap **Link with Plaid** and sign in with `user_good` / `pass_good` (Plaid's public sandbox login). [verify the demo bank user exists in Plaid Sandbox and the one-tap path works on a phone]
-3. **0:20** **Choose accounts**: all on by default, tap continue. The `plaid_sync` workflow starts.
-4. **0:25** **Questions**, asked while the sync runs. Tap two priorities and a risk comfort, leave the rest on defaults. Use the judge's own answers. [verify the rest can stay default]
-5. **0:45** Finish. The dashboard fills itself: accounts by type, health indicators, 90-day forecast. First insights land as Nemotron finishes (9 to 31 s). Talk over the wait: "Nothing here was typed in. It came from the bank link."
+**0:50 Ask a real question (Driver, tab 3: What-If Studio)**
+- Tap **Open a second bakery location**. "Nemotron agents turn that into a scenario and run it month by month… **Tight**: it works, but it leaves them half a month of cushion."
+- Tab 4, Agent Trail, open the newest run: "Not a chatbot. You see the plan, every tool call, the model that answered, and this line: every figure was checked against their real data before anyone saw it."
 
-Onboarding runs on a brand-new household, so it always runs live and is never a `cache` replay. [verify] Rehearse it on a phone off the team Wi-Fi and write the real time on this page.
+**1:25 "Or just call Brian" (Caller, phone on speaker)**
+1. Dial **+1 (844) 468-1795**. Brian says he's an AI, then asks for the family code. Type it.
+2. Ask: **"How are we doing?"** (a short answer with real numbers).
+3. Ask: **"Add a chore for Mateo: feed the dog, five dollars."** Brian asks "want me to do that?". Say **"Yes."**
+4. Driver flips to **tab 2, Kids & Teens**: the chore appears live on the laptop *and* on the judge's phone.
+   > "That's SpacetimeDB: one write, every screen in the room updates."
+5. Caller: "Thanks Brian, bye." Hang up.
 
-## PNC path (judge's phone)
+**2:15 The 15-second gap (Driver fills it while the phone stays face up)**
+> "While we wait: Brian hears you through Nemotron speech recognition, and thinks with Nemotron 3.5 Lightning that we
+> self-host on an NVIDIA L40S through Brev, so he's fast. The agent team runs on Nemotron 3 Ultra. And he only
+> calls back when something is actually wrong…"
 
-Angle: the whole financial picture, understood, then acted on.
+**2:30 The callback (Caller)**
+- The phone rings: **"Brian"**. Answer on speaker. He says it's him again, from the app (not your bank), with a critical alert.
+- Ask: **"What's the alert about?"** He explains it.
+- "Thanks Brian." Hang up.
 
-1. **0:00** Opener. Onboarding on the judge's own phone.
-2. **0:55** Read their dashboard together: "Seven kinds of account, eight health indicators and a 90-day forecast with the low point marked, built a minute ago." Read one first insight aloud. [verify the demo bank covers the account types you name]
-3. **1:20** Hop to the Riveras (`/me`): "This family has been here for months. They run a bakery in Oak Cliff and keep money in six places." Show net worth ($344,800) and the forecast low point (around Dec 1). [verify against the live card]
-4. **1:35** **Table Mode**: tap the sample conversation. The transcript streams in. End it, and the agents pull out "second location", "college fund" and "Grandma's care". Each goal gets a feasibility chip from the real balances. "Families already plan out loud. Brianotron joins only when they ask." [verify the sample button label]
-5. **2:05** **What-If Studio**: tap "Open a second bakery location" for the runway impact and an SBA-loan suggestion.
-6. **2:25** Switch to the Nguyens: the scam alert links the "grandson in jail" call to a $2,000 gift-card purchase.
-7. **2:40** Kicker.
+**2:50 Close (Driver)**
+> "One live room for the whole family, agents that check their own math, and a voice you can just call.
+> That's Brianotron." *(Then: "Happy to go deeper on any part.")*
 
-Optional if the judge leans in: **Credit** (`/room/hh_rivera/credit`): the simulated score, what's shaping it and how household health drives about 45% of it. Or call the line, hang up, and let Brian ring back with a critical alert.
+## 30-second deep dives (pick by judge)
 
-## Spacetime path (2 or 3 judges' phones + laptop)
+**PNC: 360° Financial Health Navigator**
+- Dashboard → the health card: eight indicators (cushion, debt-to-income, utilization, savings rate…), each in one plain sentence.
+- Credit: a simulated score per family member, and how the household's health feeds it.
+- "It's built for families, not one person on one screen. Table Mode turns a dinner-table conversation into goal cards, each checked against the real balances."
 
-Angle: the database is the backend, and a family shares it live.
+**NVIDIA: Nemotron beyond a chatbot**
+- Agent Trail: "Most runs start without a chat message: a bank sync, the end of a Table Mode session, a family vote."
+- "Ultra plans and calls 26 tools. Lightning does the fast steps, and runs Brian on our own L40S in NVFP4. Every trace row names the model and provider."
+- "A grounding check rejects any dollar figure that isn't in the tool results, so it can't invent numbers."
 
-1. **0:00** Opener. Judge A runs onboarding on their phone. Judges B and C scan the same QR, open `/me` and join the Riveras' room. "Everyone's in the room now": presence chips show each name. Point out that every onboarding step A taps is a row in SpacetimeDB. If a second member can join A's household mid-flow and watch progress, show it. [verify the join path]
-2. **0:55** **Table Mode on two phones**: B taps start and both B and C enter their names as consent. The sample conversation streams to both phones at once. End it: agent steps appear, then the goal cards land on both phones at the same moment.
-3. **1:35** **Family vote**: on the Dashboard's voting card, open "Take the SBA loan for the second bakery location" (Marisol yes, Daniel abstain, Elena yes are already in). B votes no, C votes yes; the tally moves on every phone. The affordability verdict (fine, tight or risky) lands on the card when the agent finishes. [verify seeded proposals carry a verdict, or pre-warm them]
-4. **2:10** Laptop: open `spacetime/src` ("tables, reducers, the forecast math, the job queue; no API server, no cache, no websocket server of our own"). Then three queries:
-   ```
-   spacetime sql -s aws keystone "SELECT workflow, status FROM agent_job WHERE household_id = 'hh_rivera'"
-   spacetime sql -s aws keystone "SELECT voter_name, choice FROM vote WHERE proposal_id = 'prop_rivera_second_location'"
-   spacetime sql -s aws keystone "SELECT COUNT(*) AS n FROM transcript_line WHERE household_id = 'hh_rivera'"
-   ```
-   The last one returns 0: the transcript was purged after analysis. (`keystone` is the database name, not the product name. Set `aws` up once with `spacetime server add --url https://brianotron.us aws`. Run all three once from the venue Wi-Fi beforehand: the table names follow contracts.md section 6 and Caddy may block a laptop that is not in `ADMIN_IPS`. [verify])
-5. **2:40** Kicker.
+**SpacetimeDB**
+- "The whole backend is one TypeScript module: tables, reducers as the API, the agent job queue, presence, and the health and forecast math as scheduled reducers. No other database, no REST API for data."
+- "The worker is just another client: it claims a job row atomically and writes every step back as a row, which is why the Agent Trail streams live."
+- Show it: Caller adds a chore or casts a vote on the phone, and the judge's phone updates.
 
-## NVIDIA path (Agent Trail on a big screen + a judge's phone)
+## Likely questions, short answers
 
-Angle: Nemotron plans, calls tools and decides, and we show every step.
+- **Is it always listening?** No. Table Mode is opt-in per session, with named consent and a recording indicator, and the transcript is deleted after the goals are pulled out.
+- **Real data?** No. Synthetic families plus Plaid Sandbox. No real customer data anywhere.
+- **Hallucinations?** Every dollar figure in an answer is checked in code against the tool results; unbacked figures get rewritten. The trace shows "N of N figures match".
+- **Can Brian move money?** No. He can only change things inside the app (chores, goals, what-ifs), and only after a spoken yes, enforced in code. He never asks for codes, PINs or money.
+- **Why call back?** Because the people who most need a heads-up often never open an app. It's only for critical alerts, at most once per call.
+- **Cost?** One t3.medium (about $1.15 a day) plus the Brev GPU (about $2.20 an hour). Every merge auto-deploys in a minute.
+- **What's next?** Row-level security per family, real bank connections after a security review, and handoff from Brian to a human advisor.
 
-1. **0:00** Agent Trail on the big screen. "Every phone holding our QR code is starting agent runs. This is the live wall." Opener runs on the judge's phone; its `plaid_sync` run and then its `onboarding_insights` run appear in the trail as they happen. Nobody typed a question into a chat box.
-2. **0:55** Expand the `onboarding_insights` run: plan, tool calls on the accounts, transactions and goals, a `thought` step with Nemotron's reasoning, then the insights it wrote. Point at the badges: Nemotron 3 Ultra planned and called tools, Nemotron 3.5 Lightning extracted structured fields, each with latency and token counts.
-3. **1:30** **What-If Studio**: the judge types their own scenario. New input always runs live (9 to 31 s). In the trail: natural-language scenario, structured scenario, simulator tool, narrative. The verdict lands on the judge's phone. (Run a canned scenario first so there is a cache fallback if rates are tight.)
-4. **2:10** **Family vote**: create a proposal with a number the judge picks. The same `what_if` workflow starts with the proposal as its subject; a second run appears in the trail and the verdict lands on the vote card. Say the label out loud: "provider `nvidia`", or "`cache`" if it is a replay.
-5. **2:30** Honesty beat: "Every step names the provider and model that answered. If NVIDIA rate-limits us, we move to our own Nemotron on Brev, then Qwen, and the badge changes. We do not hide it." Only say Brev if it is up. [verify]
-6. **2:40** Kicker.
+## If something breaks
 
-Spare beats if a judge asks: open a Table Mode run and point at `goal_feasibility` calling College Scorecard (tuition) and FRED (rates); the `tool_result` says whether the call was live or answered from the fixed table [verify which one prod does]. Voice by itself does not satisfy this track; the agent workflow the voice triggers does.
+- **An agent is slow:** say "this runs live on Nemotron" and keep talking. Questions we rehearsed replay instantly from cache.
+- **No callback within 30 s:** "our phone provider throttled us this morning", then show the dashboard alert, or the callback scene in the video.
+- **Brian doesn't answer:** use the **Talk** button in the app (same Brian, in the browser).
+- **Wi-Fi drops:** laptop and phone on a phone hotspot.
 
-## Kicker (20 s)
+## Timeline
 
-"Brianotron is a room the whole family shares, live, with a team of Nemotron agents that never stop checking the plan against the numbers."
-
-## If a judge asks
-
-- **"Is that really Nemotron?"** Each step has a provider and model badge, and `https://brianotron.us/worker/health` lists the live providers.
-- **"Is it always listening?"** No. Voice is an opt-in session with named consent and a visible recording indicator. The transcript is deleted after analysis; we keep goals and short evidence quotes.
-- **"Whose data is this?"** Synthetic households, plus a Plaid Sandbox bank. No real customer data anywhere.
-- **"What does the phone line do?"** Planned, not built: call a number, a voice explains the household's finances and runs a what-if. Same tools as the coach, traced in the Agent Trail, AI disclosure at the start of every call.
-
-## Demo hygiene
-
-- **Pre-warm** (the day of, on the deployed box, after the last redeploy):
-  1. `curl -s https://brianotron.us/worker/health | jq '{ok, spacetime, demo_mode, nvidia, jobs_run}'` must say `spacetime: connected`. Open the app on a phone off the team Wi-Fi: the header badge reads **Live**.
-  2. Run every canned input once, with the exact text you will use at the table: the Riveras' two sample Table Mode conversations, the Nguyens' conversation, "Open a second bakery location", the Nguyens' scam check, and each proposal you will vote on (SBA loan at minimum).
-  3. Open each run in the Agent Trail and confirm the provider is `nvidia`. A worker with a real provider only replays runs a real model answered, so a run that fell back to `local` will not be reused. Rerun it.
-  4. Replay each once more and check it finishes in 8 seconds or less with provider `cache`.
-  5. Rehearse the opener (new household, runs live) twice on a phone and note the time.
-  6. Do not publish with `-c always` after this. It wipes the run history and the replay cache. [verify the cache survives a worker restart]
-- **Rate limit.** The free NVIDIA tier is about 40 requests a minute, and the worker caps itself at 36. One live onboarding at a time per panel; everyone else joins the Riveras' room. Prefer canned inputs for what-ifs and votes, and let a judge type their own only when the Agent Trail is quiet.
-- A noisy hall breaks live voice. Lead with the sample conversation in Table Mode, and use the live mic only if the judge asks.
-- QR on a printed card and on the laptop lock screen. Test it with 3 phones at once, one of them on cellular.
-- **Backup video.**
-  1. After the pre-warm, record one screen capture per path on a laptop (about 60 seconds each) and one phone screen recording of the onboarding opener.
-  2. Record against the deployed build. Add an on-screen caption wherever a run is a `cache` replay.
-  3. Save the files on the laptop and a phone, not only in a cloud drive. Name them `pnc.mp4`, `spacetime.mp4`, `nvidia.mp4`, `onboarding.mp4`. Keep a 3-minute cut for the Devpost video.
-  4. Call it a recording when you play it. If the venue Wi-Fi dies, switch to the video and say so.
-- **If something breaks.** LLM outage: `cache_first` replays identical inputs (say "that is a replay"); new input falls to the fallback tiers and the badge changes. Worker down: show the Dashboard and the SQL queries, then the video. Plaid fails: skip the opener, go straight to `/me`, and say why.
+- **11:30** Code freeze. Nothing merges to main after this.
+- **12:15** Reset (Ben + Claude): pause auto-deploy, reset the Rivera room, run the health check, pre-run the demo questions so they replay instantly.
+- **12:30** Full run-through once at the table, with a real call and callback.
+- **12:50** Reset the Rivera room again (clears the rehearsal chore), then hands off.
