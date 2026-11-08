@@ -46,7 +46,8 @@ export async function groundAnswer(
   let answer = o.answer;
   let bad = unbackedFigures(answer, sources, o.question);
   if (!bad.length) {
-    run.emit(o.agent, 'message', `Check: ${count(answer)} of ${count(answer)} figures match the household's data`, { figures: count(answer) });
+    // nothing to report when the answer has no figures: "0 of 0 figures" only reads as a glitch
+    if (count(answer) > 0) run.emit(o.agent, 'message', `Check: ${count(answer)} of ${count(answer)} figures match the household's data`, { figures: count(answer) });
     return answer;
   }
   run.emit(o.agent, 'message', `Check: ${bad.slice(0, 4).join(', ')} not found in the tool results; rewriting from the data`, { unbacked: bad });
@@ -80,5 +81,11 @@ export async function groundAnswer(
   } catch {
     run.emit(o.agent, 'message', 'Could not rewrite the answer; flagging the unmatched figures instead', {});
   }
-  return bad.length ? `${answer}\n\n_Not found in your data, so treat as unverified: ${bad.join(', ')}._` : answer;
+  return bad.length ? `${answer}\n\n${unmatchedNote(bad)}` : answer;
+}
+
+/** The plain-words footnote for figures the data does not back: "I couldn't match $70 to your data, so treat it as an estimate." */
+export function unmatchedNote(bad: readonly string[]): string {
+  const list = bad.length <= 1 ? (bad[0] ?? '') : `${bad.slice(0, -1).join(', ')} and ${bad[bad.length - 1]}`;
+  return bad.length === 1 ? `I couldn't match ${list} to your data, so treat it as an estimate.` : `I couldn't match ${list} to your data, so treat them as estimates.`;
 }

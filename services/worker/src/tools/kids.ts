@@ -54,7 +54,7 @@ export const getKids = defineTool({
       };
     }),
   }),
-  summarize: (r) => `${r.kids.length} kid(s): ${r.kids.map((k: { name: string; jar_balance: number }) => `${k.name} ${usd(k.jar_balance)}`).join(', ') || 'none'}`,
+  summarize: (r) => (r.kids.length ? `${r.kids.length === 1 ? 'One kid' : `${r.kids.length} kids`}: ${r.kids.map((k: { name: string; jar_balance: number }) => `${k.name} ${usd(k.jar_balance)} in the jar`).join(', ')}` : 'No kids in this household'),
 });
 
 export const addKidChore = defineTool({

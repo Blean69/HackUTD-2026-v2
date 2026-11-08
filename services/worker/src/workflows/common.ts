@@ -3,7 +3,7 @@ import type { RunContext } from '../agent/run.js';
 import { meta } from '../agent/run.js';
 import { makeCacheKey, normalizeText } from '../agent/cache.js';
 import { z } from 'zod';
-import { sha1, truncate, usd } from '../util.js';
+import { plural, sha1, truncate, usd } from '../util.js';
 import type { Finding } from '../tools/anomalies.js';
 
 export function makeKey(run: RunContext, workflow: string, fingerprint: string): string {
@@ -29,13 +29,13 @@ export function ledgerFingerprint(run: RunContext): string {
 }
 
 const RULE_TEXT: Record<string, { title: string; detail: (n: number, ex: Finding) => string }> = {
-  impossible_value: { title: 'Impossible amounts or dates in the ledger', detail: (n, e) => `${n} transaction(s) have values that cannot be real (for example ${e.merchant}: ${e.reason}). They are excluded from the health math until fixed.` },
-  duplicate: { title: 'Possible duplicate charges', detail: (n, e) => `${n} charge(s) appear twice in a row (for example ${e.merchant} ${usd(Math.abs(e.amount))} on ${e.date}). If they are import errors, remove one of each pair.` },
-  garbled: { title: 'Merchant names that look corrupted', detail: (n, e) => `${n} transaction(s) have unreadable merchant names (for example "${e.merchant.slice(0, 30)}"). Category totals may be off until they are cleaned up.` },
+  impossible_value: { title: 'Impossible amounts or dates in the ledger', detail: (n, e) => `${plural(n, 'transaction has a value', 'transactions have values')} that cannot be real (for example ${e.merchant}: ${e.reason}). They are excluded from the health math until fixed.` },
+  duplicate: { title: 'Possible duplicate charges', detail: (n, e) => `${plural(n, 'charge appears', 'charges appear')} twice in a row (for example ${e.merchant} ${usd(Math.abs(e.amount))} on ${e.date}). If they are import errors, remove one of each pair.` },
+  garbled: { title: 'Merchant names that look corrupted', detail: (n, e) => `${plural(n, 'transaction has an unreadable merchant name', 'transactions have unreadable merchant names')} (for example "${e.merchant.slice(0, 30)}"). Category totals may be off until they are cleaned up.` },
   card_testing: { title: 'Burst of tiny charges (card testing)', detail: (n) => `${n} charges under $2 landed close together, a pattern fraudsters use to test stolen card numbers. Freeze or replace the card and review the account.` },
-  scam_payment: { title: 'Gift-card, wire or crypto payment of scam size', detail: (n, e) => `${n} payment(s) look like scam payments (for example ${usd(Math.abs(e.amount))} to ${e.merchant} on ${e.date}). Confirm with the family that these were intended, and report them to the bank if not.` },
-  account_takeover: { title: 'Large payment after a new payee or password change', detail: (n, e) => `${n} large payment(s) follow signs of an account change (for example ${usd(Math.abs(e.amount))} to ${e.merchant}). Call the bank on a number you trust.` },
-  outlier: { title: 'Unusually large purchases', detail: (n, e) => `${n} purchase(s) are far above normal for this household (for example ${usd(Math.abs(e.amount))} at ${e.merchant}). Worth a quick look.` },
+  scam_payment: { title: 'Gift-card, wire or crypto payment of scam size', detail: (n, e) => `${plural(n, 'payment looks', 'payments look')} like scam payments (for example ${usd(Math.abs(e.amount))} to ${e.merchant} on ${e.date}). Confirm with the family that these were intended, and report them to the bank if not.` },
+  account_takeover: { title: 'Large payment after a new payee or password change', detail: (n, e) => `${plural(n, 'large payment follows', 'large payments follow')} signs of an account change (for example ${usd(Math.abs(e.amount))} to ${e.merchant}). Call the bank on a number you trust.` },
+  outlier: { title: 'Unusually large purchases', detail: (n, e) => `${plural(n, 'purchase is', 'purchases are')} far above normal for this household (for example ${usd(Math.abs(e.amount))} at ${e.merchant}). Worth a quick look.` },
 };
 
 export interface FindingGroup {
@@ -64,7 +64,7 @@ const ExplainSchema = z.object({
 export async function explainGroups(run: RunContext, agent: string, groups: FindingGroup[], task: string): Promise<Map<string, { title: string; detail: string }>> {
   const base = new Map<string, { title: string; detail: string }>();
   for (const g of groups) {
-    const t = RULE_TEXT[g.rule] ?? { title: g.rule, detail: (n: number) => `${n} finding(s).` };
+    const t = RULE_TEXT[g.rule] ?? { title: g.rule.replace(/_/g, ' '), detail: (n: number) => `${plural(n, 'finding')}.` };
     base.set(g.rule, { title: t.title, detail: t.detail(g.findings.length, g.findings[0]!) });
   }
   if (!groups.length) return base;
@@ -86,7 +86,7 @@ export async function explainGroups(run: RunContext, agent: string, groups: Find
     run.emit(
       agent,
       'message',
-      r.meta.provider === 'local' ? 'Using standard alert wording (offline rule-based fallback)' : `Wrote plain-English explanations for ${r.value.items.length} finding group(s)`,
+      r.meta.provider === 'local' ? 'Using standard alert wording (offline rule-based fallback)' : `Wrote plain-English explanations for ${plural(r.value.items.length, 'group', 'groups')} of findings`,
       { items: r.value.items },
       { model: r.meta.model, provider: r.meta.provider, latencyMs: r.meta.latencyMs, tokensIn: r.meta.tokensIn, tokensOut: r.meta.tokensOut },
     );

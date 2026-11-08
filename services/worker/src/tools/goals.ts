@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { GoalInput } from '../agent/sink.js';
 import type { GoalRow, HouseholdData } from '../types.js';
-import { MS_DAY, addMonthsIso, parseDay, round2, truncate, usd } from '../util.js';
+import { MS_DAY, addMonthsIso, parseDay, plural, round2, truncate, usd } from '../util.js';
 import { gate, needsAct, niceDate, pickByWords, sounds, spend } from './confirm.js';
 import { goalFeasibility } from './feasibility.js';
 import { defineTool } from './registry.js';
@@ -64,7 +64,7 @@ export const getGoals = defineTool({
       .slice(0, 6)
       .map((g) => ({ goal: truncate(g.title, 60), target: g.target_amount > 0 ? round2(g.target_amount) : null, by: g.target_date ? niceDate(g.target_date) : null, status: statusOf(g.feasibility) })),
   }),
-  summarize: (r) => `${r.count} goal(s)${r.goals.length ? `: ${r.goals.map((g: { goal: string }) => truncate(g.goal, 30)).join(', ')}` : ''}`,
+  summarize: (r) => `${plural(r.count, 'goal')}${r.goals.length ? `: ${r.goals.map((g: { goal: string }) => truncate(g.goal, 30)).join(', ')}` : ''}`,
 });
 
 export const changeGoal = defineTool({

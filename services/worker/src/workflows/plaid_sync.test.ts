@@ -143,7 +143,7 @@ describe('plaid_sync workflow', () => {
     expect(t.store.connections.get('item_fake_1')).toMatchObject({ status: 'ok', accountsCount: 10, txnsCount: 0 });
     expect(t.store.itemsById.get('item_fake_1')!.cursor).toBe(''); // not advanced: next sync starts over
     expect(out).toMatchObject({ items: 1 });
-    expect(t.sink.traces.some((e) => /not available.*PRODUCT_NOT_READY/.test(e.title))).toBe(true);
+    expect(t.sink.traces.some((e) => /not available/.test(e.title) && /PRODUCT_NOT_READY/.test(e.dataJson))).toBe(true);
   });
 
   it('tolerates /liabilities/get failing (PRODUCT_NOT_READY / not supported)', async () => {
@@ -297,7 +297,7 @@ describe('plaid_sync workflow', () => {
     expect(titles.some((x) => /left out 2 on accounts the family did not select/.test(x))).toBe(true);
     expect(t.store.connections.get('item_fake_1')).toMatchObject({ status: 'ok', accountsCount: 2 });
     // the mapping step only saw the two kept accounts
-    expect(t.sink.traces.find((e) => /^Mapped 2 accounts/.test(e.title))).toBeTruthy();
+    expect(t.sink.traces.find((e) => /^Sorted 2 accounts/.test(e.title))).toBeTruthy();
   });
 
   it('without a selection every account is imported, as before', async () => {
@@ -333,7 +333,7 @@ describe('plaid_sync workflow', () => {
     expect(t.sleeps).toEqual([1000, 1000]);
     expect(t.store.txns.size).toBe(225);
     expect(out).toMatchObject({ txns: 225 });
-    expect(t.sink.traces.some((e) => /history is complete but just sent 38 more row/.test(e.title))).toBe(true);
+    expect(t.sink.traces.some((e) => /still sending older transactions \(38 more just arrived\)/.test(e.title))).toBe(true);
     expect(t.sink.traces.some((e) => /had not finished/.test(e.title))).toBe(false);
   });
 
@@ -366,7 +366,7 @@ describe('plaid_sync workflow', () => {
     expect(t.store.accounts.get('acct_plaid_mtg00000')!.monthly_payment).toBe(1820); // median of the latest three: 1810, 1820, 1830
     expect(t.store.accounts.get('acct_plaid_stu00000')!.monthly_payment).toBeUndefined();
     expect(t.store.accounts.get('acct_plaid_cc000000')!.monthly_payment).toBe(25); // terms from Plaid are never overridden
-    expect(t.sink.traces.find((e) => /read the monthly payment from the payment history/.test(e.title))!.title).toContain('$1,820.00');
+    expect(t.sink.traces.find((e) => /worked out the monthly payment from past payments/.test(e.title))!.title).toContain('$1,820.00');
   });
 
   it('an incremental sync keeps the payment it read earlier (stored payments + the new rows)', async () => {

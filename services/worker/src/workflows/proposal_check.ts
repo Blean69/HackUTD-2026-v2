@@ -15,10 +15,11 @@ import { emitPlan } from '../agent/loop.js';
 import type { RunContext } from '../agent/run.js';
 import { structured } from '../llm/structured.js';
 import type { ScamResult } from '../tools/scam.js';
-import { ScenarioSchema, type Scenario, type SimResult } from '../tools/simulate.js';
-import { clamp, round2, slug, truncate, usd } from '../util.js';
+import { riskyGoal } from '../tools/risky.js';
+import { FINANCED_PURCHASE_DEFAULTS, LOAN_DEFAULTS, ScenarioSchema, type Scenario, type SimResult } from '../tools/simulate.js';
+import { clamp, plural, round2, slug, truncate, usd } from '../util.js';
 import { householdBrief, textCacheKey } from './common.js';
-import { NarrativeSchema, VERDICT, buildScenarioResult, type WebVerdict } from './scenario_result.js';
+import { NarrativeSchema, NOT_ADVISED_SUGGESTION, VERDICT, buildScenarioResult, narrativeFacts } from './scenario_result.js';
 import type { JobInfo } from './types.js';
 
 export interface ProposalInput {
@@ -68,10 +69,10 @@ export function proposalScenario(p: ProposalInput): Scenario {
   const isLoan = kind === 'loan' || (kind === '' && /\bloan\b/i.test(p.title) && !/\b(car|auto|vehicle)\b/i.test(p.title));
   let scn: Scenario;
   if (isLoan) {
-    scn = { kind: 'new_loan', label, amount: p.amount, apr_pct: apr ?? 8, term_months: termMonths ?? 60, proceeds_to_cash: d.proceeds_to_cash === true, months: 24 };
+    scn = { kind: 'new_loan', label, amount: p.amount, apr_pct: apr ?? LOAN_DEFAULTS.apr_pct, term_months: termMonths ?? LOAN_DEFAULTS.term_months, proceeds_to_cash: d.proceeds_to_cash === true, months: 24 };
   } else if (kind !== 'down_payment' && kind !== 'transfer' && (rate !== undefined || term !== undefined || d.financed === true)) {
-    const downPct = clamp(numberOf(d.down_pct) ?? 10, 0, 100);
-    scn = { kind: 'purchase', label, amount: p.amount, financed: true, down_payment: round2((p.amount * downPct) / 100), apr_pct: apr ?? 7.5, term_months: termMonths ?? 60, months: 24 };
+    const downPct = clamp(numberOf(d.down_pct) ?? FINANCED_PURCHASE_DEFAULTS.down_pct, 0, 100);
+    scn = { kind: 'purchase', label, amount: p.amount, financed: true, down_payment: round2((p.amount * downPct) / 100), apr_pct: apr ?? FINANCED_PURCHASE_DEFAULTS.apr_pct, term_months: termMonths ?? FINANCED_PURCHASE_DEFAULTS.term_months, months: 24 };
   } else {
     scn = { kind: 'purchase', label, amount: p.amount, financed: false, months: 12 };
   }
@@ -116,8 +117,10 @@ function fallbackNarrative(p: ProposalInput, sim: SimResult): { summary: string;
   const { upfront, pct } = upfrontShare(sim);
   const e = sim.effect;
   const bits = [sim.headline];
+  if (sim.verdict === 'not_advised') return { summary: truncate(sim.headline, 520), suggestion: NOT_ADVISED_SUGGESTION };
+  if (sim.verdict === 'unclear') return { summary: 'This proposal has no amount yet, so there is nothing to check. Add the amount and the check runs again.', suggestion: 'Add the amount (and any loan terms) to the proposal.' };
   if (upfront > 0) bits.push(`It needs ${usd(upfront)} up front, ${pct}% of the ${usd(sim.baseline.start_liquid)} in checking and savings.`);
-  if (e.monthly_payment) bits.push(`The new payment is ${usd(e.monthly_payment)} a month against ${usd(sim.baseline.monthly_net)} of monthly cash flow today.`);
+  if (e.monthly_payment) bits.push(`The new payment is ${usd(e.monthly_payment)} a month, against your household's monthly cash flow of ${usd(sim.baseline.monthly_net)} today.`);
   const suggestion =
     sim.verdict === 'shortfall'
       ? sim.scenario.kind === 'new_loan'
@@ -133,7 +136,8 @@ function fallbackNarrative(p: ProposalInput, sim: SimResult): { summary: string;
 
 function scamWarning(scam: ScamResult): string {
   const labels = [...new Set(scam.signals.map((x) => x.label))].slice(0, 3);
-  const linked = scam.linked_transactions.length ? `, and ${scam.linked_transactions.length} recent gift-card or wire payment(s) totalling ${usd(scam.linked_total)} are on the account` : '';
+  const n = scam.linked_transactions.length;
+  const linked = n ? `, and ${plural(n, 'recent gift-card or wire payment', 'recent gift-card or wire payments')} totalling ${usd(scam.linked_total)} ${n === 1 ? 'is' : 'are'} on the account` : '';
   return `Scam warning: this proposal matches known scam patterns${labels.length ? ` (${labels.join('; ').toLowerCase()})` : ''}${linked}.`;
 }
 
@@ -144,7 +148,7 @@ export async function runProposalCheck(run: RunContext, p: ProposalInput): Promi
   await emitPlan(run, {
     agent: 'planner',
     task: 'proposal_check',
-    system: `You are the planner for Keystone's family voting. ${householdBrief(run)}`,
+    system: `You are the planner for Brianotron's family voting. ${householdBrief(run)}`,
     user: `The family is about to vote on: "${truncate(p.title, 140)}" (${usd(p.amount)}). Plan how to check whether they can afford it before they vote.`,
     toolNames: ['simulate_scenario', 'get_forecast', ...(scamCheck ? ['detect_scam_signals'] : [])],
     local: {
@@ -164,7 +168,10 @@ export async function runProposalCheck(run: RunContext, p: ProposalInput): Promi
 
   const out = await run.tool('simulator', 'simulate_scenario', scn);
   if (!out.ok) throw new Error(out.error);
-  const sim = out.result as SimResult;
+  let sim = out.result as SimResult;
+  const risky = riskyGoal(scamLines(p).map((l) => l.text).join(' '));
+  if (risky && sim.verdict !== 'not_advised') sim = { ...sim, verdict: 'not_advised', caution: risky.why, headline: `${sim.scenario.label ?? 'This proposal'}: not advised. ${risky.why}` };
+  if (sim.verdict === 'not_advised') run.emit('simulator', 'message', `Not advised: ${sim.caution ?? ''}`, { caution: sim.caution });
   await run.tool('simulator', 'get_forecast', {});
 
   let scam: ScamResult | undefined;
@@ -174,10 +181,12 @@ export async function runProposalCheck(run: RunContext, p: ProposalInput): Promi
     if (s.ok) scam = s.result as ScamResult;
   }
   const flagged = Boolean(scam && (scam.risk === 'medium' || scam.risk === 'high'));
-  const verdict: WebVerdict = flagged ? 'risky' : VERDICT[sim.verdict];
+  // the proposal table takes "" | fine | tight | risky: a proposal with nothing to check stays unchecked ("")
+  const mapped = VERDICT[sim.verdict];
+  const verdict: '' | 'fine' | 'tight' | 'risky' = flagged ? 'risky' : mapped === 'unclear' ? '' : mapped;
 
   let narrative = fallbackNarrative(p, sim);
-  try {
+  if (sim.verdict !== 'not_advised' && sim.verdict !== 'unclear') try {
     const n = await structured(run.llm, {
       name: 'write_check',
       description: 'Write the affordability check shown to the whole family before they vote',
@@ -187,8 +196,14 @@ export async function runProposalCheck(run: RunContext, p: ProposalInput): Promi
       local: narrative,
       maxTokens: 700,
       messages: [
-        { role: 'system', content: 'You explain an affordability check of a family proposal to everyone who is about to vote, in plain, calm language. Use only the numbers provided, mention the lowest cash point and the monthly effect, then give one concrete suggestion. No jargon, no investment advice. All data is synthetic.' },
-        { role: 'user', content: JSON.stringify({ proposal: p.title, amount: p.amount, details: p.details, headline: sim.headline, verdict: sim.verdict, assumptions: sim.assumptions, baseline: sim.baseline, effect: sim.effect, lowest: sim.lowest, ending: sim.ending, ...(scam ? { scam_risk: scam.risk, scam_summary: scam.summary } : {}) }) },
+        {
+          role: 'system',
+          content:
+            'You explain an affordability check of a family proposal to everyone who is about to vote, in plain, calm language, speaking to them as "you". ' +
+            "The income and spending figures are your HOUSEHOLD's (all of the family's money coming in and going out): call them \"your household's\", never the income of the business, project or thing being voted on. " +
+            'Use only the numbers provided, mention the lowest cash point (or, when keeps_falling is true, that cash keeps falling every month and when it runs out, never a "lowest point" at the last month) and the monthly effect, then give one concrete suggestion. No jargon, no investment advice, never tell them to move money. All data is synthetic.',
+        },
+        { role: 'user', content: JSON.stringify({ proposal: p.title, amount: p.amount, details: p.details, ...narrativeFacts(sim), ...(scam ? { scam_risk: scam.risk, scam_summary: scam.summary } : {}) }) },
       ],
     });
     narrative = await guardNarrative(run, { agent: 'simulator', narrative: n.value, fallback: fallbackNarrative(p, sim), question: p.title, sources: [sim] });

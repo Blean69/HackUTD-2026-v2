@@ -2,7 +2,7 @@
 import { emitPlan } from '../agent/loop.js';
 import { detectAnomalies, type AnomalyRule, type Finding } from '../tools/anomalies.js';
 import type { ScamResult } from '../tools/scam.js';
-import { truncate, usd } from '../util.js';
+import { plural, truncate, usd } from '../util.js';
 import { explainGroups, groupFindings, householdBrief, ledgerFingerprint, makeKey } from './common.js';
 import type { WorkflowDef } from './types.js';
 
@@ -21,7 +21,7 @@ export const dataQualityWorkflow: WorkflowDef = {
     await emitPlan(run, {
       agent: 'data_auditor',
       task: 'data_quality',
-      system: `You are Keystone's data auditor. ${householdBrief(run)}`,
+      system: `You are Brianotron's data auditor. ${householdBrief(run)}`,
       user: 'A new household copy was just created. Find data-quality problems and suspicious transactions and explain them.',
       toolNames: ['detect_transaction_anomalies', 'get_accounts'],
       local: { plan: ['Scan every transaction for duplicates, garbled merchants, impossible values and fraud patterns (detect_transaction_anomalies)', 'Group the hits by rule', 'Explain each group in plain English', 'Create one alert per group'] },
@@ -54,7 +54,7 @@ export const dataQualityWorkflow: WorkflowDef = {
       made.push(t.title);
       run.emit('data_auditor', 'message', `Alert: ${t.title} (${g.findings.length})`, { rule: g.rule, severity: g.severity, txn_ids: g.findings.slice(0, 6).map((f) => f.txn_id) });
     }
-    run.emit('data_auditor', 'final', `Created ${made.length} alert(s) from ${all.length} suspicious transaction(s)`, { alerts: made });
+    run.emit('data_auditor', 'final', `Created ${plural(made.length, 'alert')} from ${plural(all.length, 'suspicious transaction')}`, { alerts: made });
     return { alerts: made, findings: all.length };
   },
 };
@@ -71,7 +71,7 @@ export const scamCheckWorkflow: WorkflowDef = {
     await emitPlan(run, {
       agent: 'scam_guard',
       task: 'scam_check',
-      system: `You are Keystone's scam guard. ${householdBrief(run)}`,
+      system: `You are Brianotron's scam guard. ${householdBrief(run)}`,
       user: text ? `Check this message or call description for scams: "${truncate(text, 400)}" and compare with recent payments.` : 'Check the recent payments for scam patterns such as gift cards, wires or card testing.',
       toolNames: ['detect_scam_signals', 'detect_transaction_anomalies'],
       local: { plan: [...(text ? ['Scan the text for scam language (detect_scam_signals)'] : []), 'Look for gift-card, wire, crypto and card-testing payments (detect_transaction_anomalies)', 'Explain any hit in plain English and alert the family'] },
@@ -98,7 +98,7 @@ export const scamCheckWorkflow: WorkflowDef = {
         made.push(t.title);
       }
     }
-    run.emit('scam_guard', 'final', made.length ? `Raised ${made.length} scam alert(s)` : 'No scam patterns found', { alerts: made });
+    run.emit('scam_guard', 'final', made.length ? `Raised ${plural(made.length, 'scam alert')}` : 'No scam patterns found', { alerts: made });
     return { alerts: made };
   },
 };

@@ -2,7 +2,7 @@
 // (the Txn type has no anomaly field; the loader drops it).
 import { z } from 'zod';
 import type { HouseholdData, Txn } from '../types.js';
-import { median, parseDay, round2, usd } from '../util.js';
+import { median, parseDay, plural, round2, usd } from '../util.js';
 import { IMPOSSIBLE_AMOUNT } from './finance.js';
 import { defineTool } from './registry.js';
 
@@ -37,6 +37,21 @@ function isGarbled(merchant: string): boolean {
   if (/[^\x20-\x7E]/.test(m) && !/[À-ÿ]/.test(m)) return true; // control junk
   const words = m.split(/\s+/);
   return words.some((w) => w.length >= 7 && /^[A-Za-z0-9]+$/.test(w) && /\d/.test(w) && /[A-Za-z]/.test(w) && !/[aeiouAEIOU]/.test(w));
+}
+
+/** "10 unusually large purchases", "1 possible duplicate charge": a finding count in words people read. */
+const RULE_WORDS: Record<string, [string, string]> = {
+  impossible_value: ['impossible amount or date', 'impossible amounts or dates'],
+  duplicate: ['possible duplicate charge', 'possible duplicate charges'],
+  garbled: ['unreadable merchant name', 'unreadable merchant names'],
+  card_testing: ['card-testing charge', 'card-testing charges'],
+  scam_payment: ['scam-style payment', 'scam-style payments'],
+  account_takeover: ['sign of an account takeover', 'signs of an account takeover'],
+  outlier: ['unusually large purchase', 'unusually large purchases'],
+};
+export function ruleCount(rule: string, n: number): string {
+  const w = RULE_WORDS[rule];
+  return w ? plural(n, w[0], w[1]) : plural(n, rule.replace(/_/g, ' '));
 }
 
 export function detectAnomalies(data: HouseholdData, opts: { since?: string; limit?: number } = {}): { findings: Finding[]; counts: Record<string, number>; scanned: number } {
@@ -131,7 +146,7 @@ export function detectAnomalies(data: HouseholdData, opts: { since?: string; lim
     const zc = cat.length >= 8 ? robust(cat, a) : 0;
     const zm = merch.length >= 4 ? robust(merch, a) : 0;
     const z = Math.max(zc, zm);
-    if (z >= 4.5) add(t, 'outlier', 'info', 'fraud', Math.min(7, z), `${usd(a)} at ${t.merchant} is far above this household's usual ${zm >= zc ? 'spend there' : `${t.category} spending`} (robust z ${round2(z)}).`);
+    if (z >= 4.5) add(t, 'outlier', 'info', 'fraud', Math.min(7, z), `${usd(a)} at ${t.merchant} is far above this household's usual ${zm >= zc ? 'spend there' : `${t.category.replace(/_/g, ' ')} spending`}.`);
   }
 
   let list = [...found.values()];
@@ -157,6 +172,6 @@ export const detectTransactionAnomalies = defineTool({
   },
   summarize: (r) => {
     const total = Object.values(r.counts as Record<string, number>).reduce((s, n) => s + n, 0);
-    return total ? `${total} suspicious transactions: ${Object.entries(r.counts as Record<string, number>).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}` : `No anomalies in ${r.scanned} transactions`;
+    return total ? `${plural(total, 'transaction')} worth a look: ${Object.entries(r.counts as Record<string, number>).map(([k, v]) => ruleCount(k, v)).join(', ')}` : `Nothing unusual in ${plural(r.scanned, 'transaction')}`;
   },
 });

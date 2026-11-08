@@ -15,7 +15,7 @@ import { structured } from '../llm/structured.js';
 import type { FeasibilityResult } from '../tools/feasibility.js';
 import { DEBT_TYPES, cashFlow, liquidBalance, totalDebt } from '../tools/finance.js';
 import type { HouseholdData } from '../types.js';
-import { addMonthsIso, clamp, parseDay, round2, slug, truncate, usd } from '../util.js';
+import { addMonthsIso, clamp, parseDay, plural, round2, slug, truncate, usd } from '../util.js';
 import { householdBrief } from './common.js';
 import type { WorkflowDef } from './types.js';
 
@@ -197,7 +197,7 @@ export function candidateInsights(f: Facts, priorities: string[] = []): Insight[
   }
   // nothing to analyse yet (no bank linked): answer-based starters so the family still gets 3 useful notes
   const starters: Insight[] = [
-    { topic: 'connect_bank', severity: 'info', title: 'Connect a bank to see your real numbers', detail: 'Keystone has no account data yet, so these notes come from your answers only. Linking a bank adds balances, spending and a 90-day forecast.', weight: 10, related: [] },
+    { topic: 'connect_bank', severity: 'info', title: 'Connect a bank to see your real numbers', detail: 'Brianotron has no account data yet, so these notes come from your answers only. Linking a bank adds balances, spending and a 90-day forecast.', weight: 10, related: [] },
     { topic: 'first_priority', severity: 'info', title: priorities[0] ? `Your first priority: ${words(priorities[0])}` : 'Pick your first priority', detail: 'Everything in the plan is ordered around it. You can reorder priorities any time from the goals page.', weight: 9, related: [] },
     { topic: 'start_small', severity: 'info', title: 'Small, regular steps beat big plans', detail: 'Even a small automatic transfer on payday builds the habit while the full picture fills in.', weight: 8, related: [] },
   ];
@@ -312,7 +312,7 @@ export const onboardingInsightsWorkflow: WorkflowDef = {
     await emitPlan(run, {
       agent: 'planner',
       task: 'onboarding',
-      system: `You are the planner for Keystone's onboarding. ${householdBrief(run)}`,
+      system: `You are the planner for Brianotron's onboarding. ${householdBrief(run)}`,
       user: `The family just finished onboarding (priorities: ${priorities.join(', ') || 'none given'}; risk comfort ${risk} of 5). Plan how to turn their imported accounts and answers into a first set of insights, goal checks and one suggested proposal.`,
       toolNames: ['get_accounts', 'get_health_indicators', 'get_transactions', 'get_forecast', 'goal_feasibility'],
       local: {
@@ -390,7 +390,7 @@ export const onboardingInsightsWorkflow: WorkflowDef = {
       run.goal({ id: g.id, key, title: g.title, target_amount: plan.target_amount, target_date: plan.target_date, priority: g.priority, feasibility: res.feasibility, evidence_quote: key === 'custom' ? truncate(g.title, 280) : '', source: 'onboarding' });
       checked.push({ id: g.id, title: g.title, feasibility: res.feasibility });
     }
-    run.emit('goal_planner', 'message', checked.length ? `Checked ${checked.length} goal(s): ${checked.map((c) => `${truncate(c.title, 30)} ${c.feasibility.replace('_', ' ')}`).join('; ')}` : 'No goals with an amount to check', { goals: checked });
+    run.emit('goal_planner', 'message', checked.length ? `Checked ${plural(checked.length, 'goal')}: ${checked.map((c) => `${truncate(c.title, 30)} ${c.feasibility.replace('_', ' ')}`).join('; ')}` : 'No goals with an amount to check', { goals: checked });
 
     // 4. one suggested first proposal
     let suggested: string | null = null;
@@ -420,12 +420,12 @@ export const onboardingInsightsWorkflow: WorkflowDef = {
       } catch {
         /* keep the standard wording */
       }
-      run.proposeToFamily({ title: truncate(title, 140), amount: idea.amount, details: { ...idea.details, note: truncate(note, 240), suggested_by: 'Keystone onboarding' }, closes_in_days: 7, author_name: 'Keystone' });
+      run.proposeToFamily({ title: truncate(title, 140), amount: idea.amount, details: { ...idea.details, note: truncate(note, 240), suggested_by: 'Brianotron onboarding' }, closes_in_days: 7, author_name: 'Brian (AI)' });
       suggested = title;
       run.emit('proposal_scout', 'message', `Opened a proposal for the family to vote on: ${truncate(title, 100)} (${usd(idea.amount)}). Its affordability check runs next.`, { idea: idea.id, amount: idea.amount });
     }
 
-    run.emit('insight_writer', 'final', `Onboarding done: ${final.length} insights, ${checked.length} goal(s) checked${suggested ? `, proposal "${truncate(suggested, 60)}" opened` : ''}`, { insights: final.map((i) => i.topic), goals: checked.length, proposal: suggested });
+    run.emit('insight_writer', 'final', `Onboarding done: ${plural(final.length, 'insight')}, ${plural(checked.length, 'goal')} checked${suggested ? `, proposal "${truncate(suggested, 60)}" opened` : ''}`, { insights: final.map((i) => i.topic), goals: checked.length, proposal: suggested });
     return { insights: final.map((i) => i.topic), goals: checked, proposal: suggested };
   },
 };

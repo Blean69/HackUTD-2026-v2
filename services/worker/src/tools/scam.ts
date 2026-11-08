@@ -1,7 +1,7 @@
 // detect_scam_signals: phrase rules over what people said, cross-checked against recent gift-card / wire / crypto spending.
 import { z } from 'zod';
 import type { HouseholdData } from '../types.js';
-import { parseDay, round2, truncate, usd } from '../util.js';
+import { listWords, parseDay, plural, round2, truncate, usd } from '../util.js';
 import { defineTool } from './registry.js';
 
 interface Rule {
@@ -23,6 +23,20 @@ export const SCAM_RULES: Rule[] = [
   { type: 'prize_or_romance', label: 'Prize, lottery or online-romance pressure', weight: 1, re: /you(?:'ve| have)? won|lottery|sweepstakes|processing fee|inheritance|overseas|deployed/i },
   { type: 'stay_on_the_line', label: 'Caller stayed on the line while paying', weight: 1, re: /stay on the line|stayed on the (?:phone|line)|don'?t hang up|coach(?:ed)? (?:me|us|her|him|them)/i },
 ];
+
+/** Each signal type as a phrase inside a sentence ("urgency and a request for a wire, cash app or crypto"). */
+const SIGNAL_WORDS: Record<string, string> = {
+  gift_cards: 'a demand for gift cards',
+  wire_or_crypto: 'a request for a wire, cash app or crypto payment',
+  bail_or_jail: 'someone said to be in jail or needing bail',
+  family_in_trouble: 'a grandchild or relative said to be in trouble',
+  government_impersonation: 'a caller claiming to be the IRS or a government agency',
+  urgency: 'pressure to act right now',
+  secrecy: 'being told to keep it secret',
+  remote_access: 'a request for remote access or a one-time code',
+  prize_or_romance: 'a prize, lottery or online-romance story',
+  stay_on_the_line: 'being kept on the line while paying',
+};
 
 const PAYMENT_MERCHANT = /gift\s*card|google\s*play|itunes|apple\s*(gift|card)|steam\s*(card|wallet)|green\s*dot|moneypak|vanilla|western\s*union|moneygram|\bwire\b|bitcoin|crypto|coinme|coinflip/i; // \bwire\b: "AT&T wireless" is a phone bill, not a wire
 
@@ -95,12 +109,14 @@ export function detectScamSignals(args: z.infer<typeof ScamArgs>, data: Househol
   if (linked.length && (linkable || score > 0)) score += 3;
   const risk: ScamResult['risk'] = score >= 7 ? 'high' : score >= 4 ? 'medium' : score >= 1 ? 'low' : 'none';
   // Spending alone (no conversation) is surfaced as a low-risk heads-up, not a scam call.
+  const payments = (n: number) => plural(n, 'recent gift-card or wire payment', 'recent gift-card or wire payments');
+  const labels = SCAM_RULES.filter((r) => seen.has(r.type)).map((r) => SIGNAL_WORDS[r.type] ?? r.label.toLowerCase());
   const summary =
     risk === 'none'
       ? linked.length
-        ? `No scam language found, but ${linked.length} recent gift-card or wire payment(s) totalling ${usd(linkedTotal)} are worth a look.`
+        ? `No scam language found, but ${payments(linked.length)} totalling ${usd(linkedTotal)} ${linked.length === 1 ? 'is' : 'are'} worth a look.`
         : 'No scam signals found.'
-      : `${types.length} scam signal type(s): ${types.join(', ')}.${linked.length ? ` Linked to ${linked.length} recent payment(s) totalling ${usd(linkedTotal)}.` : ''}`;
+      : `${types.length === 1 ? 'One scam warning sign' : `${plural(types.length, 'scam warning sign')}`}: ${listWords(labels)}.${linked.length ? ` It matches ${payments(linked.length)} totalling ${usd(linkedTotal)}.` : ''}`;
   return { risk, score, signal_types: types, signals: signals.slice(0, 10), linked_transactions: linked, linked_total: linkedTotal, summary };
 }
 

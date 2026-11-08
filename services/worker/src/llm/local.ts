@@ -4,7 +4,7 @@
 import type { Scenario } from '../tools/simulate.js';
 import { findDate, findMoney, extractFromLines, parseScenarioPrompt, type Line } from './rules.js';
 import type { ChatMessage, ChatRequest, ChatResult, LLMProvider, ToolCall } from './types.js';
-import { usd } from '../util.js';
+import { plural, usd } from '../util.js';
 
 export const LOCAL_MODEL = 'keystone-rules-v1';
 
@@ -50,7 +50,7 @@ export function routeCoach(question: string, asOf: string): RoutedCall[] {
     return calls;
   }
   if (/afford|buy|purchase|new car|house|can we|should we|take out|loan|raise|lose|laid off|pay off/.test(q) && (money.length || /lose|laid off|raise|pay off/.test(q))) {
-    const scn = parseScenarioPrompt(question);
+    const scn = parseScenarioPrompt(question, asOf);
     calls.push({ tool: 'get_health_indicators', args: {}, why: 'First I look at the household\'s health indicators to see how much room there is.' });
     calls.push({ tool: 'simulate_scenario', args: scn, why: 'Then I run the numbers for this scenario against the real cash flow.' });
     return calls;
@@ -97,7 +97,7 @@ export function composeCoachAnswer(question: string, results: { name: string; re
   const parts: string[] = [];
   for (const { name, result: r } of results) {
     if (r?.error) {
-      parts.push(`I could not run ${name}: ${r.error}.`);
+      parts.push('One of my checks did not run, so this answer uses the others.');
       continue;
     }
     switch (name) {
@@ -129,15 +129,15 @@ export function composeCoachAnswer(question: string, results: { name: string; re
         break;
       case 'detect_transaction_anomalies': {
         const n = Object.values(r.counts ?? {}).reduce((s: number, x) => s + Number(x), 0);
-        parts.push(n ? `I also found ${n} suspicious transaction(s), for example ${(r.findings ?? []).slice(0, 2).map((f: { merchant: string; amount: number }) => `${f.merchant} ${usd(f.amount)}`).join(' and ')}.` : 'No suspicious transactions turned up.');
+        parts.push(n ? `I also found ${plural(n, 'transaction')} worth a look, for example ${(r.findings ?? []).slice(0, 2).map((f: { merchant: string; amount: number; date: string }) => `${f.merchant} ${usd(f.amount)} on ${f.date}`).join(' and ')}.` : 'No suspicious transactions turned up.');
         break;
       }
       case 'get_transactions':
         if (r.groups) parts.push(`Top spending in the last 90 days: ${r.groups.slice(0, 4).map((g: { key: string; out: number }) => `${g.key} ${usd(g.out)}`).join(', ')}.`);
-        else parts.push(`${r.matched} matching transactions totalling ${usd(r.total_out)} out.`);
+        else parts.push(`${plural(r.matched, 'matching transaction')} totalling ${usd(r.total_out)} out.`);
         break;
       case 'get_obligations':
-        parts.push(`Fixed monthly obligations total ${usd(r.monthly_total)} across ${r.count} items.`);
+        parts.push(`Fixed monthly bills and payments total ${usd(r.monthly_total)} across ${plural(r.count, 'item')}.`);
         break;
       case 'get_credit_score':
         if (!r.available) {
@@ -154,9 +154,11 @@ export function composeCoachAnswer(question: string, results: { name: string; re
             .join('; ')}. These are demo numbers, not a real credit report.`,
         );
         break;
-      case 'get_credit_profiles':
-        parts.push(`Credit scores: ${(r.profiles ?? []).map((p: { member: string; score: number; utilization_pct: number }) => `${p.member} ${p.score} (${p.utilization_pct}% utilization)`).join(', ')}.`);
+      case 'get_credit_profiles': {
+        const scored = (r.profiles ?? []).filter((p: { simulated_score?: number }) => p.simulated_score !== undefined);
+        parts.push(scored.length ? `Simulated credit scores (the Credit page): ${scored.map((p: { member: string; simulated_score: number; band: string }) => `${p.member} ${p.simulated_score} (${p.band})`).join(', ')}. These are demo numbers, not a real credit report.` : 'No simulated credit score has been computed yet.');
         break;
+      }
     }
   }
   if (!parts.length) return `I looked at the household data but did not find anything specific for: "${question}".`;
@@ -176,7 +178,7 @@ function handle(req: ChatRequest): Partial_ {
     return { content: '', toolCalls: [call(req, extractFromLines(lines, String(local.asOf ?? new Date().toISOString().slice(0, 10))))] };
   }
   if (task === 'scenario.parse') {
-    const scn: Scenario = parseScenarioPrompt(String(local.prompt ?? ''));
+    const scn: Scenario = parseScenarioPrompt(String(local.prompt ?? ''), local.asOf ? String(local.asOf) : undefined);
     return { content: '', toolCalls: [call(req, scn)] };
   }
   // a structured step whose offline answer the caller computed itself (onboarding insights, ...): hand it back as the tool call

@@ -517,7 +517,7 @@ const KEEP: Record<string, string[]> = {
   get_obligations: [],
   get_accounts: [],
   get_credit_score: [],
-  simulate_scenario: ['kind', 'label', 'amount', 'down_payment', 'financed', 'apr_pct', 'term_months', 'income_change_pct', 'income_change_monthly', 'duration_months', 'account_hint', 'months'],
+  simulate_scenario: ['kind', 'label', 'amount', 'down_payment', 'financed', 'apr_pct', 'term_months', 'income_change_pct', 'income_change_monthly', 'spending_change_monthly', 'duration_months', 'account_hint', 'months'],
   goal_feasibility: ['title', 'target_amount', 'target_date', 'monthly_contribution'],
   detect_scam_signals: ['text'],
 };

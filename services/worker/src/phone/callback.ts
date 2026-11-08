@@ -241,6 +241,10 @@ export function buildAlertCandidates(data: HouseholdData, alerts: readonly Alert
   if (low && low.balance < 0) {
     const first = data.forecast.find((p) => p.balance < 0) ?? low;
     const inDays = (parseDay(first.date) ?? today) - today;
+    // the bills that really fall due that day (by due_day), so nothing is said about bills colliding unless they do
+    const day = Number(first.date.slice(8, 10));
+    const dueThatDay = data.obligations.filter((o) => o.due_day === day && o.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 3);
+    const billsLine = dueThatDay.map((o) => `${o.name} ($${money(o.amount).toLocaleString('en-US')})`).join(', ');
     out.push({
       id: `forecast:${first.date}`,
       type: 'overdraft',
@@ -248,9 +252,9 @@ export function buildAlertCandidates(data: HouseholdData, alerts: readonly Alert
       severity: 'critical',
       kind: 'obligation',
       title: `Checking could go below zero on ${first.date}`,
-      detail: `The 90-day forecast dips to about -$${money(low.balance).toLocaleString('en-US')} around ${low.date}.`,
+      detail: `The 90-day forecast dips to about -$${money(low.balance).toLocaleString('en-US')} around ${low.date}.${billsLine ? ` Due that day: ${billsLine}.` : ''} Make sure checking can cover the payments due then.`,
       related_ids: [],
-      facts: { date: first.date, low_date: low.date, shortfall: money(low.balance), bills_due: round0(first.obligations_due), in_days: inDays },
+      facts: { date: first.date, low_date: low.date, shortfall: money(low.balance), bills_due: round0(first.obligations_due), in_days: inDays, ...(billsLine ? { bills_that_day: billsLine } : {}) },
       priority: inDays <= 14 ? 75 : 55,
     });
   }

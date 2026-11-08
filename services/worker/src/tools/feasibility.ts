@@ -10,7 +10,7 @@ export const FeasibilityArgs = z.object({
   target_amount: z.number().min(0).describe('Total amount needed in USD'),
   target_date: z.string().describe('YYYY-MM-DD deadline'),
   current_saved: z.number().min(0).optional().describe('Already set aside for this goal (default: all savings + CDs)'),
-  monthly_contribution: z.number().min(0).optional().describe('Monthly amount the family can dedicate (default: measured monthly surplus)'),
+  monthly_contribution: z.number().min(0).optional().describe('Monthly amount the family can dedicate to this goal (default: the monthly surplus, the same figure as the dashboard\'s Cash flow tile)'),
 });
 export type FeasibilityArgs = z.infer<typeof FeasibilityArgs>;
 
@@ -30,17 +30,13 @@ export interface FeasibilityResult {
   explanation: string;
 }
 
-/** Monthly capacity the household can realistically put toward goals: the lower of history-based surplus and the DB forecast trend. */
-export function monthlyCapacity(data: HouseholdData): { surplus: number; history: number; forecast: number | null } {
-  const history = cashFlow(data).monthly_net;
-  let forecast: number | null = null;
-  const pts = [...data.forecast].sort((a, b) => (a.date < b.date ? -1 : 1));
-  if (pts.length >= 14) {
-    const months = monthsBetween(pts[0]!.date, pts[pts.length - 1]!.date);
-    if (months > 0.5) forecast = round2((pts[pts.length - 1]!.balance - pts[0]!.balance) / months);
-  }
-  const candidates = [history, ...(forecast !== null ? [forecast] : [])];
-  return { surplus: Math.max(0, round2(Math.min(...candidates))), history, forecast };
+/**
+ * The household's monthly surplus: the dashboard's Cash flow figure (`cash_flow.net_monthly`, see tools/finance.ts cashFlow),
+ * floored at 0 for "what can go toward goals". `net` keeps the sign, so a household losing money is never shown a surplus.
+ */
+export function monthlyCapacity(data: HouseholdData): { surplus: number; net: number; window_days: number } {
+  const flow = cashFlow(data);
+  return { surplus: Math.max(0, round2(flow.monthly_net)), net: flow.monthly_net, window_days: flow.window_days };
 }
 
 export function goalFeasibility(a: FeasibilityArgs, data: HouseholdData): FeasibilityResult {
@@ -53,18 +49,18 @@ export function goalFeasibility(a: FeasibilityArgs, data: HouseholdData): Feasib
   const projected = round2(saved + available * months);
   const ratio = required <= 0 ? 99 : round2(available / required);
   const feasibility = stillNeeded <= 0 || ratio >= 1 ? 'on_track' : ratio >= 0.6 ? 'stretch' : 'off_track';
-  const basis =
-    a.monthly_contribution !== undefined
-      ? 'monthly amount supplied by the caller'
-      : `measured surplus ${usd(cap.history)}/mo${cap.forecast !== null ? ` and forecast trend ${usd(cap.forecast)}/mo (the lower is used)` : ''}`;
+  const supplied = a.monthly_contribution !== undefined;
+  // a supplied amount is what is set aside for THIS goal (e.g. what is left after earlier goals), never "the surplus"
+  const have = supplied ? `${usd(available)}/mo is available for it` : `the monthly surplus is ${usd(available)}/mo`;
+  const basis = supplied ? 'monthly amount available for this goal' : `monthly surplus ${usd(cap.net)}/mo over the last ${Math.round(cap.window_days)} days (the dashboard's Cash flow figure)`;
   const explanation =
     feasibility === 'on_track'
       ? stillNeeded <= 0
         ? `Already covered: ${usd(saved)} saved against ${usd(a.target_amount)}.`
-        : `Needs ${usd(required)}/mo for ${Math.round(months)} months; capacity is ${usd(available)}/mo.`
+        : `Needs ${usd(required)}/mo for ${Math.round(months)} months; ${have}.`
       : feasibility === 'stretch'
-        ? `Needs ${usd(required)}/mo but only ${usd(available)}/mo is available (${Math.round(ratio * 100)}%); a bigger contribution or a later date would close the gap.`
-        : `Needs ${usd(required)}/mo but only ${usd(available)}/mo is available (${Math.round(ratio * 100)}%); at this pace the family would have about ${usd(projected)} by the deadline.`;
+        ? `Needs ${usd(required)}/mo but ${have} (${Math.round(ratio * 100)}%); a bigger contribution or a later date would close the gap.`
+        : `Needs ${usd(required)}/mo but ${have} (${Math.round(ratio * 100)}%); at this pace the family would have about ${usd(projected)} by the deadline.`;
   return {
     feasibility,
     target_amount: a.target_amount,
@@ -89,5 +85,5 @@ export const goalFeasibilityTool = defineTool({
   schema: FeasibilityArgs,
   describe: (a) => `Checking feasibility${a.title ? ` of "${a.title}"` : ''}: ${usd(a.target_amount)} by ${a.target_date}`,
   run: (a, { data }) => goalFeasibility(a, data),
-  summarize: (r: FeasibilityResult) => `${r.feasibility.replace('_', ' ')}: needs ${usd(r.required_monthly)}/mo, has ${usd(r.available_monthly)}/mo`,
+  summarize: (r: FeasibilityResult, a) => `${r.feasibility.replace('_', ' ')}: needs ${usd(r.required_monthly)}/mo, ${a.monthly_contribution !== undefined ? `${usd(r.available_monthly)}/mo available for it` : `monthly surplus ${usd(r.available_monthly)}/mo`}`,
 });

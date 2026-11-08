@@ -108,8 +108,9 @@ def test_templates_are_filled_from_the_households_accounts_bills_and_dates():
         assert 1500 <= amt <= 2700  # at most 60% of the 4,409 in checking
         od = template_alert(ctx, rng, name="overdraft_two_bills")
         m = re.search(r"below zero on (\w+) (\d+)", od.statement)
-        assert (m.group(1), 11 <= int(m.group(2)) <= 16) == ("November", True) and "two bills, Mortgage and F-150 loan, land the same day" in od.statement
-        assert "from savings" in od.action
+        # both bills are really due on the 1st: from November 7 that is December 1, and only then is it "the same day"
+        assert (m.group(1), m.group(2)) == ("December", "1") and "two bills, Mortgage and F-150 loan, land the same day" in od.statement
+        assert "make sure checking can cover both payments" in od.action and "savings" not in od.action and "Moving" not in od.detail
         assert re.search(r"\$\d+ (together|charge)|tiny charges", template_alert(ctx, rng, name="gift_card_pattern").statement + template_alert(ctx, rng, name="card_testing").statement)
 
 
@@ -127,6 +128,27 @@ def test_templates_work_without_any_household_context_and_never_repeat_the_one_j
         seen.add(a.key)
     assert len(seen) == 7
     assert template_alert(bare, random.Random(1), exclude={f"tpl:{n}" for n in alerts.TEMPLATES}).source == "template"  # all used: start over
+
+
+def test_the_overdraft_template_uses_the_real_due_dates_and_never_says_move_money():
+    rivera = {**CTX, "as_of": "2026-11-08", "obligations": [
+        {"name": "Mortgage (Trinity Federal)", "amount": 2218, "due_day": 1, "kind": "loan"},
+        {"name": "Rewards Visa payment", "amount": 2195, "due_day": 21, "kind": "loan"},
+        {"name": "Gas Mastercard payment", "amount": 717, "due_day": 24, "kind": "loan"},
+        {"name": "F-150 auto loan", "amount": 612, "due_day": 12, "kind": "loan"},
+    ]}
+    ctx = Ctx.from_payload(payload(ctx=rivera), random.Random(0))
+    assert alerts.next_due(date(2026, 11, 8), 1) == date(2026, 12, 1) and alerts.next_due(date(2026, 11, 8), 21) == date(2026, 11, 21)
+    assert alerts.next_due(date(2027, 2, 10), 31) == date(2027, 2, 28)
+    for seed in range(10):
+        od = template_alert(ctx, random.Random(seed), name="overdraft_two_bills")
+        # the closest pair of the three biggest bills: the Visa (Nov 21) and the Mastercard (Nov 24), three days apart, not "the same day"
+        assert "same day" not in od.statement and "three days apart" in od.statement
+        assert "Rewards Visa payment on November 21" in od.statement and "Gas Mastercard payment on November 24" in od.statement
+        assert "below zero on November 24" in od.statement and "November 15" not in od.statement + od.detail
+        assert od.action == "I'd make sure checking can cover both payments before then." and "savings" not in od.detail.lower()
+    real = select_alert(payload(cand(id="forecast:x", type="overdraft", kind="obligation", facts={"date": "2026-11-13", "shortfall": 340, "bills_due": 1800})))
+    assert "make sure checking can cover" in real.action and "savings" not in real.action
 
 
 def test_a_card_in_another_city_is_never_in_the_home_city():
@@ -161,7 +183,7 @@ def test_the_spoken_text_survives_the_speech_normalizer_in_plain_words():
     norm = SpeechNormalizer("2026-11-07")
     a = template_alert(Ctx.from_payload(payload(), random.Random(0)), random.Random(11), name="overdraft_two_bills")
     said = norm.normalize(spoken_script(a, posted=True))
-    assert "$" not in said and not re.search(r"\d", said) and "November" in said
+    assert "$" not in said and not re.search(r"\d", said) and "December" in said
 
 
 def test_model_notes_carry_what_was_said_and_the_facts_and_forbid_inventing():

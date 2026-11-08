@@ -106,6 +106,23 @@ export interface ProposalItem {
   closes_at: string;
   created_by_name: string;
   created_at: string;
+  /** The proposal's details_json (loan terms such as rate_pct, term_months, down_pct). Optional: absent in fixtures. */
+  details?: Record<string, unknown>;
+}
+
+/**
+ * The household's monthly cash flow as the recompute stores it (`cash_flow`, docs/contracts.md section 14): the same figures the
+ * dashboard's Cash flow tile and the savings-rate indicator show. Every agent-facing "monthly surplus / cash flow" reads this.
+ */
+export interface CashFlowRow {
+  as_of: string;
+  window_days: number;
+  income_monthly: number;
+  expense_monthly: number;
+  net_monthly: number;
+  savings_rate: number;
+  /** Spending per category over the whole window (not per month). */
+  categories: { category: string; total: number }[];
 }
 export interface VoteItem {
   proposal_id: string;
@@ -190,6 +207,8 @@ export interface HouseholdData {
   alerts?: AlertItem[];
   proposals?: ProposalItem[];
   votes?: VoteItem[];
+  /** The recompute's cash-flow row. Optional: absent in fixtures and before the module computed one; tools then derive it from the ledger. */
+  cash_flow?: CashFlowRow;
   /** "Today" for this household's data (YYYY-MM-DD). */
   asOf: string;
 }

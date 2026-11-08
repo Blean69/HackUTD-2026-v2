@@ -87,6 +87,29 @@ export function memberCreditViews(data: HouseholdData, filter?: string): CreditM
     .sort((a, b) => (a.member < b.member ? -1 : a.member > b.member ? 1 : 0));
 }
 
+/** Marks a credit_score health indicator that already speaks the simulated scores, so aligning twice is a no-op. */
+const SIMULATED_MARK = 'Simulated scores';
+
+/**
+ * The module's `credit_score` health indicator averages the raw bureau profile (`credit_profile.score`), which is not what the
+ * Credit page shows. Agents must speak the simulated scores (`credit_score` table), so when those exist the indicator is rewritten
+ * from them: value = their average, explanation = each member's simulated score. Without simulated scores it is left as it is.
+ */
+export function alignCreditIndicator<T extends { key: string; value: number; status: string; explanation: string }>(
+  health: T[],
+  scores: readonly CreditScoreRow[] | undefined,
+  members: readonly { id: string; name: string }[],
+): T[] {
+  if (!scores?.length) return health;
+  const names = new Map(members.map((m) => [m.id, m.name.split(' ')[0] ?? m.name]));
+  const sorted = [...scores].sort((a, b) => ((names.get(a.member_id) ?? a.member_id) < (names.get(b.member_id) ?? b.member_id) ? -1 : 1));
+  const avg = Math.round(sorted.reduce((s, c) => s + c.score, 0) / sorted.length);
+  const status = avg >= 740 ? 'good' : avg >= 670 ? 'watch' : 'risk';
+  const list = sorted.map((c) => `${names.get(c.member_id) ?? c.member_id} ${c.score} (${c.band})`).join(', ');
+  const explanation = `${SIMULATED_MARK} on the Credit page: ${list}${sorted.length > 1 ? `; average ${avg}` : ''}. Demo scores, not a real credit report.`;
+  return health.map((h) => (h.key === 'credit_score' && !h.explanation.startsWith(SIMULATED_MARK) ? { ...h, value: avg, status, explanation } : h));
+}
+
 export const getCreditScore = defineTool({
   name: 'get_credit_score',
   description:

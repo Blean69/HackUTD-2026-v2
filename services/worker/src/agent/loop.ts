@@ -118,7 +118,8 @@ export async function runAgentLoop(run: RunContext, o: LoopOptions): Promise<Loo
       const out = await run.tool(o.agent, tc.name, args, res);
       toolsUsed.push(tc.name);
       if (out.ok) results.push(out.result);
-      msgs.push({ role: 'tool', tool_call_id: tc.id, name: tc.name, content: fitJson(out.ok ? out.result : { error: out.error }, 3500) });
+      const shown = out.ok && out.adjusted && out.result && typeof out.result === 'object' && !Array.isArray(out.result) ? { ...(out.result as object), note: `Some arguments were out of range and were adjusted (${out.adjusted.join('; ')}).` } : out.ok ? out.result : { error: out.error };
+      msgs.push({ role: 'tool', tool_call_id: tc.id, name: tc.name, content: fitJson(shown, 3500) });
     }
   }
   // unreachable (the last iteration always returns) but keeps the compiler honest

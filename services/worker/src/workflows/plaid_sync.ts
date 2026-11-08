@@ -29,6 +29,18 @@ const ClassifySchema = z.object({
 
 const msgOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const plural = (n: number, w: string): string => `${n} ${w}${n === 1 ? '' : 's'}`;
+const secs = (ms: number): string => `${Math.max(1, Math.round(ms / 1000))} seconds`;
+/** Each Plaid step in the words a family reads when it does not work. */
+const STEP_WORDS: Record<string, string> = {
+  plaid_accounts_get: 'Reading the accounts',
+  plaid_liabilities_get: 'Reading card and loan terms',
+  plaid_transactions_sync: 'Reading transactions',
+  agent_upsert_accounts: 'Saving the accounts',
+  agent_upsert_txns: 'Saving transactions',
+  agent_remove_txns: 'Removing old transactions',
+  agent_save_plaid_item: 'Remembering where the sync stopped',
+  recompute_household: 'Updating the health indicators',
+};
 
 interface Traced<T> {
   ok: boolean;
@@ -47,7 +59,7 @@ async function traced<T>(run: RunContext, agent: string, tool: string, args: unk
     return { ok: true, value };
   } catch (error) {
     const code = isPlaidError(error) ? error.code : undefined;
-    run.emit(agent, 'tool_result', `${tool} failed: ${truncate(msgOf(error), 160)}`, { tool, ok: false, error: msgOf(error), ...(code ? { code } : {}) }, { latencyMs: Date.now() - t0 });
+    run.emit(agent, 'tool_result', `${STEP_WORDS[tool] ?? 'This step'} did not work: ${truncate(msgOf(error), 160)}`, { tool, ok: false, error: msgOf(error), ...(code ? { code } : {}) }, { latencyMs: Date.now() - t0 });
     return { ok: false, error };
   }
 }
@@ -71,10 +83,10 @@ async function paginate(run: RunContext, client: PlaidClient, token: string, sta
           'bank_connector',
           'plaid_transactions_sync',
           { cursor: acc.next ? 'saved' : 'none', count: SYNC_COUNT, page, ...(attempt > 1 ? { poll: attempt } : {}) },
-          `Plaid /transactions/sync page ${page} for ${institution}${acc.next ? '' : ' (from the beginning)'}`,
+          `Reading ${institution}'s transactions${acc.next ? ' since the last sync' : ' from the beginning'}${page > 1 ? ` (part ${page})` : ''}`,
           () => client.transactionsSync(token, acc.next, SYNC_COUNT),
           (p) => ({
-            title: `+${p.added.length} added, ${p.modified.length} modified, ${p.removed.length} removed${p.has_more ? ' (more pages)' : ''}${p.transactions_update_status ? `; ${p.transactions_update_status.toLowerCase().replace(/_/g, ' ')}` : ''}`,
+            title: `${plural(p.added.length, 'new transaction')}, ${p.modified.length} updated, ${p.removed.length} removed${p.has_more ? '; more to read' : ''}`,
             data: { added: p.added.length, modified: p.modified.length, removed: p.removed.length, has_more: p.has_more, status: p.transactions_update_status },
           }),
         );
@@ -90,7 +102,7 @@ async function paginate(run: RunContext, client: PlaidClient, token: string, sta
       throw new Error(`/transactions/sync did not finish after ${MAX_PAGES} pages`);
     } catch (e) {
       if (isPlaidError(e, 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION') && restart < 2) {
-        run.emit('bank_connector', 'message', 'Plaid changed the data while paging; starting the sync over from the saved cursor', { restart: restart + 1 });
+        run.emit('bank_connector', 'message', `${institution} changed its data while we were reading it; starting this read over`, { restart: restart + 1 });
         continue;
       }
       throw e;
@@ -114,13 +126,13 @@ async function classifyAmbiguous(run: RunContext, decisions: Decision[]): Promis
   try {
     const r = await structured(run.llm, {
       name: 'classify_accounts',
-      description: 'Choose the Keystone account type for each ambiguous bank account',
+      description: 'Choose the account type for each bank account the rules were unsure of',
       schema: ClassifySchema,
       role: 'fast',
       task: 'plaid_sync.explain',
       local: { items: [] },
       messages: [
-        { role: 'system', content: `You map bank accounts from Plaid to Keystone's eight account types: ${ACCOUNT_TYPES.join(', ')}. Call classify_accounts with exactly one entry per listed account (use its exact account_id). Credit and loan accounts must map to a debt type (credit_card, mortgage, auto_loan, personal_loan; student loans are personal_loan). Deposit and investment accounts must not map to a debt type; retirement accounts are ira, other investment or brokerage accounts are savings. Give a one-sentence reason. All data is synthetic Plaid Sandbox data.` },
+        { role: 'system', content: `You map bank accounts from Plaid to Brianotron's eight account types: ${ACCOUNT_TYPES.join(', ')}. Call classify_accounts with exactly one entry per listed account (use its exact account_id). Credit and loan accounts must map to a debt type (credit_card, mortgage, auto_loan, personal_loan; student loans are personal_loan). Deposit and investment accounts must not map to a debt type; retirement accounts are ira, other investment or brokerage accounts are savings. Give a one-sentence reason. All data is synthetic Plaid Sandbox data.` },
         { role: 'user', content: `Ambiguous accounts:\n${JSON.stringify(facts)}` },
       ],
     });
@@ -140,12 +152,12 @@ async function classifyAmbiguous(run: RunContext, decisions: Decision[]): Promis
     run.emit(
       'account_mapper',
       'message',
-      r.meta.provider === 'local' ? `Kept the default mapping for ${plural(unsure.length, 'ambiguous account')} (offline rule-based fallback)` : `Nemotron placed ${plural(applied.length, 'ambiguous account')}: ${applied.map((a) => `${byId.get(a.account_id)?.account.name ?? a.account_id} as ${a.type.replace('_', ' ')}`).join(', ')}`,
+      r.meta.provider === 'local' ? `Kept the standard type for ${plural(unsure.length, 'account')} the bank did not label clearly` : `Nemotron placed ${plural(applied.length, 'account')} the bank did not label clearly: ${applied.map((a) => `${byId.get(a.account_id)?.account.name ?? a.account_id} as ${a.type.replace('_', ' ')}`).join(', ')}`,
       { asked: facts.length, answers: applied },
       { model: r.meta.model, provider: r.meta.provider, latencyMs: r.meta.latencyMs, tokensIn: r.meta.tokensIn, tokensOut: r.meta.tokensOut },
     );
   } catch (e) {
-    run.emit('account_mapper', 'message', `Could not ask the model about ${plural(unsure.length, 'ambiguous account')} (${truncate(msgOf(e), 100)}); using the default mapping`, {});
+    run.emit('account_mapper', 'message', `Could not ask Nemotron about ${plural(unsure.length, 'account')} the bank did not label clearly (${truncate(msgOf(e), 100)}); kept the standard types`, {});
   }
 }
 
@@ -179,7 +191,7 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
     'bank_connector',
     'plaid_accounts_get',
     { institution: inst },
-    `Plaid /accounts/get for ${inst}`,
+    `Reading your accounts and balances at ${inst}`,
     () => client.accountsGet(token),
     (r) => ({ title: `${plural(r.accounts.length, 'account')} with live balances`, data: { count: r.accounts.length, accounts: r.accounts.map((a) => ({ id: a.account_id, name: a.name, type: a.type, subtype: a.subtype, balance: a.balances.current })) } }),
   );
@@ -192,7 +204,7 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
   const notSelected = new Set(offered.filter((a) => !plaidAccounts.includes(a)).map((a) => a.account_id));
   if (selection) {
     if (!plaidAccounts.length) throw new Error(`none of the ${plural(selection.size, 'selected account')} exist at ${inst} any more`);
-    run.emit('bank_connector', 'message', `Importing ${plaidAccounts.length} of ${offered.length} accounts: the ones the family selected`, { selected: plaidAccounts.map((a) => ({ id: a.account_id, name: a.name })), left_out: offered.length - plaidAccounts.length });
+    run.emit('bank_connector', 'message', `Importing ${plaidAccounts.length} of ${plural(offered.length, 'account')}: the ones the family selected`, { selected: plaidAccounts.map((a) => ({ id: a.account_id, name: a.name })), left_out: offered.length - plaidAccounts.length });
   }
 
   // 2. liabilities: optional (rates, limits, payments), tolerate "not ready" / "not supported"
@@ -201,15 +213,15 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
     'bank_connector',
     'plaid_liabilities_get',
     { institution: inst },
-    `Plaid /liabilities/get for ${inst} (card and loan terms)`,
+    `Reading card and loan terms at ${inst}`,
     () => client.liabilitiesGet(token),
     (r) => {
       const l = r.liabilities;
       const counts = { credit: l.credit?.length ?? 0, mortgage: l.mortgage?.length ?? 0, student: l.student?.length ?? 0, loan: l.loan?.length ?? 0 };
-      return { title: `Terms for ${counts.credit} card(s), ${counts.mortgage} mortgage(s), ${counts.student + counts.loan} loan(s)`, data: counts };
+      return { title: `Terms for ${plural(counts.credit, 'card')}, ${plural(counts.mortgage, 'mortgage')} and ${plural(counts.student + counts.loan, 'loan')}`, data: counts };
     },
   );
-  if (!liab.ok) run.emit('bank_connector', 'message', `Liabilities are optional; continuing without card and loan terms (${isPlaidError(liab.error) ? liab.error.code : 'error'})`, {});
+  if (!liab.ok) run.emit('bank_connector', 'message', `${inst} did not share card and loan terms; continuing without them`, { code: isPlaidError(liab.error) ? liab.error.code : 'error' });
   const facts = liabilityFacts(liab.ok ? liab.value!.liabilities : null);
 
   // 3. transactions: cursor paging; a brand-new item is polled until Plaid has loaded its history
@@ -230,7 +242,7 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
       page = await paginate(run, client, token, cursor, inst, attempt);
     } catch (e) {
       if (isPlaidError(e, 'PRODUCT_NOT_READY') && attempt < maxAttempts) {
-        run.emit('bank_connector', 'message', `${inst} is still preparing transactions; waiting ${Math.round(rt.pollMs / 1000)}s and trying again (${attempt}/${maxAttempts})`, {});
+        run.emit('bank_connector', 'message', `${inst} is still preparing your transactions; checking again in ${secs(rt.pollMs)}`, { attempt, of: maxAttempts });
         await rt.sleep(rt.pollMs);
         continue;
       }
@@ -260,7 +272,7 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
       quiet = page.added.length + page.modified.length === 0 ? quiet + 1 : 0;
       if (quiet >= quietNeeded) break;
       if (attempt < maxAttempts) {
-        run.emit('bank_connector', 'message', `Plaid says ${inst}'s history is complete but just sent ${page.added.length + page.modified.length} more row(s); one more check in ${Math.round(rt.pollMs / 1000)}s (${attempt}/${maxAttempts})`, { have: upserts.size });
+        run.emit('bank_connector', 'message', `${inst} is still sending older transactions (${page.added.length + page.modified.length} more just arrived); checking once more in ${secs(rt.pollMs)}`, { have: upserts.size, attempt, of: maxAttempts });
         await rt.sleep(rt.pollMs);
         continue;
       }
@@ -269,14 +281,14 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
       historyPending = true;
       break;
     }
-    run.emit('bank_connector', 'message', `Plaid is still loading ${inst}'s history (${(page.status ?? '').toLowerCase().replace(/_/g, ' ')}); checking again in ${Math.round(rt.pollMs / 1000)}s (${attempt}/${maxAttempts})`, { have: upserts.size });
+    run.emit('bank_connector', 'message', `${inst} is still loading your transaction history; checking again in ${secs(rt.pollMs)}`, { have: upserts.size, status: page.status, attempt, of: maxAttempts });
     await rt.sleep(rt.pollMs);
   }
-  if (noTxns) run.emit('bank_connector', 'message', `Transactions are not available for ${inst} yet (${noTxns}); syncing accounts and balances only`, { code: noTxns });
-  if (historyPending) run.emit('bank_connector', 'message', `Plaid had not finished ${inst}'s full history when polling ended; the next sync will pick up the rest`, { have: upserts.size });
+  if (noTxns) run.emit('bank_connector', 'message', `Transactions are not available from ${inst} yet; saving accounts and balances only`, { code: noTxns });
+  if (historyPending) run.emit('bank_connector', 'message', `${inst} had not finished sending its full history; the next sync will pick up the rest`, { have: upserts.size });
 
   // 4. account types
-  run.handoff('bank_connector', 'account_mapper', `Mapping ${plural(plaidAccounts.length, 'Plaid account')} to Keystone account types`);
+  run.handoff('bank_connector', 'account_mapper', `Sorting ${plural(plaidAccounts.length, 'account')} into checking, savings, cards and loans`);
   const decisions: Decision[] = plaidAccounts.map((a) => {
     const d = mapAccountType(a.type, a.subtype);
     return { account: a, type: d.type, confident: d.confident, why: d.why, by: d.confident ? 'rule' : 'default' };
@@ -287,7 +299,7 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
   run.emit(
     'account_mapper',
     'message',
-    `Mapped ${plural(decisions.length, 'account')}: ${[...counts].map(([t, n]) => `${n} ${t.replace('_', ' ')}`).join(', ')}`,
+    `Sorted ${plural(decisions.length, 'account')}: ${[...counts].map(([t, n]) => `${n} ${t.replace('_', ' ')}`).join(', ')}`,
     { mapping: decisions.map((d) => ({ id: accountId(d.account.account_id), plaid: `${d.account.type}/${d.account.subtype ?? ''}`, type: d.type, by: d.by, why: truncate(d.why, 120) })) },
   );
   const accountRows: AccountRow[] = decisions.map((d) => mapAccount(d.account, { householdId: hh, institution: inst, type: d.type, liability: facts.get(d.account.account_id) }));
@@ -318,13 +330,13 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
         inferred.push({ account: a.nickname, monthly_payment: pay });
       }
     }
-    if (inferred.length) run.emit('account_mapper', 'message', `Plaid gave no loan terms for ${plural(inferred.length, 'loan')}; read the monthly payment from the payment history: ${inferred.map((i) => `${i.account} $${i.monthly_payment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(', ')}`, { inferred });
+    if (inferred.length) run.emit('account_mapper', 'message', `${inst} gave no loan terms for ${plural(inferred.length, 'loan')}; worked out the monthly payment from past payments: ${inferred.map((i) => `${i.account} $${i.monthly_payment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(', ')}`, { inferred });
   }
-  run.emit('account_mapper', 'message', `Mapped ${plural(txnRows.length, 'transaction')} (Plaid positive = money out, Keystone negative = money out)${orphaned ? `; skipped ${orphaned} on accounts Plaid no longer lists` : ''}${leftOut ? `; left out ${leftOut} on accounts the family did not select` : ''}`, { sample: txnRows.slice(0, 3).map((t) => ({ date: t.date, merchant: t.merchant, amount: t.amount, category: t.category })) });
+  run.emit('account_mapper', 'message', `Prepared ${plural(txnRows.length, 'transaction')}${orphaned ? `; skipped ${orphaned} on accounts the bank no longer lists` : ''}${leftOut ? `; left out ${leftOut} on accounts the family did not select` : ''}`, { sample: txnRows.slice(0, 3).map((t) => ({ date: t.date, merchant: t.merchant, amount: t.amount, category: t.category })) });
 
   // 5. write to SpacetimeDB
-  run.handoff('account_mapper', 'reconciler', `Writing ${inst} to SpacetimeDB`);
-  const wr = await traced(run, 'reconciler', 'agent_upsert_accounts', { count: accountRows.length }, `Upsert ${plural(accountRows.length, 'account')} into SpacetimeDB`, async () => {
+  run.handoff('account_mapper', 'reconciler', `Saving ${inst}'s accounts and transactions`);
+  const wr = await traced(run, 'reconciler', 'agent_upsert_accounts', { count: accountRows.length }, `Saving ${plural(accountRows.length, 'account')}`, async () => {
     for (let i = 0; i < accountRows.length; i += BATCH) await store.upsertAccounts(accountRows.slice(i, i + BATCH));
     return accountRows.length;
   }, (n) => ({ title: `${plural(n, 'account')} saved`, data: { upserted: n } }));
@@ -333,15 +345,15 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
   const batches = Math.ceil(txnRows.length / BATCH);
   for (let b = 0; b < batches; b++) {
     const rows = txnRows.slice(b * BATCH, (b + 1) * BATCH);
-    const r = await traced(run, 'reconciler', 'agent_upsert_txns', { batch: b + 1, of: batches, rows: rows.length }, `Upsert transactions ${b * BATCH + 1}-${b * BATCH + rows.length} of ${txnRows.length}`, async () => {
+    const r = await traced(run, 'reconciler', 'agent_upsert_txns', { batch: b + 1, of: batches, rows: rows.length }, `Saving transactions ${b * BATCH + 1}-${b * BATCH + rows.length} of ${txnRows.length}`, async () => {
       await store.upsertTxns(rows);
       return rows.length;
-    }, (n) => ({ title: `${plural(n, 'transaction')} saved (batch ${b + 1}/${batches})`, data: { upserted: n } }));
+    }, (n) => ({ title: `${plural(n, 'transaction')} saved${batches > 1 ? ` (part ${b + 1} of ${batches})` : ''}`, data: { upserted: n } }));
     if (!r.ok) throw r.error;
   }
   if (removedIds.size) {
     const ids = [...removedIds].map(txnId);
-    const r = await traced(run, 'reconciler', 'agent_remove_txns', { count: ids.length }, `Remove ${plural(ids.length, 'transaction')} Plaid no longer reports`, async () => {
+    const r = await traced(run, 'reconciler', 'agent_remove_txns', { count: ids.length }, `Removing ${plural(ids.length, 'transaction')} the bank no longer shows`, async () => {
       for (let i = 0; i < ids.length; i += BATCH) await store.removeTxns(ids.slice(i, i + BATCH));
       return ids.length;
     }, (n) => ({ title: `${plural(n, 'transaction')} removed`, data: { removed: n } }));
@@ -349,11 +361,11 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
   }
   // the cursor only moves once the data it describes is safely stored, so a failed run is simply retried from the old one
   if (cursorAdvanced) {
-    const r = await traced(run, 'reconciler', 'agent_save_plaid_item', { cursor: 'next' }, 'Save the /transactions/sync cursor', async () => store.saveItem({ ...item, accessToken: '', institutionId: '', institutionName: '', cursor }), () => ({ title: 'Cursor saved', data: { saved: true } }));
+    const r = await traced(run, 'reconciler', 'agent_save_plaid_item', { cursor: 'next' }, 'Remembering where this sync stopped, so the next one reads only new transactions', async () => store.saveItem({ ...item, accessToken: '', institutionId: '', institutionName: '', cursor }), () => ({ title: 'Saved', data: { saved: true } }));
     if (!r.ok) throw r.error;
   }
-  const rc = await traced(run, 'reconciler', 'recompute_household', { household_id: hh }, 'Recompute health indicators, forecast and data-quality rule alerts', () => store.recompute(hh), () => ({ title: 'Health indicators, 90-day forecast and rule alerts refreshed from the new data', data: { household_id: hh } }));
-  if (!rc.ok) run.emit('reconciler', 'message', `Recompute failed (${truncate(msgOf(rc.error), 100)}); the scheduled tick will retry within a minute`, {});
+  const rc = await traced(run, 'reconciler', 'recompute_household', { household_id: hh }, 'Updating your health indicators, 90-day forecast and alerts', () => store.recompute(hh), () => ({ title: 'Health indicators, 90-day forecast and alerts updated from the new data', data: { household_id: hh } }));
+  if (!rc.ok) run.emit('reconciler', 'message', `Updating the health indicators did not work this time (${truncate(msgOf(rc.error), 100)}); it runs again on its own within a minute`, {});
 
   // 6. report
   const stored = (await store.countTxns(hh, accountRows.map((a) => a.id))) ?? txnRows.length;
@@ -408,13 +420,13 @@ export function createPlaidSyncWorkflow(getRt: () => PlaidRuntime = getPlaidRunt
         }
 
         const names = items.map((i) => i.institutionName || 'your bank').join(', ');
-        const fallbackPlan = [`Fetch the accounts and live balances at ${names} (Plaid /accounts/get)`, 'Read card and loan terms where the bank supports them (Plaid /liabilities/get)', 'Pull new, changed and removed transactions with a saved cursor (Plaid /transactions/sync)', "Map Plaid account types to Keystone's eight types, asking Nemotron about ambiguous ones", 'Save accounts and transactions to SpacetimeDB, recompute health and the forecast, then report'];
+        const fallbackPlan = [`Read the accounts and live balances at ${names}`, 'Read card and loan terms where the bank shares them', 'Read new, changed and removed transactions since the last sync', 'Sort the accounts into checking, savings, cards and loans, asking Nemotron about any the bank did not label clearly', 'Save everything, update the health indicators and the forecast, then report'];
         try {
           await emitPlan(run, {
             agent: 'planner',
             task: 'plaid_sync',
-            system: `You are Keystone's bank-sync planner. ${householdBrief(run)} Data comes from the Plaid Sandbox (synthetic).`,
-            user: `The household linked ${names}. Plan how to import its accounts, balances, card and loan terms and transactions from Plaid into the family's financial picture. Steps available: Plaid /accounts/get, /liabilities/get, /transactions/sync (cursor paging), account-type mapping, saving to SpacetimeDB, recompute health and forecast.`,
+            system: `You are Brianotron's bank-sync planner. ${householdBrief(run)} Data comes from the Plaid Sandbox (synthetic). The family reads your plan: write it in plain words, with no API endpoints, ids or technical terms.`,
+            user: `The household linked ${names}. Plan how to bring its accounts, balances, card and loan terms and transactions into the family's financial picture. Steps available: read the accounts and balances, read card and loan terms, read new transactions since the last sync, sort the accounts into types, save everything, update the health indicators and the forecast.`,
             toolNames: [],
             local: { plan: fallbackPlan },
           });
@@ -430,7 +442,7 @@ export function createPlaidSyncWorkflow(getRt: () => PlaidRuntime = getPlaidRunt
           } catch (e) {
             const message = isPlaidError(e) ? `${e.message} (${e.code})` : msgOf(e);
             failed.push({ item, error: message });
-            run.emit('reconciler', 'message', `Sync of ${item.institutionName || 'the bank'} failed: ${truncate(message, 200)}`, { item_id: item.itemId });
+            run.emit('reconciler', 'message', `Syncing ${item.institutionName || 'the bank'} did not finish: ${truncate(message, 200)}`, { item_id: item.itemId });
             await rt.store!.setConnection({ itemId: item.itemId, householdId: hh, institutionName: item.institutionName, status: 'error', accountsCount: 0, txnsCount: 0, error: truncate(message, 400) }).catch(() => undefined);
           }
         }
