@@ -1,8 +1,9 @@
 "use client";
 import { Sparkline } from "@/components/charts/Sparkline";
+import { CountUp } from "@/components/motion";
 import { Card, Chip, Delta, InfoTip } from "@/components/ui";
 import type { RoomFinance } from "@/lib/data/finance-hooks";
-import { usd } from "@/lib/format";
+import { cx, shortDate, usd } from "@/lib/format";
 
 function Label({ children, info }: { children: string; info?: string }) {
   return (
@@ -13,60 +14,52 @@ function Label({ children, info }: { children: string; info?: string }) {
   );
 }
 
-/** Five headline numbers. Everything is derived from the household's own rows; nothing here is hard-coded. */
-export function KpiRow({ fin, rangeLabel }: { fin: RoomFinance; rangeLabel: string }) {
-  const { nw, trend, history, flow, property, accounts, debt, healthModel: hm } = fin;
-  const hasChange = history.length > 1;
+/**
+ * Four headline numbers, each shown once on the Dashboard: net worth (with what it is made of), monthly cash flow,
+ * the health score, and the lowest cash balance the 90-day forecast reaches. Everything is derived from the household's rows.
+ */
+export function KpiRow({ fin }: { fin: RoomFinance }) {
+  const { nw, trend, history, flow, forecast, healthModel: hm } = fin;
+  const low = forecast.low_point;
+  const lowTone = !low ? "" : low.balance < 0 ? "text-risk" : low.balance < 3000 ? "text-watch" : "";
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-[1.7fr_1fr_1fr_1fr_1fr]" aria-label="Key figures">
-      <Card className="col-span-2 p-4 lg:col-span-1">
+    <section className="grid grid-cols-3 gap-2.5 sm:gap-3 lg:grid-cols-[1.6fr_1fr_1fr_1fr]" aria-label="Key figures">
+      <Card className="col-span-3 p-4 lg:col-span-1">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <Label info="Everything you own minus everything you owe, including estimated home and vehicle value.">Net Worth</Label>
-            <p className="num mt-1 text-[1.85rem] font-semibold leading-none tracking-tight sm:text-[2rem]">{usd(nw.net)}</p>
-            {hasChange ? (
-              <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Delta value={trend.change.pct} text={`${trend.change.pct >= 0 ? "+" : ""}${trend.change.pct.toFixed(1)}% (${usd(trend.change.abs, { sign: true })})`} />
-                <span className="text-[0.74rem] text-ink-3">{rangeLabel.toLowerCase()}</span>
-              </p>
-            ) : null}
+            <Label info="Everything you own minus everything you owe. Home and vehicle values are estimates on file.">Net worth</Label>
+            <p className="num mt-1 text-[1.9rem] font-semibold leading-none tracking-tight"><CountUp value={nw.net} format={(n) => usd(n)} /></p>
+            <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              {history.length > 1 ? <Delta value={trend.change.pct} text={`${trend.change.pct >= 0 ? "+" : ""}${trend.change.pct.toFixed(1)}%`} /> : null}
+              <span className="num text-[0.78rem] text-ink-3">{usd(nw.assets, { compact: true })} assets · {usd(nw.liabilities, { compact: true })} owed</span>
+            </p>
           </div>
-          <div className="hidden w-32 shrink-0 sm:block lg:w-28 xl:w-36">
-            <Sparkline values={history.map((h) => h.value)} width={140} height={48} label={`Net worth over ${rangeLabel.toLowerCase()}`} />
+          <div className="hidden w-28 shrink-0 sm:block xl:w-36">
+            <Sparkline values={history.map((h) => h.value)} width={140} height={48} label="Net worth over the last six months" />
           </div>
         </div>
       </Card>
 
-      <Card className="p-4">
-        <Label info="Cash, savings, CDs, retirement accounts and the estimated value of your home and vehicles.">Total Assets</Label>
-        <p className="num mt-1 text-[1.4rem] font-semibold leading-tight tracking-tight">{usd(nw.assets)}</p>
-        <p className="mt-2 text-[0.74rem] leading-snug text-ink-3">
-          {property > 0 ? <>incl. <span className="num">{usd(property, { compact: true })}</span> home &amp; vehicles (est.)</> : <>{accounts.filter((a) => a.type !== "credit_card" && !["auto_loan", "personal_loan", "mortgage"].includes(a.type)).length} asset accounts</>}
-        </p>
+      <Card className="p-3 sm:p-4">
+        <Label>Cash flow</Label>
+        <p className={cx("num mt-1 text-[1.15rem] font-semibold leading-tight tracking-tight sm:text-[1.4rem]", flow.value < 0 && "text-risk")}><CountUp value={flow.value} format={(n) => usd(n, { sign: true })} /></p>
+        <p className="mt-2 text-[0.76rem] leading-snug text-ink-3">a month{flow.basis > 1 ? `, ${flow.basis}-mo avg` : ""}</p>
       </Card>
 
-      <Card className="p-4">
-        <Label info="Mortgage, auto and personal loans, and card balances.">Total Liabilities</Label>
-        <p className="num mt-1 text-[1.4rem] font-semibold leading-tight tracking-tight">{usd(nw.liabilities)}</p>
-        <p className="mt-2 text-[0.74rem] leading-snug text-ink-3"><span className="num">{usd(debt.monthlyPayments)}</span> a month in payments</p>
-      </Card>
-
-      <Card className="p-4">
-        <Label info="Average of income minus cash spending over the last full months, from your checking and savings activity.">Monthly Cash Flow</Label>
-        <p className={`num mt-1 text-[1.4rem] font-semibold leading-tight tracking-tight ${flow.value < 0 ? "text-risk" : ""}`}>{usd(flow.value, { sign: true })}</p>
-        <p className="mt-2">
-          {flow.change !== null ? <><Delta value={flow.change} text={usd(flow.change, { sign: true, compact: true })} /> <span className="text-[0.74rem] text-ink-3">vs prior {flow.basis} mo</span></> : <span className="text-[0.74rem] text-ink-3">{flow.basis > 1 ? `avg of last ${flow.basis} months` : "last full month"}</span>}
-        </p>
-      </Card>
-
-      <Card className="p-4">
-        <Label info="A 0 to 100 score blended from liquidity, savings, credit, debt, net worth trend, emergency fund and cash safety.">Household Health</Label>
+      <Card className="p-3 sm:p-4">
+        <Label>Health</Label>
         <p className="mt-1 flex items-baseline gap-1">
-          <span className="num text-[1.7rem] font-semibold leading-none tracking-tight">{hm.score ?? "—"}</span>
-          <span className="text-[0.9rem] text-ink-3">/ 100</span>
+          <span className="num text-[1.5rem] font-semibold leading-none tracking-tight sm:text-[1.7rem]">{hm.score === null ? "—" : <CountUp value={hm.score} />}</span>
+          <span className="text-[0.82rem] text-ink-3">/ 100</span>
         </p>
-        <p className="mt-2"><Chip tone={hm.tone === "neutral" ? "neutral" : hm.tone} className="!text-[0.78rem] !font-semibold">{hm.label}</Chip></p>
+        <p className="mt-2"><Chip tone={hm.tone}>{hm.label}</Chip></p>
       </Card>
-    </div>
+
+      <Card className="p-3 sm:p-4">
+        <Label>Forecast low</Label>
+        <p className={cx("num mt-1 text-[1.15rem] font-semibold leading-tight tracking-tight sm:text-[1.4rem]", lowTone)}>{low ? <CountUp value={low.balance} format={(n) => usd(n)} /> : "—"}</p>
+        <p className="mt-2 text-[0.76rem] leading-snug text-ink-3">{low ? <>cash, around <span className="num">{shortDate(low.date)}</span></> : "No forecast yet"}</p>
+      </Card>
+    </section>
   );
 }

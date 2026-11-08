@@ -63,6 +63,8 @@ Row ids are strings unless marked `u64 auto`. `ts`/`*_at` are SpacetimeDB `Times
 | `agent_run` | run_id pk, job_id, workflow, household_id, status running/done/error, started_at, finished_at, providers_json, result_json | worker |
 | `trace_event` | id u64 auto pk, run_id, household_id, seq, ts, workflow, agent, type, title, data_json, model, provider, latency_ms, tokens_in, tokens_out | worker (`emit_trace`) |
 | `worker` (private) | identity pk, label, registered_at | `register_worker` |
+| `phone_access` (private) | household_id pk, pin_hash, salt, updated_at, set_by (Identity) | `set_phone_pin`, `clear_phone_pin`. `pin_hash = sha256_hex("keystone/phone-pin/v1:" + salt + ":" + pin)`; the code itself is never stored or logged |
+| `phone_access_status` | household_id pk, has_pin, updated_at | same reducers (what the UI reads; never the code or its hash) |
 
 ### Trace event semantics (the NVIDIA story)
 `workflow` ∈ huddle | what_if | coach | scam_check | data_quality | plaid_sync | onboarding_insights | phone. `agent` e.g. planner, goal_extractor, reconciler, voice_agent,
@@ -85,6 +87,8 @@ Client-callable (any identity):
 | `ack_alert` | alert_id, display_name | sets acknowledged_by |
 | `post_advisor_note` | household_id, author_name, text | inserts note + an `advisor` alert |
 | `recompute_household` | household_id | recomputes health indicators, 90-day forecast, rule-based data-quality alerts (pure math, deterministic) |
+| `set_phone_pin` | household_id, pin | the household's 5-digit phone code (section 8). Caller must be the household owner or, for a seeded household (no owner), be in its room. Rejects: not exactly 5 digits, weak (same digit, a straight run up or down such as 12345 / 54321 / 67890, two alternating digits), or a code another household already uses (each other row's salted hash is recomputed and compared). New random salt on every change |
+| `clear_phone_pin` | household_id | same callers; deletes the hash and sets `phone_access_status.has_pin` false |
 
 Lifecycle: `client_connected` (no-op or lobby presence), `client_disconnected` (delete presence).
 Scheduled: `tick_recompute` every 60 s recomputes households with recent changes.
@@ -99,6 +103,7 @@ Worker-only (reject unless `ctx.sender` is in `worker`):
 | `emit_trace(run_id, seq, workflow, agent, type, title, data_json, model, provider, latency_ms, tokens_in, tokens_out)` | inserts `trace_event` |
 | `agent_upsert_goal`, `agent_create_alert`, `agent_update_scenario`, `agent_coach_reply`, `set_huddle_status` | write results |
 | `purge_transcript(huddle_id)` | deletes that huddle's transcript lines (privacy: we keep goals + short evidence quotes only) |
+| `worker_phone_access` (VIEW, `public` but empty for everyone who is not in `worker`) | the `phone_access` rows (household_id, pin_hash, salt, updated_at, set_by). The worker subscribes to `SELECT * FROM worker_phone_access` and checks a caller's digits against it. A view, not a `verify_phone_pin` reducer, because a 2.14.1 reducer returns nothing to its caller (same pattern as `worker_plaid_items`) |
 | `seed_households`, `seed_members`, `seed_accounts`, `seed_txns`, `seed_credit`, `seed_obligations`, `seed_conversations` (rows_json) | bulk insert from `data/seed/` |
 
 ### As built (module agent, spacetimedb 2.14.1): deviations to know
@@ -198,8 +203,11 @@ synthetic data only; the first thing spoken is a disclosure that it is an AI ass
   (`sdp`, `type`, `pc_id`, `restart_pc`, `requestData`/`request_data` = `{household_id, display_name}`); `PATCH` for trickle ICE.
   Local `VOICE_BASE=http://localhost:7860`, prod `https://<host>/voice` (Caddy strips the prefix). No PIN: the household comes from the request data.
   RTVI events carry the live captions, and one server message `{type: "run", run_id}` is sent as soon as the call's `agent_run` exists.
-- **Phone (optional):** SignalWire number -> `POST /voice/twiml` (cXML `<Connect><Stream>`) -> `wss://<host>/voice/ws`; a 4-digit keypad PIN
-  (worker env `PHONE_PINS=1234:hh_rivera`, 3 tries) gates everything. Caller numbers are only ever stored as a salted hash.
+- **Phone (optional):** SignalWire number -> `POST /voice/twiml` (cXML `<Connect><Stream>`) -> `wss://<host>/voice/ws`; a 5-digit keypad code
+  (3 tries per call) gates everything. Each household sets its own in the app (`set_phone_pin`, "Call Brian" in the header and as an optional last
+  onboarding item; the number shown comes from `NEXT_PUBLIC_PHONE_NUMBER`). `/phone/identify` checks those household codes first (salted hashes read through
+  the `worker_phone_access` view, constant-time compare against every row), then the worker env `PHONE_PINS=12345:hh_rivera` (the seeded demo
+  households keep theirs there; the UI says "Demo code: ask the team"). A worker log line records only the outcome of each attempt, never the digits. Caller numbers are only ever stored as a salted hash.
 - **Worker routes** (internal, `x-voice-secret` = `VOICE_SHARED_SECRET`; Caddy answers 404 for `/worker/phone/*`): `POST /phone/identify`,
   `POST /phone/start`, `GET /phone/tools`, `POST /phone/tool`, `POST /phone/trace`, `POST /phone/end`. Tools are `get_health_indicators, get_forecast,
   get_obligations, get_accounts, simulate_scenario, goal_feasibility, detect_scam_signals`; the model gets a trimmed `voiceView` of each result.

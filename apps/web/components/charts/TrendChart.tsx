@@ -14,7 +14,7 @@ function Tip({ active, payload }: { active?: boolean; payload?: { payload: Trend
     <div className="rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.78rem]">
       <p className="font-semibold">{longDate(p.date)}</p>
       {p.actual !== undefined ? <p className="num text-ink-2">Net worth: <span className="font-semibold text-ink">{usd(p.actual)}</span></p> : null}
-      {isForecast && p.forecast !== undefined ? <p className="num text-ink-2">Forecast (est.): <span className="font-semibold text-ink">{usd(p.forecast)}</span></p> : null}
+      {isForecast && p.forecast !== undefined ? <p className="num text-ink-2">Forecast: <span className="font-semibold text-ink">{usd(p.forecast)}</span></p> : null}
       {isForecast && p.best !== undefined ? <p className="num text-good">Best case: {usd(p.best)}</p> : null}
       {isForecast && p.worst !== undefined ? <p className="num text-risk">Worst case: {usd(p.worst)}</p> : null}
     </div>
@@ -41,9 +41,8 @@ export function TrendChart({ model, height = 260, mobileHeight }: { model: Trend
     <div>
       <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.72rem] text-ink-2" aria-hidden="true">
         <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[var(--c1)]" /> Actual</li>
-        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--c2)]" /> Forecast</li>
-        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dotted border-[var(--c3)]" /> Best case ({model.bestPct >= 0 ? "+" : ""}{model.bestPct.toFixed(0)}%, est.)</li>
-        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dotted border-risk" /> Worst case ({model.worstPct >= 0 ? "+" : ""}{model.worstPct.toFixed(0)}%, est.)</li>
+        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[var(--c2)]" /> 90-day forecast</li>
+        <li className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dotted border-[var(--c3)]" /> Best and worst case</li>
       </ul>
       <div style={{ ["--h" as string]: `${mobileHeight ?? height}px`, ["--hd" as string]: `${height}px` }} className="h-[var(--h)] sm:h-[var(--hd)]" role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>

@@ -11,6 +11,7 @@ import type { ExternalApis } from '../tools/external.js';
 import type { ToolContext, ToolRegistry } from '../tools/registry.js';
 import type { HouseholdData } from '../types.js';
 import { median, truncate } from '../util.js';
+import type { PhoneCodeSource } from './access.js';
 import { buildBrief, familyLabel } from './brief.js';
 import type { PhoneConfig } from './config.js';
 import { PinChecker, type PinResult } from './identity.js';
@@ -35,6 +36,8 @@ export interface PhoneDeps {
   /** Queue a job and return its id (the real one calls the agent_enqueue_job reducer and looks the row up in the client cache). */
   enqueueJob(workflow: string, householdId: string, subjectId: string, input: Record<string, unknown>): Promise<bigint>;
   cfg: PhoneConfig;
+  /** Household codes set in the app (salted hashes from SpacetimeDB), checked before the env PINs. Optional: without it only PHONE_PINS work. */
+  codes?: PhoneCodeSource;
   now?: () => number;
   log?: (msg: string) => void;
 }
@@ -141,7 +144,7 @@ export class PhoneService {
   constructor(private d: PhoneDeps) {
     this.now = d.now ?? Date.now;
     this.log = d.log ?? ((m) => console.log(m));
-    this.pins = new PinChecker(d.cfg.pins, d.cfg.pinTries, this.now);
+    this.pins = new PinChecker(d.cfg.pins, d.cfg.pinTries, this.now, undefined, d.codes);
   }
 
   get activeCalls(): number {
@@ -151,7 +154,10 @@ export class PhoneService {
   // ---- identify ------------------------------------------------------------------------------------------------------
   async identify(req: { call_id: string; caller_hash?: string; pin: string }): Promise<Record<string, unknown>> {
     if (!SAFE_ID.test(req.call_id ?? '')) throw new PhoneError(400, 'bad_call_id');
+    await this.d.codes?.ready?.(); // the household codes load once at startup; after that they stay live
     const r: PinResult = this.pins.check(req.call_id, clean(req.caller_hash, 80), String(req.pin ?? ''));
+    // Only the outcome is logged: never the digits, the caller's number or hash, or which household.
+    this.log(`[phone] identify call=${req.call_id}: ${r.ok ? `ok (${r.source === 'code' ? 'household code' : 'env PIN'})` : r.locked ? 'wrong, locked' : `wrong, ${r.triesLeft} ${r.triesLeft === 1 ? 'try' : 'tries'} left`}`);
     if (!r.ok) return { ok: false, tries_left: r.triesLeft, locked: r.locked };
     let householdName = '';
     let firstName = '';

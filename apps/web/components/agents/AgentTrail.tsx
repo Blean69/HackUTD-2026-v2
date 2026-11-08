@@ -1,14 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconChevronDown } from "@/components/icons";
 import { AppShell } from "@/components/shell/AppShell";
 import { ProviderBadge, providerName, runProviders } from "@/components/trace/badges";
 import { runTotals, TraceTimeline } from "@/components/trace/TraceTimeline";
 import { Button, Card, Chip, Empty, LivePill, PageHeader, Skeleton } from "@/components/ui";
 import { DEMO_HOUSEHOLD_ID, PRODUCT_NAME } from "@/lib/constants";
-import { useDataReady, useDataScope, useHouseholds, useRuns, useTraceByRun } from "@/lib/data/hooks";
+import { useDataReady, useDataScope, useHouseholds, useRuns, useRunTraces, useTraceByRun } from "@/lib/data/hooks";
 import { useNow } from "@/lib/data/finance-hooks";
 import { cx, duration, relTime } from "@/lib/format";
 import { useLastHousehold } from "@/lib/lastHousehold";
@@ -16,6 +16,9 @@ import { openTrace } from "@/lib/traceUi";
 import { WORKFLOWS, WORKFLOW_LABEL, type AgentRun, type TraceEvent, type Workflow } from "@/lib/types";
 
 const runDomId = (id: string) => `run-${id}`;
+/** Runs rendered at a time; the wall holds every run ever made. */
+const PAGE = 15;
+const NO_EVENTS: readonly TraceEvent[] = [];
 
 function RunStatus({ status }: { status: AgentRun["status"] }) {
   if (status === "running") return <Chip tone="brand"><span className="anim-blink h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />Live</Chip>;
@@ -40,7 +43,7 @@ function RunBody({ run, events }: { run: AgentRun; events: readonly TraceEvent[]
   );
 }
 
-function RunRow({
+const RunRow = memo(function RunRow({
   run, events, household, now, open, onToggle, linked,
 }: {
   run: AgentRun;
@@ -48,7 +51,7 @@ function RunRow({
   household: string;
   now: number;
   open: boolean;
-  onToggle: () => void;
+  onToggle: (runId: string) => void;
   linked: boolean;
 }) {
   const totals = useMemo(() => runTotals(events), [events]);
@@ -64,22 +67,20 @@ function RunRow({
         type="button"
         aria-expanded={open}
         aria-controls={`${runDomId(run.run_id)}-body`}
-        onClick={onToggle}
+        onClick={() => onToggle(run.run_id)}
         className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-surface-2"
       >
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Chip>{WORKFLOW_LABEL[run.workflow]}</Chip>
+            <span className="text-[0.9rem] font-semibold">{WORKFLOW_LABEL[run.workflow]}</span>
             <RunStatus status={run.status} />
-            {linked ? <Chip tone="brand">Linked run</Chip> : null}
-            <span className="text-[0.88rem] font-semibold">{household}</span>
+            <span className="text-[0.84rem] text-ink-2">{household}</span>
             <span className="num text-[0.76rem] text-ink-3">{relTime(run.started_at, now)}</span>
           </span>
-          <span className="num mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[0.78rem] text-ink-2">
-            <span><b className="font-semibold text-ink">{events.length}</b> steps</span>
-            <span><b className="font-semibold text-ink">{toolCalls}</b> tool calls</span>
-            <span><b className="font-semibold text-ink">{totals.latency ? duration(totals.latency) : "—"}</b> model time</span>
-            <span><b className="font-semibold text-ink">{tokens ? tokens.toLocaleString() : "—"}</b> tokens</span>
+          <span className="num mt-1 block text-[0.78rem] text-ink-2">
+            {events.length
+              ? `${events.length} steps · ${toolCalls} tool calls${totals.latency ? ` · ${duration(totals.latency)} model time` : ""}${tokens ? ` · ${tokens.toLocaleString()} tokens` : ""}`
+              : run.status === "running" ? "Waiting for the first step…" : "Loading steps…"}
           </span>
           {providers.length ? (
             <span className="mt-1.5 flex flex-wrap gap-1">
@@ -92,16 +93,7 @@ function RunRow({
       {open ? <RunBody run={run} events={events} /> : null}
     </li>
   );
-}
-
-function Stat({ label, value, title, className }: { label: string; value: string; title?: string; className?: string }) {
-  return (
-    <div className={cx("bg-surface px-3.5 py-3", className)}>
-      <dt className="text-[0.74rem] text-ink-3">{label}</dt>
-      <dd className="num mt-0.5 truncate text-[1.05rem] font-semibold leading-tight text-ink" title={title ?? value}>{value}</dd>
-    </div>
-  );
-}
+});
 
 function TrailBody() {
   useDataScope("agents");
@@ -110,6 +102,7 @@ function TrailBody() {
   const focus = params.get("run");
   const [wf, setWf] = useState<Workflow | "all">("all");
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [limit, setLimit] = useState(PAGE);
   const all = useRuns();
   const byRun = useTraceByRun();
   const households = useHouseholds();
@@ -125,29 +118,27 @@ function TrailBody() {
     return c;
   }, [all]);
   const live = useMemo(() => all.filter((r) => r.status === "running").length, [all]);
-  const stats = useMemo(() => {
-    let tools = 0;
-    let lat = 0;
-    let n = 0;
+  // Run counts per model provider (a run can use several). "Local tool" steps are not model calls, so they are left out.
+  // The module stores `{provider, model, calls, ...}` objects; the mock engine stores bare names. Accept both.
+  const providerCounts = useMemo(() => {
     const prov = new Map<string, number>();
-    for (const evs of byRun.values()) {
-      for (const e of evs) {
-        if (e.type === "tool_call") tools++;
-        if (e.latency_ms && e.model && e.provider !== "cache") {
-          lat += e.latency_ms;
-          n++;
-        }
-        if (e.model || e.provider === "cache") {
-          const p = providerName(e.provider) || "Unknown";
-          prov.set(p, (prov.get(p) ?? 0) + 1);
-        }
+    for (const r of all) {
+      const names = new Set((r.providers as unknown[]).map((x) => (typeof x === "string" ? x : (x as { provider?: string } | null)?.provider ?? "")).filter((x) => x && x !== "local"));
+      for (const p of names) {
+        const name = providerName(p) || p;
+        prov.set(name, (prov.get(name) ?? 0) + 1);
       }
     }
-    return { tools, avg: n ? lat / n : 0, prov: [...prov.entries()].sort((a, b) => b[1] - a[1]) };
-  }, [byRun]);
+    return [...prov.entries()].sort((a, b) => b[1] - a[1]);
+  }, [all]);
 
   // First open run: the linked one, otherwise the newest run if it is still going.
   const defaultOpenId = focus && all.some((r) => r.run_id === focus) ? focus : runs[0]?.status === "running" ? runs[0].run_id : null;
+
+  const toggle = useCallback(
+    (id: string) => setOverrides((o) => ({ ...o, [id]: !(o[id] ?? id === defaultOpenId) })),
+    [defaultOpenId],
+  );
 
   // ?run=<id>: bring that run into view once it has rendered, once per link.
   const focusReady = !!focus && ready && all.some((r) => r.run_id === focus);
@@ -159,37 +150,36 @@ function TrailBody() {
     el.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [focus, focusReady]);
 
-  const provText = stats.prov.map(([p, n]) => `${p} ${n}`).join(" · ");
+  const provText = providerCounts.map(([p, n]) => `${p} ${n}`).join(" · ");
+  const focusIdx = focus ? runs.findIndex((r) => r.run_id === focus) : -1;
+  const shown = runs.slice(0, Math.max(limit, focusIdx + 1));
+  useRunTraces(shown);
 
   return (
     <>
       <PageHeader
         title="Agent Trail"
-        sub="Every decision below was planned and executed by Nemotron agents calling real tools."
+        sub="Every step below was planned and run by Nemotron agents."
         right={live ? <LivePill label={`${live} live now`} /> : undefined}
       />
 
-      <dl className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-5" aria-label="Agent run totals">
-        <Stat label="Runs" value={String(all.length)} />
-        <Stat label="Live now" value={String(live)} />
-        <Stat label="Tool calls" value={String(stats.tools)} />
-        <Stat label="Avg model latency" value={stats.avg ? duration(stats.avg) : "—"} />
-        <Stat label="Providers" value={provText || "—"} className="col-span-2 sm:col-span-1" />
-      </dl>
+      <p className="num mb-3 text-[0.84rem] text-ink-2" aria-label="Agent run totals">
+        <b className="font-semibold text-ink">{all.length}</b> runs{provText ? <> · runs by provider: {provText}</> : null}
+      </p>
 
       <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter by workflow">
-        {(["all", ...WORKFLOWS] as const).map((w) => (
+        {(["all", ...WORKFLOWS] as const).filter((w) => w === "all" || w === wf || (counts[w] ?? 0) > 0).map((w) => (
           <button
             key={w}
             type="button"
             aria-pressed={wf === w}
-            onClick={() => setWf(w)}
+            onClick={() => { setWf(w); setLimit(PAGE); }}
             className={cx(
               "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[0.8rem] font-medium transition-colors",
               wf === w ? "on-dark border-dark bg-dark text-white" : "border-line-strong bg-surface text-ink-2 hover:text-ink",
             )}
           >
-            {w === "all" ? "All runs" : WORKFLOW_LABEL[w]}
+            {w === "all" ? "All" : WORKFLOW_LABEL[w]}
             <span className={cx("num text-[0.72rem]", wf === w ? "text-white/70" : "text-ink-3")}>{counts[w] ?? 0}</span>
           </button>
         ))}
@@ -207,25 +197,29 @@ function TrailBody() {
       ) : runs.length ? (
         <Card className="overflow-hidden">
           <ul className="divide-y divide-line" aria-label="Agent runs, newest first">
-            {runs.map((r) => (
+            {shown.map((r) => (
               <RunRow
                 key={r.run_id}
                 run={r}
-                events={byRun.get(r.run_id) ?? []}
+                events={byRun.get(r.run_id) ?? NO_EVENTS}
                 household={nameOf(r.household_id)}
                 now={now}
                 open={overrides[r.run_id] ?? r.run_id === defaultOpenId}
-                onToggle={() => setOverrides((o) => ({ ...o, [r.run_id]: !(o[r.run_id] ?? r.run_id === defaultOpenId) }))}
+                onToggle={toggle}
                 linked={r.run_id === focus}
               />
             ))}
           </ul>
+          {runs.length > shown.length ? (
+            <div className="border-t border-line p-3 text-center">
+              <Button variant="secondary" size="sm" onClick={() => setLimit((l) => l + PAGE)}>Show {Math.min(PAGE, runs.length - shown.length)} more ({runs.length - shown.length} left)</Button>
+            </div>
+          ) : null}
         </Card>
       ) : (
         <Empty title={wf === "all" ? "No agent runs yet" : `No ${WORKFLOW_LABEL[wf].toLowerCase()} runs yet`}>
           Start Table Mode or ask {PRODUCT_NAME} a question in{" "}
-          <Link href={`/room/${DEMO_HOUSEHOLD_ID}`} className="font-medium text-brand-strong underline underline-offset-2">the demo household</Link>
-          {" "}and watch the agents work here.
+          <Link href={`/room/${DEMO_HOUSEHOLD_ID}`} className="font-medium text-brand-strong underline underline-offset-2">the demo household</Link>.
         </Empty>
       )}
     </>

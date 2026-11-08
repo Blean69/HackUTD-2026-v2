@@ -1,18 +1,20 @@
 "use client";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { CoachPanel } from "@/components/coach/CoachPanel";
 import { BrandMark, IconActivity, IconClose, IconMenu, IconMore, IconSpark } from "@/components/icons";
+import { CallBrianButton } from "@/components/phone/CallBrianButton";
 import { AgentActivityPanel } from "@/components/trace/AgentActivityPanel";
-import { CallPill, CallSheet } from "@/components/voice/CallSheet";
 import { TalkButton } from "@/components/voice/TalkButton";
-import { openCallSheet } from "@/lib/voiceCall/session";
+import { openCallSheet, useCall } from "@/lib/voiceCall/session";
 import { IconButton } from "@/components/ui";
 import { PRODUCT_NAME } from "@/lib/constants";
 import { useLatestRun } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
 import { cx } from "@/lib/format";
+import { closeCallBrian, useCallBrianOpen } from "@/lib/phoneUi";
 import { closeCoach, closeTrace, openCoach, openTrace, useCoachOpen, useTraceUi } from "@/lib/traceUi";
 import { NAV, TABS } from "./nav";
 import { NotificationsBell } from "./NotificationsBell";
@@ -20,6 +22,12 @@ import { SlideOver } from "./SlideOver";
 import { Sidebar } from "./Sidebar";
 
 const SIDEBAR_W = 232;
+
+// The call sheet is a large piece of UI most visits never open: load it the first time someone reaches for a call.
+const CallSheet = dynamic(() => import("@/components/voice/CallSheet").then((m) => m.CallSheet), { ssr: false });
+const CallPill = dynamic(() => import("@/components/voice/CallSheet").then((m) => m.CallPill), { ssr: false });
+// "Call Brian" (phone number + the household's 5-digit code): also loaded on first use.
+const CallBrianPanel = dynamic(() => import("@/components/phone/CallBrianPanel").then((m) => m.CallBrianPanel), { ssr: false });
 
 /** Header button that opens the Agent activity panel; pulses while a run is in flight. */
 export function AgentActivityButton({ householdId, className, dark }: { householdId?: string; className?: string; dark?: boolean }) {
@@ -66,6 +74,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
   const setMenu = (v: boolean) => setMenuPath(v ? path : null);
   const trace = useTraceUi();
   const coachOpen = useCoachOpen();
+  const callBrianOpen = useCallBrianOpen();
   const ident = useLocalIdentity();
   const latest = useLatestRun(householdId);
   const me = ident.name ?? "Someone";
@@ -84,9 +93,13 @@ export function AppShell({ householdId, header, children }: { householdId: strin
   useEffect(() => {
     closeCoach();
     closeTrace();
+    closeCallBrian();
   }, [path]);
 
   const target = trace.runId ?? latest?.run_id ?? null;
+  const call = useCall();
+  const [voiceUsed, setVoiceUsed] = useState(false);
+  if (!voiceUsed && (call.sheetOpen || call.phase !== "idle")) setVoiceUsed(true);
 
   return (
     <div className="min-h-dvh bg-bg text-ink">
@@ -107,6 +120,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
         <IconButton label={`Ask ${PRODUCT_NAME}`} onClick={openCoach} className="text-white hover:bg-white/10 hover:text-white">
           <IconSpark size={20} />
         </IconButton>
+        <CallBrianButton variant="top" />
         <AgentActivityButton householdId={householdId} dark />
         <NotificationsBell householdId={householdId} me={me} dark />
       </div>
@@ -114,7 +128,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
       <div style={{ ["--sb" as string]: `${SIDEBAR_W}px` }} className="md:pl-[var(--sb)]">
         <div className="mx-auto max-w-[1760px]">
           {header}
-          <main id="main" className="px-4 pb-28 pt-2 sm:px-6 md:pb-12">
+          <main id="main" key={path} className="motion-page px-4 pb-28 pt-2 sm:px-6 md:pb-12">
             {children}
           </main>
         </div>
@@ -150,26 +164,18 @@ export function AppShell({ householdId, header, children }: { householdId: strin
 
       <Drawer open={menu} onClose={() => setMenu(false)} householdId={householdId} />
 
-      {/* "Ask Cosign" launcher, available on every page */}
-      {!coachOpen && !trace.open ? (
-        <button
-          type="button"
-          onClick={openCoach}
-          aria-label={`Ask ${PRODUCT_NAME}`}
-          className="on-dark fixed bottom-[4.5rem] right-4 z-20 inline-flex h-11 items-center gap-2 rounded-full bg-dark px-4 text-[0.88rem] font-semibold text-white hover:bg-[var(--dark-hover)] md:bottom-6 md:right-6"
-        >
-          <IconSpark size={18} />
-          <span className="hidden sm:inline">Ask {PRODUCT_NAME}</span>
-        </button>
-      ) : null}
-
       <SlideOver open={coachOpen} onClose={closeCoach} label={`Ask ${PRODUCT_NAME}`} title={`Ask ${PRODUCT_NAME}`} subtitle="Answers come from tools run on your real accounts. Everyone in the room sees the conversation." icon={<IconSpark size={18} />}>
         <CoachPanel householdId={householdId} me={me} />
       </SlideOver>
       <AgentActivityPanel open={trace.open} runId={target} onClose={closeTrace} />
+      {callBrianOpen ? <CallBrianPanel householdId={householdId} /> : null}
       {/* Voice call: the call lives in lib/voiceCall, so it survives leaving this page. */}
-      <CallSheet householdId={householdId} />
-      <CallPill />
+      {voiceUsed ? (
+        <>
+          <CallSheet householdId={householdId} />
+          <CallPill />
+        </>
+      ) : null}
     </div>
   );
 }

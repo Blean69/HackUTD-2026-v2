@@ -2,15 +2,13 @@
 import type { VoteTally } from "@/lib/data/hooks";
 import { cx } from "@/lib/format";
 
-const pct = (n: number, total: number) => (total ? Math.round((n / total) * 100) : 0);
-
-/** Yes / No / Abstain progress bar plus the counts underneath. */
-export function VoteBar({ tally, className }: { tally: VoteTally; className?: string }) {
+/** Yes / No / Abstain bar with one line of counts underneath. */
+export function VoteBar({ tally, eligible, className }: { tally: VoteTally; eligible?: number; className?: string }) {
   const { yes, no, abstain, total } = tally;
   const summary = `${yes} yes, ${no} no, ${abstain} abstain`;
   return (
     <div className={className}>
-      <div className="flex h-2.5 w-full gap-px overflow-hidden rounded-full bg-line" role="img" aria-label={total ? `Votes so far: ${summary}` : "No votes yet"}>
+      <div className="flex h-2 w-full gap-px overflow-hidden rounded-full bg-line" role="img" aria-label={total ? `Votes so far: ${summary}` : "No votes yet"}>
         {total ? (
           <>
             <span className="bg-good" style={{ width: `${(yes / total) * 100}%` }} />
@@ -19,19 +17,19 @@ export function VoteBar({ tally, className }: { tally: VoteTally; className?: st
           </>
         ) : null}
       </div>
-      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.8rem]">
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.8rem] text-ink-2">
         {[
-          { label: "Yes", n: yes, dot: "bg-good" },
-          { label: "No", n: no, dot: "bg-risk" },
-          { label: "Abstain", n: abstain, dot: "bg-[#aab6b0]" },
+          { label: "yes", n: yes, dot: "bg-good" },
+          { label: "no", n: no, dot: "bg-risk" },
+          { label: "abstain", n: abstain, dot: "bg-[#aab6b0]" },
         ].map((x) => (
-          <li key={x.label} className="flex items-center gap-1.5 text-ink-2">
+          <span key={x.label} className="inline-flex items-center gap-1.5">
             <span className={cx("h-2 w-2 rounded-full", x.dot)} aria-hidden="true" />
             <span className="num font-semibold text-ink">{x.n}</span> {x.label}
-            {total ? <span className="num text-ink-3">({pct(x.n, total)}%)</span> : null}
-          </li>
+          </span>
         ))}
-      </ul>
+        {eligible ? <span className="num ml-auto text-ink-3">{total} of {Math.max(eligible, total)} voted</span> : null}
+      </p>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { IconCap, IconCar, IconCard, IconClose, IconHome, IconPlane, IconPlus, IconTarget } from "@/components/icons";
-import { Button, Card, Chip, Empty, IconTile, PageHeader, Progress, Skeleton, Spinner, inputCls, labelCls, selectCls, type Tone } from "@/components/ui";
+import { Button, Card, Chip, Empty, ErrorNote, IconTile, PageHeader, Progress, Skeleton, Spinner, inputCls, labelCls, selectCls, type Tone } from "@/components/ui";
 import { ProposalList } from "@/components/voting/ProposalList";
 import { deleteGoal, upsertGoal } from "@/lib/data/actions";
-import { useRoomFinance } from "@/lib/data/finance-hooks";
-import { useDataReady, useGoals } from "@/lib/data/hooks";
+import { useToday } from "@/lib/data/finance-hooks";
+import { useAccounts, useGoals, useRoomTables } from "@/lib/data/hooks";
 import { cx, longDate, usd } from "@/lib/format";
 import { goalProgress } from "@/lib/finance";
 import type { Feasibility, Goal, GoalPriority } from "@/lib/types";
@@ -27,15 +27,8 @@ const FEAS: Record<Exclude<Feasibility, "">, { tone: Tone; label: string; hint: 
   stretch: { tone: "watch", label: "Stretch", hint: "Possible with trade-offs or financing" },
   off_track: { tone: "risk", label: "Off track", hint: "Not reachable on today's numbers" },
 };
-const PRI: Record<GoalPriority, { label: string; tone: Tone }> = {
-  high: { label: "High priority", tone: "brand" },
-  medium: { label: "Medium priority", tone: "neutral" },
-  low: { label: "Low priority", tone: "neutral" },
-};
-
 function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalProgress> }) {
   const f = goal.feasibility ? FEAS[goal.feasibility] : null;
-  const pri = PRI[goal.priority];
   const [busy, setBusy] = useState(false);
   const target = goal.target_amount ?? 0;
   const tone: Tone = f?.tone === "risk" || f?.tone === "watch" ? f.tone : "brand";
@@ -53,11 +46,11 @@ function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalPr
     <li>
       <Card className="flex h-full flex-col p-4">
         <div className="flex items-start gap-3">
-          <IconTile tone={tone} size={40}>{goalIcon(goal.title, 20)}</IconTile>
+          <IconTile tone={tone} size={36}>{goalIcon(goal.title, 18)}</IconTile>
           <div className="min-w-0 flex-1">
             <h3 className="text-[0.95rem] font-semibold leading-snug">{goal.title}</h3>
             <p className="num mt-0.5 text-[0.84rem] text-ink-2">
-              {target ? <span className="font-semibold text-ink">{usd(target)}</span> : <span>No target amount</span>}
+              {target ? <span className="font-semibold text-ink">{usd(target)}</span> : <span className="text-ink-3">No target amount</span>}
               {goal.target_date ? <> by {longDate(goal.target_date)}</> : null}
             </p>
           </div>
@@ -74,24 +67,22 @@ function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalPr
         </div>
 
         {saved ? (
-          <div className="mt-3.5">
+          <div className="mt-3">
             <div className="flex items-baseline justify-between gap-2 text-[0.78rem]">
               <span className="num text-ink-2"><span className="font-semibold text-ink">{usd(saved.saved)}</span> of {usd(target)}</span>
               <span className="num font-semibold">{Math.round(saved.pct)}%</span>
             </div>
             <Progress value={saved.pct} tone={tone} label={`${goal.title} progress`} className="mt-1.5" />
-            <p className="mt-1 text-[0.72rem] text-ink-3">{saved.basis === "account" ? "est. from your matching savings account" : "est. pace: time elapsed, adjusted for feasibility"}</p>
           </div>
         ) : null}
 
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
           {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip title="The agents are checking this against your accounts">Checking</Chip>}
-          <Chip tone={pri.tone}>{pri.label}</Chip>
-          {goal.source === "huddle" ? <Chip tone="info" title="Captured in a Table Mode session">From Table Mode</Chip> : null}
+          {goal.priority === "high" ? <span className="text-[0.76rem] font-medium text-ink-2">High priority</span> : null}
         </div>
 
         {goal.evidence_quote ? (
-          <blockquote className="mt-3 border-l-2 border-line-strong pl-3 text-[0.82rem] italic leading-snug text-ink-2">&ldquo;{goal.evidence_quote}&rdquo;</blockquote>
+          <blockquote className="mt-3 line-clamp-2 border-l-2 border-line-strong pl-3 text-[0.82rem] italic leading-snug text-ink-2">&ldquo;{goal.evidence_quote}&rdquo;</blockquote>
         ) : null}
       </Card>
     </li>
@@ -155,7 +146,7 @@ function AddGoalForm({ householdId, onDone }: { householdId: string; onDone: () 
             </select>
           </div>
         </div>
-        {err ? <p role="alert" className="mt-3 rounded-md bg-risk-soft px-3 py-2 text-[0.84rem] text-risk">{err}</p> : null}
+        {err ? <ErrorNote className="mt-3">{err}</ErrorNote> : null}
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="submit" disabled={busy || !title.trim()}>
             {busy ? <Spinner /> : null}
@@ -168,17 +159,22 @@ function AddGoalForm({ householdId, onDone }: { householdId: string; onDone: () 
   );
 }
 
+const SHOWN = 6;
+
 export function GoalsPage({ householdId }: { householdId: string }) {
-  const ready = useDataReady();
+  const ready = useRoomTables(householdId, ["goal"]);
   const goals = useGoals(householdId);
-  const fin = useRoomFinance(householdId);
+  const accounts = useAccounts(householdId);
+  const today = useToday();
   const [adding, setAdding] = useState(false);
+  const [all, setAll] = useState(false);
+  const shown = useMemo(() => (all ? goals : goals.slice(0, SHOWN)), [all, goals]);
 
   return (
     <div>
       <PageHeader
         title="Goals"
-        sub="What the household is saving toward, checked against real balances"
+        sub="Checked against your real balances."
         right={
           <Button onClick={() => setAdding((a) => !a)} aria-expanded={adding} aria-controls="add-goal">
             {adding ? <IconClose size={16} /> : <IconPlus size={16} />}
@@ -193,14 +189,22 @@ export function GoalsPage({ householdId }: { householdId: string }) {
 
       {!ready ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading goals">
-          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-44 !rounded-lg" />)}
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-40 !rounded-lg" />)}
         </div>
       ) : goals.length ? (
-        <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Household goals">
-          {goals.map((g) => <GoalCard key={g.id} goal={g} saved={goalProgress(g, fin.accounts, fin.today)} />)}
-        </ul>
+        <>
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Household goals">
+            {shown.map((g) => <GoalCard key={g.id} goal={g} saved={goalProgress(g, accounts, today)} />)}
+          </ul>
+          {goals.length > SHOWN ? (
+            <div className="mt-3">
+              <Button variant="secondary" size="sm" onClick={() => setAll((v) => !v)}>{all ? "Show fewer" : `Show all ${goals.length} goals`}</Button>
+            </div>
+          ) : null}
+          <p className="mt-3 text-[0.76rem] text-ink-3">Progress is estimated from a matching savings account, or from the goal&apos;s timeline.</p>
+        </>
       ) : (
-        <Empty title="No goals yet">Add one above, or run a Table Mode session and the agents will turn what you say into goals.</Empty>
+        <Empty title="No goals yet">Add one, or run Table Mode and the agents will turn what you say into goals.</Empty>
       )}
 
       <div className="mt-8">

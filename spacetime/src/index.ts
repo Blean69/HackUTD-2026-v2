@@ -12,6 +12,7 @@ export * from './reducers/proposal';
 export * from './reducers/recompute';
 export * from './reducers/plaid';
 export * from './reducers/onboarding';
+export * from './reducers/phone';
 export * from './reducers/worker';
 export * from './reducers/admin';
 export * from './reducers/seed';

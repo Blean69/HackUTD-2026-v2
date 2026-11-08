@@ -52,6 +52,7 @@ import AppendTranscriptReducer from "./append_transcript_reducer";
 import AskCoachReducer from "./ask_coach_reducer";
 import CastVoteReducer from "./cast_vote_reducer";
 import ClaimJobReducer from "./claim_job_reducer";
+import ClearPhonePinReducer from "./clear_phone_pin_reducer";
 import CloseProposalReducer from "./close_proposal_reducer";
 import CreateProposalReducer from "./create_proposal_reducer";
 import CreateSandboxReducer from "./create_sandbox_reducer";
@@ -80,6 +81,7 @@ import SeedTxnsReducer from "./seed_txns_reducer";
 import SeedVotesReducer from "./seed_votes_reducer";
 import SelectBankAccountsReducer from "./select_bank_accounts_reducer";
 import SetHuddleStatusReducer from "./set_huddle_status_reducer";
+import SetPhonePinReducer from "./set_phone_pin_reducer";
 import StartHuddleReducer from "./start_huddle_reducer";
 import StartOnboardingReducer from "./start_onboarding_reducer";
 import StartRunReducer from "./start_run_reducer";
@@ -106,6 +108,7 @@ import HouseholdProfileRow from "./household_profile_table";
 import HuddleRow from "./huddle_table";
 import MemberRow from "./member_table";
 import ObligationRow from "./obligation_table";
+import PhoneAccessStatusRow from "./phone_access_status_table";
 import PresenceRow from "./presence_table";
 import ProposalRow from "./proposal_table";
 import ScenarioRow from "./scenario_table";
@@ -113,6 +116,7 @@ import TraceEventRow from "./trace_event_table";
 import TranscriptLineRow from "./transcript_line_table";
 import TxnRow from "./txn_table";
 import VoteRow from "./vote_table";
+import WorkerPhoneAccessRow from "./worker_phone_access_table";
 import WorkerPlaidItemsRow from "./worker_plaid_items_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -374,6 +378,17 @@ const tablesSchema = __schema({
       { name: 'obligation_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, ObligationRow),
+  phoneAccessStatus: __table({
+    name: 'phone_access_status',
+    indexes: [
+      { accessor: 'household_id', name: 'phone_access_status_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+    ],
+    constraints: [
+      { name: 'phone_access_status_household_id_key', constraint: 'unique', columns: ['householdId'] },
+    ],
+  }, PhoneAccessStatusRow),
   presence: __table({
     name: 'presence',
     indexes: [
@@ -484,6 +499,13 @@ const tablesSchema = __schema({
       { name: 'vote_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, VoteRow),
+  workerPhoneAccess: __table({
+    name: 'worker_phone_access',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, WorkerPhoneAccessRow),
   workerPlaidItems: __table({
     name: 'worker_plaid_items',
     indexes: [
@@ -513,6 +535,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ask_coach", AskCoachReducer),
   __reducerSchema("cast_vote", CastVoteReducer),
   __reducerSchema("claim_job", ClaimJobReducer),
+  __reducerSchema("clear_phone_pin", ClearPhonePinReducer),
   __reducerSchema("close_proposal", CloseProposalReducer),
   __reducerSchema("create_proposal", CreateProposalReducer),
   __reducerSchema("create_sandbox", CreateSandboxReducer),
@@ -541,6 +564,7 @@ const reducersSchema = __reducers(
   __reducerSchema("seed_votes", SeedVotesReducer),
   __reducerSchema("select_bank_accounts", SelectBankAccountsReducer),
   __reducerSchema("set_huddle_status", SetHuddleStatusReducer),
+  __reducerSchema("set_phone_pin", SetPhonePinReducer),
   __reducerSchema("start_huddle", StartHuddleReducer),
   __reducerSchema("start_onboarding", StartOnboardingReducer),
   __reducerSchema("start_run", StartRunReducer),
@@ -573,10 +597,14 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "health_indicator": Omit<typeof tablesSchema.schemaType.tables["healthIndicator"], "accessorName"> & { readonly accessorName: "health_indicator" };
     /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
     readonly "household_profile": Omit<typeof tablesSchema.schemaType.tables["householdProfile"], "accessorName"> & { readonly accessorName: "household_profile" };
+    /** @deprecated Use `phoneAccessStatus` instead. This alias will be removed in the next major version. */
+    readonly "phone_access_status": Omit<typeof tablesSchema.schemaType.tables["phoneAccessStatus"], "accessorName"> & { readonly accessorName: "phone_access_status" };
     /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
     readonly "trace_event": Omit<typeof tablesSchema.schemaType.tables["traceEvent"], "accessorName"> & { readonly accessorName: "trace_event" };
     /** @deprecated Use `transcriptLine` instead. This alias will be removed in the next major version. */
     readonly "transcript_line": Omit<typeof tablesSchema.schemaType.tables["transcriptLine"], "accessorName"> & { readonly accessorName: "transcript_line" };
+    /** @deprecated Use `workerPhoneAccess` instead. This alias will be removed in the next major version. */
+    readonly "worker_phone_access": Omit<typeof tablesSchema.schemaType.tables["workerPhoneAccess"], "accessorName"> & { readonly accessorName: "worker_phone_access" };
     /** @deprecated Use `workerPlaidItems` instead. This alias will be removed in the next major version. */
     readonly "worker_plaid_items": Omit<typeof tablesSchema.schemaType.tables["workerPlaidItems"], "accessorName"> & { readonly accessorName: "worker_plaid_items" };
   };
@@ -607,8 +635,10 @@ const tableAccessorAliases = {
   "forecast_point": "forecastPoint",
   "health_indicator": "healthIndicator",
   "household_profile": "householdProfile",
+  "phone_access_status": "phoneAccessStatus",
   "trace_event": "traceEvent",
   "transcript_line": "transcriptLine",
+  "worker_phone_access": "workerPhoneAccess",
   "worker_plaid_items": "workerPlaidItems",
 } as const;
 
@@ -650,10 +680,14 @@ export type DbView = __DbViewBase & {
   readonly "health_indicator": __DbViewBase["healthIndicator"];
   /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
   readonly "household_profile": __DbViewBase["householdProfile"];
+  /** @deprecated Use `phoneAccessStatus` instead. This alias will be removed in the next major version. */
+  readonly "phone_access_status": __DbViewBase["phoneAccessStatus"];
   /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
   readonly "trace_event": __DbViewBase["traceEvent"];
   /** @deprecated Use `transcriptLine` instead. This alias will be removed in the next major version. */
   readonly "transcript_line": __DbViewBase["transcriptLine"];
+  /** @deprecated Use `workerPhoneAccess` instead. This alias will be removed in the next major version. */
+  readonly "worker_phone_access": __DbViewBase["workerPhoneAccess"];
   /** @deprecated Use `workerPlaidItems` instead. This alias will be removed in the next major version. */
   readonly "worker_plaid_items": __DbViewBase["workerPlaidItems"];
 };
@@ -680,10 +714,14 @@ export type Tables = __TablesBase & {
   readonly "health_indicator": __TablesBase["healthIndicator"];
   /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
   readonly "household_profile": __TablesBase["householdProfile"];
+  /** @deprecated Use `phoneAccessStatus` instead. This alias will be removed in the next major version. */
+  readonly "phone_access_status": __TablesBase["phoneAccessStatus"];
   /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
   readonly "trace_event": __TablesBase["traceEvent"];
   /** @deprecated Use `transcriptLine` instead. This alias will be removed in the next major version. */
   readonly "transcript_line": __TablesBase["transcriptLine"];
+  /** @deprecated Use `workerPhoneAccess` instead. This alias will be removed in the next major version. */
+  readonly "worker_phone_access": __TablesBase["workerPhoneAccess"];
   /** @deprecated Use `workerPlaidItems` instead. This alias will be removed in the next major version. */
   readonly "worker_plaid_items": __TablesBase["workerPlaidItems"];
 };

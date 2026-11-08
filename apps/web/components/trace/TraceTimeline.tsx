@@ -38,6 +38,7 @@ const agentName = (a: string) => a.replace(/_/g, " ");
 /**
  * Activity log for one agent run: a quiet vertical rail with a small marker per step, the agent, the step type,
  * the time, the model + provider chips, and the raw `data` behind each step in a collapsible block.
+ * `compact` is the summary form (Table Mode): no per-step chips or raw data; the caller shows the run's models once.
  */
 export function TraceTimeline({
   events, running, compact, autoScroll, scrollRef,
@@ -98,7 +99,7 @@ export function TraceTimeline({
             ) : null}
             {e.provider || e.model || e.latency_ms || e.tokens ? (
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <ProviderBadge model={e.model} provider={e.provider} />
+                {compact ? null : <ProviderBadge model={e.model} provider={e.provider} />}
                 {e.latency_ms ? <span className="num text-[0.72rem] text-ink-3">{duration(e.latency_ms)}</span> : null}
                 {e.tokens ? <span className="num text-[0.72rem] text-ink-3">{e.tokens.in} in · {e.tokens.out} out tokens</span> : null}
               </div>

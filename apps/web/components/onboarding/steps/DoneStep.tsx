@@ -1,20 +1,25 @@
 "use client";
 import { useEffect, useRef, useState, type Ref } from "react";
-import { IconArrowRight } from "@/components/icons";
+import { IconArrowRight, IconCheck } from "@/components/icons";
 import { Button } from "@/components/ui";
+import { OnboardingCallBrian } from "@/components/phone/OnboardingCallBrian";
 import { friendlyError, onboarding, useInsightsRun, type HouseholdProfile, type OnboardingBank } from "@/lib/data/onboarding";
 import { AgentResults } from "../AgentResults";
 import { Notice, StepFooter, StepHeading } from "../fields";
+import { InviteButton } from "../PresenceBar";
 import { SyncStatus } from "../SyncStatus";
 
-/** Step 6: `finish_onboarding`, then the assistant's work in plain words, then the way into the dashboard. */
+/** Step 6: `finish_onboarding` once the import has settled, the agents' first pass live, then the hand-off. */
 export function DoneStep({
-  householdId, bank, profile, name, onDashboard, onChooseAccounts, headingRef,
+  householdId, householdName, bank, profile, name, expectedAccounts, expectedTxns, onDashboard, onChooseAccounts, headingRef,
 }: {
   householdId: string;
+  householdName?: string;
   bank?: OnboardingBank;
   profile?: HouseholdProfile;
   name: string;
+  expectedAccounts: number;
+  expectedTxns?: number;
   onDashboard: () => void;
   onChooseAccounts: () => void;
   headingRef: Ref<HTMLHeadingElement>;
@@ -29,44 +34,43 @@ export function DoneStep({
   const alreadyDone = profile?.status === "done" || !!run;
   // The module refuses to finish mid-sync or before accounts are chosen, so wait for the bank to settle.
   const canFinish = !syncing && !needsChoice;
+  const finished = run?.status === "done";
 
-  // Finish once the bank has caught up (so the agent reads the full ledger), exactly once per attempt.
+  // Finish once the import has caught up (so the agents read the full ledger), exactly once per attempt.
   useEffect(() => {
     if (alreadyDone || !canFinish || started.current === attempt) return;
     started.current = attempt;
-    onboarding.finish(householdId).catch((e: unknown) => setErr(friendlyError(e, "We couldn't wrap up just yet.")));
+    onboarding.finish(householdId).catch((e: unknown) => setErr(friendlyError(e, "We couldn't start the agents just yet.")));
   }, [alreadyDone, canFinish, attempt, householdId]);
 
+  const first = name.split(" ")[0];
   return (
     <div>
+      <div className="mb-1 flex items-center gap-3">
+        <span className="motion-pop flex h-11 w-11 items-center justify-center rounded-full bg-good-soft text-good">
+          <IconCheck size={22} strokeWidth={2.6} />
+        </span>
+      </div>
       <StepHeading
         headingRef={headingRef}
-        title={`You're all set${name ? `, ${name.split(" ")[0]}` : ""}`}
-        sub="Your dashboard is ready. While you are here, watch your assistant take a first pass through the numbers."
+        title={`You're all set${first ? `, ${first}` : ""}`}
+        sub={finished ? "Here is what your agents found. Everything is waiting on your dashboard." : "Your agents are reading your accounts now. Watch their first findings arrive."}
       />
 
       {needsChoice ? (
-        <div className="mb-4">
-          <Notice
-            tone="warn"
-            action={
-              <Button variant="secondary" size="sm" onClick={onChooseAccounts}>
-                Choose accounts
-              </Button>
-            }
-          >
-            Pick which accounts to import first, so your assistant sees the whole picture.
+        <div className="mb-5">
+          <Notice tone="warn" action={<Button variant="secondary" size="sm" onClick={onChooseAccounts}>Choose</Button>}>
+            Pick which accounts to import first, so the agents see the whole picture.
           </Notice>
         </div>
-      ) : bank ? (
-        <div className="mb-4">
-          <SyncStatus bank={bank} compact />
-          {syncing ? <p className="mt-2 text-[0.8rem] text-ink-2">Your assistant starts as soon as the sync finishes, so nothing is missed. Your dashboard is ready whenever you are.</p> : null}
+      ) : bank && syncing ? (
+        <div className="mb-6">
+          <SyncStatus bank={bank} expectedAccounts={expectedAccounts} expectedTxns={expectedTxns} />
         </div>
       ) : null}
 
       {err ? (
-        <div className="mb-4">
+        <div className="mb-5">
           <Notice
             tone="error"
             action={
@@ -89,9 +93,17 @@ export function DoneStep({
 
       <AgentResults householdId={householdId} waiting={!canFinish} />
 
+      {/* Optional and skippable: a 5-digit code so Brian knows whose accounts to open when this household calls. */}
+      <OnboardingCallBrian householdId={householdId} />
+
+      <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.84rem] text-ink-2">
+        <span>Planning together?</span>
+        <InviteButton householdId={householdId} householdName={householdName} />
+      </div>
+
       <StepFooter>
         <Button size="lg" onClick={onDashboard}>
-          Go to my dashboard <IconArrowRight size={18} />
+          Open your dashboard <IconArrowRight size={18} />
         </Button>
       </StepFooter>
     </div>

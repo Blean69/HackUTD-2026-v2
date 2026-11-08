@@ -1,5 +1,5 @@
-import { LandingClient } from "@/components/LandingClient";
+import { Landing } from "@/components/landing/Landing";
 
 export default function Home() {
-  return <LandingClient />;
+  return <Landing />;
 }

@@ -1,51 +1,61 @@
 "use client";
 import { useMemo, useState, type Ref } from "react";
-import { Button, Chip, Skeleton } from "@/components/ui";
+import { IconCheck } from "@/components/icons";
+import { CountUp } from "@/components/motion";
+import { Button, Skeleton } from "@/components/ui";
 import { cx } from "@/lib/format";
 import { accountKind, friendlyError, onboarding, type AccountOption, type OnboardingBank } from "@/lib/data/onboarding";
 import { BusyLabel, money, Notice, StepFooter, StepHeading } from "../fields";
 
-function Row({ o, checked, onToggle, institution }: { o: AccountOption; checked: boolean; onToggle: () => void; institution: string }) {
+function Row({ o, checked, onToggle, disabled, i }: { o: AccountOption; checked: boolean; onToggle: () => void; disabled?: boolean; i: number }) {
   const k = accountKind(o);
   const id = `acct-${o.id}`;
   return (
-    <li>
-      <label htmlFor={id} className={cx("flex min-h-[3.5rem] cursor-pointer items-center gap-3 px-3.5 py-2.5 transition-colors hover:bg-surface-2", checked && "bg-brand-soft/30")}>
-        <input id={id} type="checkbox" checked={checked} onChange={onToggle} className="h-5 w-5 shrink-0 accent-brand" />
+    <li className="motion-fade" style={{ ["--i" as string]: i }}>
+      <label htmlFor={id} className={cx("flex min-h-[3.75rem] items-center gap-3 px-4 py-3 transition-colors has-[:focus-visible]:bg-surface-2", disabled ? "cursor-default" : "cursor-pointer hover:bg-surface-2")}>
+        <input id={id} type="checkbox" checked={checked} onChange={onToggle} disabled={disabled} className="peer sr-only" />
+        <span
+          aria-hidden="true"
+          className={cx(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--focus)]",
+            checked ? "border-brand bg-brand text-white" : "border-line-strong bg-surface",
+          )}
+        >
+          {checked ? <IconCheck size={13} strokeWidth={3} /> : null}
+        </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[0.92rem] font-medium leading-tight">{o.name}</span>
-          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[0.78rem] text-ink-2">
-            <span className="truncate">{institution}</span>
-            <Chip tone={k.debt ? "watch" : "brand"}>{k.label}</Chip>
-            {o.mask ? <span className="num text-ink-3">••{o.mask}</span> : null}
+          <span className={cx("block truncate text-[0.94rem] font-medium leading-tight", !checked && "text-ink-2")}>{o.name}</span>
+          <span className="mt-0.5 block text-[0.8rem] text-ink-3">
+            {k.label}
+            {o.mask ? <span className="num"> ••{o.mask}</span> : null}
           </span>
         </span>
-        <span className="num shrink-0 text-right text-[0.92rem] font-semibold">
+        <span className={cx("num shrink-0 text-right text-[0.94rem] font-semibold", !checked && "text-ink-3")}>
+          {k.debt ? "−" : ""}
           {money(o.balance)}
-          {k.debt ? <span className="block text-[0.7rem] font-normal text-ink-3">owed</span> : null}
         </span>
       </label>
     </li>
   );
 }
 
-/** Step 4: pick which accounts to import (`select_bank_accounts`). All on by default, with live asset and debt totals. */
+/** Step 4: pick which accounts to import (`select_bank_accounts`). All on by default, with live totals. */
 export function AccountsStep({
-  householdId, bank, options, onBack, onDone, onBackToConnect, headingRef,
+  householdId, bank, options, onBack, onDone, headingRef,
 }: {
   householdId: string;
   bank?: OnboardingBank;
   options: AccountOption[];
   onBack: () => void;
   onDone: () => void;
-  onBackToConnect: () => void;
   headingRef: Ref<HTMLHeadingElement>;
 }) {
-  // What the family has changed on this screen; anything untouched follows the stored `selected` flag (on by default).
+  // What the family changed on this screen; anything untouched follows the stored `selected` flag (on by default).
   const [touched, setTouched] = useState<Readonly<Record<string, boolean>>>({});
   const isOn = (o: AccountOption) => touched[o.account_id] ?? o.selected;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const imported = bank?.status === "syncing" || bank?.status === "ok";
 
   const totals = useMemo(() => {
     let assets = 0;
@@ -65,6 +75,7 @@ export function AccountsStep({
   const toggle = (o: AccountOption) => setTouched((prev) => ({ ...prev, [o.account_id]: !(prev[o.account_id] ?? o.selected) }));
 
   async function submit() {
+    if (imported) return onDone();
     if (!bank || busy || totals.count === 0) return;
     setBusy(true);
     setErr(null);
@@ -80,24 +91,34 @@ export function AccountsStep({
   if (!bank || options.length === 0) {
     return (
       <div>
-        <StepHeading headingRef={headingRef} title="Choose accounts" sub="Pick the accounts you want your assistant to see." />
-        {!bank ? (
-          <Notice tone="info" action={<Button variant="secondary" size="sm" onClick={onBackToConnect}>Connect a bank</Button>}>
-            No bank is connected yet.
-          </Notice>
-        ) : (
-          <div className="space-y-2" role="status" aria-label="Loading your accounts">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
-        )}
+        <StepHeading headingRef={headingRef} title="Choose accounts" sub="Finding the accounts at your bank…" />
+        <div className="divide-y divide-line overflow-hidden rounded-lg border border-line" role="status" aria-label="Loading your accounts">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-4">
+              <Skeleton className="h-5 w-5" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
         <StepFooter onBack={onBack} />
       </div>
     );
   }
 
   const allOn = totals.count === options.length;
+  const group = (title: string, rows: AccountOption[], offset: number) =>
+    rows.length ? (
+      <section aria-label={title}>
+        <h2 className="mb-1.5 text-[0.8rem] font-semibold text-ink-3">{title}</h2>
+        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
+          {rows.map((o, i) => (
+            <Row key={o.id} o={o} i={offset + i} checked={isOn(o)} onToggle={() => toggle(o)} disabled={imported || busy} />
+          ))}
+        </ul>
+      </section>
+    ) : null;
+
   return (
     <form
       onSubmit={(e) => {
@@ -105,58 +126,43 @@ export function AccountsStep({
         void submit();
       }}
     >
-      <StepHeading headingRef={headingRef} title="Choose accounts" sub="Everything starts selected. Untick anything you would rather keep out. You can change this later." />
+      <StepHeading
+        headingRef={headingRef}
+        title="Choose accounts"
+        sub={imported ? "These accounts are on their way in." : `Everything at ${bank.institution_name || "your bank"} starts selected. Untick anything you would rather keep out.`}
+      />
 
-      <div className="mb-3 grid grid-cols-3 gap-2 rounded-lg border border-line bg-surface-2 p-3 text-center" role="status" aria-live="polite" aria-label="Totals for the selected accounts">
+      <div className="mb-5 grid grid-cols-3 rounded-lg bg-surface-2 py-3 text-center" role="status" aria-live="polite" aria-label="Totals for the selected accounts">
         <div>
-          <p className="text-[0.72rem] text-ink-2">Assets</p>
-          <p className="num text-[1rem] font-semibold text-good">{money(totals.assets)}</p>
+          <p className="text-[0.74rem] text-ink-3">Assets</p>
+          <CountUp value={totals.assets} format={money} className="mt-0.5 block text-[1.02rem] font-semibold" />
+        </div>
+        <div className="border-x border-line">
+          <p className="text-[0.74rem] text-ink-3">Debts</p>
+          <CountUp value={totals.debts} format={money} className="mt-0.5 block text-[1.02rem] font-semibold" />
         </div>
         <div>
-          <p className="text-[0.72rem] text-ink-2">Debts</p>
-          <p className="num text-[1rem] font-semibold text-watch">{money(totals.debts)}</p>
+          <p className="text-[0.74rem] text-ink-3">Net</p>
+          <CountUp value={totals.net} format={money} className="mt-0.5 block text-[1.02rem] font-semibold" />
         </div>
-        <div>
-          <p className="text-[0.72rem] text-ink-2">Net</p>
-          <p className="num text-[1rem] font-semibold">{money(totals.net)}</p>
-        </div>
-        {totals.debts > 0 ? <p className="col-span-3 text-[0.74rem] leading-snug text-ink-3">Bank accounts only. We add your home and car value in a moment.</p> : null}
       </div>
 
-      <div className="mb-2 flex items-center justify-between">
-        <p className="num text-[0.82rem] text-ink-2">
-          {totals.count} of {options.length} selected
-        </p>
-        <Button variant="ghost" size="sm" onClick={() => setTouched(Object.fromEntries(options.map((o) => [o.account_id, !allOn])))}>
-          {allOn ? "Select none" : "Select all"}
-        </Button>
-      </div>
+      {totals.net < 0 ? <p className="-mt-3 mb-5 text-[0.8rem] text-ink-3">Bank accounts only. Your home and car are added in a moment.</p> : null}
 
-      <div className="space-y-3">
-        {owned.length ? (
-          <section aria-labelledby="own-h">
-            <h2 id="own-h" className="mb-1 text-[0.78rem] font-semibold uppercase tracking-wide text-ink-3">
-              What you own
-            </h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-              {owned.map((o) => (
-                <Row key={o.id} o={o} institution={bank.institution_name} checked={isOn(o)} onToggle={() => toggle(o)} />
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        {owed.length ? (
-          <section aria-labelledby="owe-h">
-            <h2 id="owe-h" className="mb-1 text-[0.78rem] font-semibold uppercase tracking-wide text-ink-3">
-              What you owe
-            </h2>
-            <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line">
-              {owed.map((o) => (
-                <Row key={o.id} o={o} institution={bank.institution_name} checked={isOn(o)} onToggle={() => toggle(o)} />
-              ))}
-            </ul>
-          </section>
-        ) : null}
+      {!imported ? (
+        <div className="mb-2 flex items-center justify-between">
+          <p className="num text-[0.84rem] text-ink-2">
+            {totals.count} of {options.length} selected
+          </p>
+          <Button variant="ghost" size="sm" onClick={() => setTouched(Object.fromEntries(options.map((o) => [o.account_id, !allOn])))}>
+            {allOn ? "Clear all" : "Select all"}
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="space-y-4">
+        {group("What you own", owned, 0)}
+        {group("What you owe", owed, owned.length)}
       </div>
 
       {err ? (
@@ -165,10 +171,10 @@ export function AccountsStep({
         </div>
       ) : null}
 
-      <StepFooter onBack={onBack} note={totals.count === 0 ? "Pick at least one account to import, or go back and skip the bank." : undefined}>
-        <Button type="submit" size="lg" disabled={busy || totals.count === 0}>
+      <StepFooter onBack={onBack} note={totals.count === 0 && !imported ? "Pick at least one account to import." : undefined}>
+        <Button type="submit" size="lg" disabled={busy || (!imported && totals.count === 0)}>
           <BusyLabel busy={busy} busyText="Importing…">
-            Import {totals.count} {totals.count === 1 ? "account" : "accounts"}
+            {imported ? "Continue" : `Import ${totals.count} ${totals.count === 1 ? "account" : "accounts"}`}
           </BusyLabel>
         </Button>
       </StepFooter>

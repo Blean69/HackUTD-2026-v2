@@ -150,6 +150,8 @@ export const delete_sandbox = spacetimedb.reducer({ household_id: t.string() }, 
   ctx.db.household_profile.household_id.delete(household_id);
   for (const r of [...ctx.db.bank_connection.household_id.filter(household_id)]) ctx.db.bank_connection.item_id.delete(r.item_id);
   for (const r of [...ctx.db.plaid_item.household_id.filter(household_id)]) ctx.db.plaid_item.item_id.delete(r.item_id);
+  ctx.db.phone_access.household_id.delete(household_id);
+  ctx.db.phone_access_status.household_id.delete(household_id);
   ctx.db.dirty_household.household_id.delete(household_id);
   ctx.db.household.id.delete(household_id);
 });

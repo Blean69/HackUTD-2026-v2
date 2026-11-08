@@ -40,6 +40,7 @@ services:
         NEXT_PUBLIC_SPACETIME_DB: ${NEXT_PUBLIC_SPACETIME_DB:-${SPACETIME_DB:-keystone}}
         NEXT_PUBLIC_WORKER_URL: ${NEXT_PUBLIC_WORKER_URL:-https://${PUBLIC_HOSTNAME:-localhost}/worker}
         NEXT_PUBLIC_VOICE_URL: ${NEXT_PUBLIC_VOICE_URL:-https://${PUBLIC_HOSTNAME:-localhost}/voice}   # the Talk button's /api/offer lives under this
+        NEXT_PUBLIC_PHONE_NUMBER: ${NEXT_PUBLIC_PHONE_NUMBER-+18444681795}   # "Call Brian" number shown in the app; set empty to hide it (note "-" not ":-")
         NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS:-0}
     image: keystone-web:latest
     restart: always

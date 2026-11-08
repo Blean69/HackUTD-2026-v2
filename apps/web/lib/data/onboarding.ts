@@ -16,11 +16,12 @@
  * store through the ordinary hooks, so the same screens work in both modes.
  */
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { WORKER_URL } from "@/lib/constants";
 import { workerPost } from "@/lib/worker";
 import type {
-  Account, AccountType, AgentRun, Alert, AlertKind, Goal, MemberRole, Obligation, TraceEvent, TraceType, Transaction, Workflow,
+  Account, AccountType, AgentRun, Alert, AlertKind, Goal, Household, MemberRole, Obligation, TraceEvent, TraceType, Transaction, Workflow,
 } from "@/lib/types";
-import { getConnection } from "./connection";
+import { getConnection, useConnection } from "./connection";
 import { useBankConnections, useRows, useTraceEvents } from "./hooks";
 import { computeForecast, computeHealth, isoDate } from "./mock/math";
 import { ensureBackend } from "./runtime";
@@ -31,14 +32,17 @@ import { emptyRows, store } from "./store";
 
 export const STEPS = [
   { key: "welcome", label: "Welcome" },
-  { key: "household", label: "Household" },
-  { key: "connect", label: "Connect bank" },
+  { key: "household", label: "Your household" },
+  { key: "connect", label: "Connect your bank" },
   { key: "accounts", label: "Choose accounts" },
-  { key: "about", label: "About you" },
+  { key: "questions", label: "A few questions" },
   { key: "done", label: "Done" },
 ] as const;
 export type StepKey = (typeof STEPS)[number]["key"];
 export const STEP_COUNT = STEPS.length;
+export const stepIndex = (k: string): number => STEPS.findIndex((s) => s.key === k);
+/** The "A few questions" step is three short screens. */
+export const QUESTION_COUNT = 3;
 
 export const INSIGHTS_WORKFLOW = "onboarding_insights";
 export const MAX_PRIORITIES = 3;
@@ -167,6 +171,201 @@ export function accountKind(o: { type: string; subtype: string }): AccountKind {
   if (/saving|money market|cash management|hsa/.test(t)) return { type: "savings", label: "Savings", debt: false };
   return { type: "checking", label: "Checking", debt: false };
 }
+
+/** Round to a friendly figure people would actually say out loud. */
+const roundTo = (n: number, step: number) => Math.max(step, Math.round(n / step) * step);
+
+/**
+ * Smart defaults for the questions, from the accounts the family chose to import: a mortgage means they own their home
+ * (value estimated at a typical 65% loan-to-value), an auto loan means a car worth a little more than what is owed.
+ */
+export function answerDefaults(selected: readonly { type: string; subtype: string; balance: number }[]): Pick<OnboardingAnswers, "own_home" | "home_value" | "vehicle_value"> & { homeEstimated: boolean; vehicleEstimated: boolean } {
+  let mortgage = 0;
+  let auto = 0;
+  for (const o of selected) {
+    const k = accountKind(o).type;
+    if (k === "mortgage") mortgage += Math.abs(o.balance);
+    if (k === "auto_loan") auto += Math.abs(o.balance);
+  }
+  return {
+    own_home: mortgage > 0,
+    home_value: mortgage > 0 ? roundTo(mortgage / 0.65, 5000) : 0,
+    vehicle_value: auto > 0 ? roundTo(auto * 1.2, 500) : 0,
+    homeEstimated: mortgage > 0,
+    vehicleEstimated: auto > 0,
+  };
+}
+
+// ------------------------------------------------------------------------------------------------ sandbox profiles (7b)
+
+/** `GET /plaid/sandbox_profiles` row (docs/contracts.md section 7b). */
+export interface SandboxProfileAccount {
+  name: string;
+  type: string;
+  subtype: string;
+  mask: string;
+  balance: number;
+}
+export interface SandboxProfile {
+  profile_id: string;
+  display_name: string;
+  summary: string;
+  accounts: SandboxProfileAccount[];
+  txn_count: number;
+}
+export const DEFAULT_PROFILE_ID = "family_demo";
+
+/**
+ * Stand-ins shaped exactly like the worker's response, used when the worker (or its profiles route) is not reachable.
+ * `family_demo` mirrors data/plaid/sandbox_user.json, which the worker connects by default.
+ */
+export const MOCK_PROFILES: SandboxProfile[] = [
+  {
+    profile_id: DEFAULT_PROFILE_ID,
+    display_name: "Ana and Luis, two incomes, a home and a car",
+    summary: "A family with a mortgage, an auto loan, a rewards card and steady savings.",
+    accounts: [
+      { name: "Everyday Checking", type: "depository", subtype: "checking", mask: "0001", balance: 6200 },
+      { name: "High-Yield Savings", type: "depository", subtype: "savings", mask: "0002", balance: 18500 },
+      { name: "24-Month CD", type: "depository", subtype: "cd", mask: "0007", balance: 30000 },
+      { name: "Traditional IRA", type: "investment", subtype: "ira", mask: "0006", balance: 88000 },
+      { name: "Rewards Visa", type: "credit", subtype: "credit card", mask: "0003", balance: 1850 },
+      { name: "Home Mortgage", type: "loan", subtype: "mortgage", mask: "0004", balance: 212000 },
+      { name: "Auto Loan", type: "loan", subtype: "auto", mask: "0005", balance: 14300 },
+    ],
+    txn_count: 226,
+  },
+  {
+    profile_id: "pnc_maya",
+    display_name: "Maya, early-career nurse, saving for a first home",
+    summary: "Steady paychecks, a student loan and a card she pays off most months.",
+    accounts: [
+      { name: "Checking", type: "depository", subtype: "checking", mask: "4410", balance: 3240 },
+      { name: "Savings", type: "depository", subtype: "savings", mask: "4411", balance: 9800 },
+      { name: "Cash Rewards Card", type: "credit", subtype: "credit card", mask: "4412", balance: 1420 },
+      { name: "Student Loan", type: "loan", subtype: "student", mask: "4413", balance: 28600 },
+    ],
+    txn_count: 184,
+  },
+  {
+    profile_id: "pnc_darnell",
+    display_name: "Darnell, food-truck owner with uneven income",
+    summary: "Business and personal money in one place, a small loan and a busy card.",
+    accounts: [
+      { name: "Business Checking", type: "depository", subtype: "checking", mask: "7720", balance: 7900 },
+      { name: "Personal Checking", type: "depository", subtype: "checking", mask: "7721", balance: 1150 },
+      { name: "Savings", type: "depository", subtype: "savings", mask: "7722", balance: 2300 },
+      { name: "Business Card", type: "credit", subtype: "credit card", mask: "7723", balance: 4850 },
+      { name: "Equipment Loan", type: "loan", subtype: "loan", mask: "7724", balance: 12000 },
+    ],
+    txn_count: 262,
+  },
+  {
+    profile_id: "pnc_ruth",
+    display_name: "Ruth and Harold, retired, drawing on an IRA",
+    summary: "Social Security, a CD ladder and a large IRA. No debt.",
+    accounts: [
+      { name: "Checking", type: "depository", subtype: "checking", mask: "3301", balance: 5600 },
+      { name: "Savings", type: "depository", subtype: "savings", mask: "3302", balance: 41000 },
+      { name: "12-Month CD", type: "depository", subtype: "cd", mask: "3303", balance: 25000 },
+      { name: "Rollover IRA", type: "investment", subtype: "ira", mask: "3304", balance: 182000 },
+    ],
+    txn_count: 121,
+  },
+];
+
+const PROFILE_KINDS: { one: string; many: string; types: AccountType[] }[] = [
+  { one: "checking", many: "checking", types: ["checking"] },
+  { one: "savings", many: "savings", types: ["savings"] },
+  { one: "CD", many: "CDs", types: ["cd"] },
+  { one: "IRA", many: "retirement", types: ["ira"] },
+  { one: "card", many: "cards", types: ["credit_card"] },
+  { one: "mortgage", many: "mortgages", types: ["mortgage"] },
+  { one: "loan", many: "loans", types: ["auto_loan", "personal_loan"] },
+];
+/** "7 accounts: 2 checking, savings, card, loan" (a count only where there are several of a kind). */
+export function accountMix(accounts: readonly { type: string; subtype: string }[]): string {
+  const parts = PROFILE_KINDS.map((k) => ({ k, n: accounts.filter((a) => k.types.includes(accountKind(a).type)).length }))
+    .filter((x) => x.n > 0)
+    .map(({ k, n }) => (n > 1 ? `${n} ${k.many}` : k.one));
+  return `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}: ${parts.join(", ")}`;
+}
+
+function asProfiles(v: unknown): SandboxProfile[] {
+  const list = Array.isArray(v) ? v : v && typeof v === "object" && Array.isArray((v as { profiles?: unknown }).profiles) ? (v as { profiles: unknown[] }).profiles : [];
+  return list
+    .filter((p): p is Record<string, unknown> => !!p && typeof p === "object" && typeof (p as Rec).profile_id === "string")
+    .map((p) => ({
+      profile_id: str(p.profile_id),
+      display_name: str(p.display_name, str(p.profile_id)),
+      summary: str(p.summary),
+      accounts: (Array.isArray(p.accounts) ? p.accounts : []).map((a: Rec) => ({ name: str(a.name), type: str(a.type), subtype: str(a.subtype), mask: str(a.mask), balance: num(a.balance) })),
+      txn_count: num(p.txn_count),
+    }));
+}
+
+/** live: the worker's list. default: a worker without the profiles route (it only knows its default customer). */
+export type ProfilesSource = "loading" | "live" | "default" | "mock";
+interface ProfilesState {
+  source: ProfilesSource;
+  profiles: SandboxProfile[];
+}
+let profilesNow: ProfilesState = { source: "loading", profiles: [] };
+const profileListeners = new Set<() => void>();
+let profilesInflight: Promise<void> | null = null;
+function setProfiles(p: ProfilesState): void {
+  profilesNow = p;
+  for (const l of profileListeners) l();
+}
+
+/**
+ * Loads the sandbox customers once (and again on later calls until the live list has arrived, so a worker that comes
+ * up mid-demo is picked up). Mock mode, or a worker that does not answer, uses MOCK_PROFILES. A live worker without
+ * the profiles route only knows its default customer, so then only that one is offered.
+ */
+export function loadSandboxProfiles(mode: OnboardingMode): Promise<void> {
+  if (profilesNow.source === "live" || mode === "detecting") return Promise.resolve();
+  if (mode === "mock") {
+    if (profilesNow.source !== "mock") setProfiles({ source: "mock", profiles: MOCK_PROFILES });
+    return Promise.resolve();
+  }
+  if (profilesInflight) return profilesInflight;
+  profilesInflight = (async () => {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 2500);
+    try {
+      const res = await fetch(`${WORKER_URL}/plaid/sandbox_profiles`, { signal: ctl.signal });
+      const list = res.ok ? asProfiles(await res.json()) : [];
+      if (list.length) setProfiles({ source: "live", profiles: list });
+      else if (res.status === 404) setProfiles({ source: "default", profiles: MOCK_PROFILES.slice(0, 1) });
+      else setProfiles({ source: "mock", profiles: MOCK_PROFILES });
+    } catch {
+      setProfiles({ source: "mock", profiles: MOCK_PROFILES });
+    } finally {
+      clearTimeout(t);
+      profilesInflight = null;
+    }
+  })();
+  return profilesInflight;
+}
+
+export function useSandboxProfiles(mode: OnboardingMode): ProfilesState {
+  useEffect(() => {
+    void loadSandboxProfiles(mode);
+  }, [mode]);
+  return useSyncExternalStore(
+    (cb) => {
+      profileListeners.add(cb);
+      return () => {
+        profileListeners.delete(cb);
+      };
+    },
+    () => profilesNow,
+    () => profilesNow,
+  );
+}
+export const findProfile = (id: string | undefined): SandboxProfile | undefined =>
+  id ? (profilesNow.profiles.find((p) => p.profile_id === id) ?? MOCK_PROFILES.find((p) => p.profile_id === id)) : undefined;
 
 // ------------------------------------------------------------------------------------------------ tiny tables
 
@@ -440,6 +639,53 @@ export function useInsightsRun(householdId: string | undefined): { run: AgentRun
   return { run, events };
 }
 
+/** Live mode: every household_profile row, while the page is open (the login page lists this browser's setups). */
+export function useAllProfilesSubscription(mode: OnboardingMode): void {
+  useEffect(() => {
+    if (mode !== "live") return;
+    const conn = liveConnection();
+    if (!conn) return;
+    let handle: { unsubscribe(): void } | undefined;
+    try {
+      handle = conn.subscriptionBuilder().onError(() => undefined).subscribe(["SELECT * FROM household_profile"]);
+    } catch {
+      /* the list still shows households, just without their setup status */
+    }
+    return () => {
+      try {
+        handle?.unsubscribe();
+      } catch {
+        /* already ended */
+      }
+    };
+  }, [mode]);
+}
+
+export interface OwnedHousehold {
+  household: Household;
+  /** Private copies of a seed household have no profile and count as finished. */
+  finished: boolean;
+  status: OnboardingStatus | "copy";
+}
+
+/** Households this browser's identity created (onboardings and private copies), newest first. */
+export function useOwnedHouseholds(): OwnedHousehold[] {
+  const households = useRows("household");
+  const profileRows = useTable(profiles);
+  const me = useConnection().identity;
+  return useMemo(() => {
+    if (!me) return [];
+    return households
+      .filter((h) => h.owner === me && (h.id.startsWith("hh_onb_") || h.id.startsWith("hh_sbx_")))
+      .map((h) => {
+        const p = profileRows.find((x) => x.household_id === h.id);
+        const status: OwnedHousehold["status"] = h.id.startsWith("hh_sbx_") ? "copy" : (p?.status ?? "connect");
+        return { household: h, status, finished: status === "copy" || status === "done" };
+      })
+      .sort((a, b) => b.household.created_at.localeCompare(a.household.created_at));
+  }, [households, profileRows, me]);
+}
+
 /** Which step a household is on, from its stored state (used to resume after a refresh and to follow along live). */
 export function deriveStep(p: { status?: OnboardingStatus; bank?: OnboardingBank; hasRun: boolean }): number {
   if (p.status === "done" || p.hasRun) return 5;
@@ -520,14 +766,14 @@ export const onboarding = {
 
   /** Step 3: Plaid Link finished with a public token. */
   async exchange(householdId: string, publicToken: string): Promise<void> {
-    if ((await ensureOnboardingMode()) === "mock") return mock.connect(householdId);
+    if ((await ensureOnboardingMode()) === "mock") return mock.connect(householdId, DEFAULT_PROFILE_ID);
     await worker("/plaid/exchange", { household_id: householdId, public_token: publicToken, select: true });
   },
 
-  /** Step 3, one-tap path: the demo bank. */
-  async connectDemo(householdId: string): Promise<void> {
-    if ((await ensureOnboardingMode()) === "mock") return mock.connect(householdId);
-    await worker("/plaid/sandbox_connect", { household_id: householdId, select: true });
+  /** Step 3, main path: connect one of the sandbox customers (section 7b). */
+  async connectDemo(householdId: string, profileId: string = DEFAULT_PROFILE_ID): Promise<void> {
+    if ((await ensureOnboardingMode()) === "mock") return mock.connect(householdId, profileId);
+    await worker("/plaid/sandbox_connect", { household_id: householdId, profile_id: profileId, select: true });
   },
 
   /** `select_bank_accounts` */
@@ -555,25 +801,6 @@ const rid = (n = 6) => Math.random().toString(36).slice(2, 2 + n).padEnd(n, "0")
 const iso = () => new Date().toISOString();
 const wf = (s: string) => s as Workflow;
 
-interface DemoAccount {
-  account_id: string;
-  name: string;
-  official_name: string;
-  mask: string;
-  type: string;
-  subtype: string;
-  balance: number;
-}
-/** The "First Platypus Bank" custom sandbox user (checking, savings, CD, IRA, card, auto loan, mortgage). */
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  { account_id: "chk", name: "Plaid Checking", official_name: "Plaid Gold Standard 0% Interest Checking", mask: "0000", type: "depository", subtype: "checking", balance: 4210.35 },
-  { account_id: "sav", name: "Plaid Saving", official_name: "Plaid Silver Standard 0.1% Interest Saving", mask: "1111", type: "depository", subtype: "savings", balance: 12840 },
-  { account_id: "cd", name: "Plaid CD", official_name: "Plaid Bronze Standard 0.2% Interest CD", mask: "2222", type: "depository", subtype: "cd", balance: 8000 },
-  { account_id: "cc", name: "Plaid Credit Card", official_name: "Plaid Diamond 12.5% APR Interest Credit Card", mask: "3333", type: "credit", subtype: "credit card", balance: 2145.2 },
-  { account_id: "mtg", name: "Plaid Mortgage", official_name: "Plaid 30-year Fixed Mortgage", mask: "4444", type: "loan", subtype: "mortgage", balance: 214300 },
-  { account_id: "auto", name: "Plaid Auto Loan", official_name: "Plaid Auto Loan 60 months", mask: "5555", type: "loan", subtype: "auto", balance: 11230 },
-  { account_id: "ira", name: "Plaid IRA", official_name: "Plaid Platinum Standard IRA", mask: "6666", type: "investment", subtype: "ira", balance: 34580 },
-];
 const MOCK_BANK = "First Platypus Bank";
 
 function hash(s: string): number {
@@ -626,8 +853,8 @@ function makeTxns(hid: string, accounts: Account[], now: Date): Transaction[] {
     const day = (d: number) => new Date(now.getFullYear(), now.getMonth() - m, d, 12);
     const past = (d: Date) => d <= now;
     for (const d of [1, 15]) if (past(day(d))) add(checking, day(d), 2650 + Math.round(rand() * 40), "Direct deposit, payroll", "income", true);
-    if (past(day(1))) add(checking, day(1), -1640, "Mortgage payment", "housing", true);
-    if (past(day(5))) add(checking, day(5), -412, "Auto loan payment", "transport", true);
+    if (past(day(1))) add(checking, day(1), accounts.some((a) => a.type === "mortgage") ? -1640 : -1450, accounts.some((a) => a.type === "mortgage") ? "Mortgage payment" : "Rent", "housing", true);
+    if (past(day(5)) && accounts.some((a) => a.type === "auto_loan")) add(checking, day(5), -412, "Auto loan payment", "transport", true);
     if (past(day(12))) add(checking, day(12), -Math.round(40 + rand() * 90), "Oncor electric", "utilities", true);
     if (past(day(18))) add(checking, day(18), -64.99, "Spectrum internet", "utilities", true);
     if (past(day(8))) add(card ?? spend, day(8), -15.49, "Netflix", "subscriptions", true);
@@ -673,14 +900,20 @@ const mock = {
     return id;
   },
 
-  async connect(hid: string): Promise<void> {
-    if (store.rows("bank_connection").some((b) => b.household_id === hid)) return;
-    await sleep(500);
+  async connect(hid: string, profileId: string): Promise<void> {
+    if (store.rows("bank_connection").some((b) => b.household_id === hid && b.status !== "error")) return;
+    const profile = findProfile(profileId) ?? MOCK_PROFILES[0];
+    await sleep(450);
     const itemId = `item_mock_${rid()}`;
     store.upsert("bank_connection", { item_id: itemId, household_id: hid, institution_name: MOCK_BANK, status: "linking", accounts_count: 0, txns_count: 0 });
-    later(1300, () => {
-      options.upsertMany(DEMO_ACCOUNTS.map((a) => ({ ...a, id: `${itemId}:${a.account_id}`, household_id: hid, item_id: itemId, selected: true })));
-      setBank(itemId, { status: "selecting", accounts_count: DEMO_ACCOUNTS.length });
+    later(1400, () => {
+      options.upsertMany(
+        profile.accounts.map((a, i) => {
+          const account_id = `${profile.profile_id}_${i}`;
+          return { ...a, account_id, official_name: a.name, id: `${itemId}:${account_id}`, household_id: hid, item_id: itemId, selected: true };
+        }),
+      );
+      setBank(itemId, { status: "selecting", accounts_count: profile.accounts.length });
       setProfile(hid, { status: "selecting" });
     });
   },

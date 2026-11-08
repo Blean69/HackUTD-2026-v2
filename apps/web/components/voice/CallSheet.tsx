@@ -12,6 +12,7 @@ import {
   closeCallSheet, enableSound, hangUp, isCallActive, openCallSheet, resetCall, retryCall, setHint, startCall, SUGGESTIONS, toggleMute, useCall,
   type Caption, type CallErrorKind, type CallState,
 } from "@/lib/voiceCall/session";
+import { PhoneHint } from "@/components/phone/PhoneHint";
 import { LevelOrb, activityLabel } from "./LevelOrb";
 import { CallClock, clockText } from "./TalkButton";
 
@@ -526,7 +527,7 @@ function SheetContent({ call, householdId }: { call: CallState; householdId: str
       minimize={isCallActive(call)}
       phaseKey={`${call.phase}:${call.error?.kind ?? ""}:${voice === "down" ? "down" : "ok"}`}
       right={live ? <LivePill label="Live" className="mt-1" /> : undefined}
-      footer={live ? <LiveFooter call={call} /> : undefined}
+      footer={live ? <LiveFooter call={call} /> : call.phase === "connecting" ? undefined : <PhoneHint />}
     >
       {body}
     </SheetFrame>

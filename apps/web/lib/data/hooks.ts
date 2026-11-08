@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { dedupeGoals } from "@/lib/finance";
 import { LIABILITY_TYPES } from "@/lib/format";
 import type {
-  Account, AgentRun, Alert, HealthIndicator, HealthStatus, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
+  AgentRun, Alert, HealthIndicator, HealthStatus, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
-import type { DataScope } from "./backend";
+import type { DataScope, RoomTable } from "./backend";
 import { useConnection } from "./connection";
-import { setDataScope } from "./runtime";
+import { acquireRoomTables, roomTablesLoaded, setDataScope, subscribeLoaded } from "./runtime";
 import { store, emptyRows, type TableName, type TableRows } from "./store";
 
 const subscribers = new Map<TableName, (cb: () => void) => () => void>();
@@ -39,6 +40,26 @@ export function useDataScope(kind: DataScope["kind"], householdId = ""): void {
   useEffect(() => {
     setDataScope(kind === "room" ? { kind, householdId } : ({ kind } as DataScope));
   }, [kind, householdId]);
+}
+
+/**
+ * Ask for the room tables this page or panel reads, on top of the base set (members, accounts, health, alerts, huddle,
+ * runs). Returns true once the connection is ready and those tables have landed, so a page can show a skeleton instead
+ * of a false "nothing here yet". Tables unsubscribe a few seconds after the last reader goes away.
+ */
+export function useRoomTables(householdId: string, tables: readonly RoomTable[]): boolean {
+  const key = tables.join(",");
+  const connected = useDataReady();
+  useEffect(() => {
+    if (!householdId || !key) return;
+    return acquireRoomTables(householdId, key.split(",") as RoomTable[]);
+  }, [householdId, key]);
+  const loaded = useSyncExternalStore(
+    subscribeLoaded,
+    () => (key ? roomTablesLoaded(householdId, key.split(",")) : true),
+    () => false,
+  );
+  return connected && loaded;
 }
 
 // ------------------------------------------------------------------ household
@@ -97,29 +118,13 @@ export function useAlerts(householdId: string): Alert[] {
     [rows, householdId],
   );
 }
+/** The household's goals, newest first, with goals the agents extracted twice collapsed into one. Needs the `goal` table. */
 export function useGoals(householdId: string) {
   const rows = useRows("goal");
   return useMemo(
-    () => rows.filter((g) => g.household_id === householdId).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.title.localeCompare(b.title)),
+    () => dedupeGoals(rows.filter((g) => g.household_id === householdId).sort((a, b) => b.created_at.localeCompare(a.created_at) || a.title.localeCompare(b.title))),
     [rows, householdId],
   );
-}
-
-export interface NetWorth {
-  assets: number;
-  liabilities: number;
-  net: number;
-}
-export function useNetWorth(accounts: readonly Account[], propertyValue = 0): NetWorth {
-  return useMemo(() => {
-    let assets = propertyValue;
-    let liabilities = 0;
-    for (const a of accounts) {
-      if (LIABILITY_TYPES.has(a.type)) liabilities += a.balance;
-      else assets += a.balance;
-    }
-    return { assets, liabilities, net: assets - liabilities };
-  }, [accounts, propertyValue]);
 }
 
 export function useTxns(householdId: string) {
@@ -249,18 +254,52 @@ export function useTraceEvents(runId: string | null | undefined): TraceEvent[] {
   const rows = useRows("trace_event");
   return useMemo(() => (runId ? rows.filter((e) => e.run_id === runId).sort((a, b) => a.seq - b.seq) : []), [rows, runId]);
 }
-/** All trace events grouped by run, newest events last. Used by the /agents wall to avoid N filters. */
+/**
+ * Load the steps of specific runs, whatever household they belong to (the rows currently on screen in the Agent Trail).
+ * Steps are the heaviest table, so the wall loads them for the runs it shows, not for every run ever made.
+ */
+export function useRunTraces(runs: readonly { run_id: string; household_id: string }[]): void {
+  const key = runs.map((r) => `${r.household_id}|${r.run_id}`).join(",");
+  useEffect(() => {
+    if (!key) return;
+    const releases = key.split(",").map((k) => {
+      const [household, runId] = k.split("|");
+      return acquireRoomTables(household, [`trace_event@${runId}`]);
+    });
+    return () => {
+      for (const release of releases) release();
+    };
+  }, [key]);
+}
+
+/** Last event of a run -> the sorted array built for it, so an unchanged run keeps the same array between renders. */
+const runEventsCache = new WeakMap<TraceEvent, TraceEvent[]>();
+
+/**
+ * All trace events grouped by run, oldest first. A run whose events did not change keeps the same array, so memoised
+ * rows on the /agents wall only re-render for the run that is actually moving.
+ */
 export function useTraceByRun(): Map<string, TraceEvent[]> {
   const rows = useRows("trace_event");
   return useMemo(() => {
-    const m = new Map<string, TraceEvent[]>();
+    const grouped = new Map<string, TraceEvent[]>();
     for (const e of rows) {
-      const a = m.get(e.run_id);
+      const a = grouped.get(e.run_id);
       if (a) a.push(e);
-      else m.set(e.run_id, [e]);
+      else grouped.set(e.run_id, [e]);
     }
-    for (const a of m.values()) a.sort((x, y) => x.seq - y.seq);
-    return m;
+    const out = new Map<string, TraceEvent[]>();
+    for (const [id, a] of grouped) {
+      a.sort((x, y) => x.seq - y.seq);
+      const last = a[a.length - 1];
+      const hit = runEventsCache.get(last);
+      if (hit && hit.length === a.length && hit[0] === a[0]) out.set(id, hit);
+      else {
+        runEventsCache.set(last, a);
+        out.set(id, a);
+      }
+    }
+    return out;
   }, [rows]);
 }
 

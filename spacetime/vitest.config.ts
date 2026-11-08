@@ -8,6 +8,6 @@ export default defineConfig({
   plugins: [spacetimedbModuleTestPlugin() as unknown as Plugin],
   test: {
     environment: 'node',
-    include: ['src/module.test.ts'],
+    include: ['src/module.test.ts', 'src/phone.test.ts'],
   },
 });

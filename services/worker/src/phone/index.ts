@@ -8,6 +8,7 @@ import type { ExternalApis } from '../tools/external.js';
 import type { ToolRegistry } from '../tools/registry.js';
 import type { HouseholdData } from '../types.js';
 import { sleep } from '../util.js';
+import { SpacetimePhoneCodes } from './access.js';
 import { getPhoneRuntime, setPhoneRuntime } from './routes.js';
 import { PhoneService } from './session.js';
 
@@ -15,6 +16,7 @@ export { getPhoneRuntime, resetPhoneRuntime, setPhoneRuntime } from './routes.js
 export { loadPhoneConfig, parsePins } from './config.js';
 export { PhoneService, PhoneError } from './session.js';
 export { PHONE_TOOLS, voiceView } from './voice_view.js';
+export { hashPin, matchStoredPin, PHONE_PIN_PEPPER, SpacetimePhoneCodes, StaticPhoneCodes, type PhoneCodeRow, type PhoneCodeSource } from './access.js';
 
 export interface AttachPhoneDeps {
   sink: WorkerSink;
@@ -38,7 +40,11 @@ async function enqueueViaConnection(conn: DbConnection, workflow: string, househ
 export function attachPhone(conn: DbConnection, deps: AttachPhoneDeps): PhoneService {
   const cfg = getPhoneRuntime().cfg;
   getPhoneRuntime().service?.stopReaper();
+  // The household codes families set in the app: a worker-only view, subscribed in the background (identify waits for it, briefly).
+  const codes = new SpacetimePhoneCodes(conn);
+  void codes.attach();
   const service = new PhoneService({
+    codes,
     sink: deps.sink,
     registry: deps.registry,
     external: deps.external,

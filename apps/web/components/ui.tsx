@@ -4,6 +4,12 @@ import { IconArrowDown, IconArrowUp } from "./icons";
 
 /* ------------------------------------------------------------------------------------------------
    Cosign UI kit. White cards, thin borders, 8px radius, no shadows. Money is always tabular (`num`).
+
+   Scales (use these, not one-off values):
+     type     0.76rem meta · 0.84rem secondary · 0.9rem body · 0.95rem card title · 1.35-1.7rem page title
+     space    gaps of 2 / 3 / 4 / 6 (8 / 12 / 16 / 24 px); cards pad 16 px (p-4), wizard cards 32 px on desktop
+     buttons  one primary per view; secondary for alternatives; ghost for Back and low-stakes actions
+     status   colour only carries meaning (good / watch / risk); neutral labels are plain text, not chips
    ------------------------------------------------------------------------------------------------ */
 
 export const inputCls =
@@ -82,7 +88,7 @@ export function SectionTitle({ title, sub, right, id }: { title: string; sub?: s
 
 export type Tone = "neutral" | "good" | "watch" | "risk" | "info" | "brand" | "accent";
 const TONE: Record<Tone, string> = {
-  neutral: "bg-surface-2 text-ink-2 border-line",
+  neutral: "bg-surface-2 text-ink-2 border-transparent",
   good: "bg-good-soft text-good border-transparent",
   watch: "bg-watch-soft text-watch border-transparent",
   risk: "bg-risk-soft text-risk border-transparent",
@@ -142,7 +148,7 @@ export function Button({ variant = "primary", size = "md", className, type = "bu
   return (
     <button
       type={type}
-      className={cx("inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-semibold transition-colors disabled:cursor-not-allowed", BTN[variant], BTN_SIZE[size], className)}
+      className={cx("press inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-semibold disabled:cursor-not-allowed", size === "lg" && "rounded-lg", BTN[variant], BTN_SIZE[size], className)}
       {...rest}
     />
   );
@@ -155,7 +161,7 @@ export function IconButton({ label, className, children, ...rest }: Omit<ButtonH
       type="button"
       aria-label={label}
       title={label}
-      className={cx("relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink", className)}
+      className={cx("press relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-ink-2 hover:bg-surface-2 hover:text-ink", className)}
       {...rest}
     >
       {children}
@@ -191,7 +197,7 @@ export function Progress({ value, tone = "brand", label, className, height = "h-
   const v = Math.max(0, Math.min(100, value));
   return (
     <div className={cx("overflow-hidden rounded-full bg-line", height, className)} role="progressbar" aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
-      <div className={cx("h-full rounded-full", TONE_BG[tone])} style={{ width: `${v}%` }} />
+      <div className={cx("bar-fill h-full rounded-full", TONE_BG[tone])} style={{ transform: `scaleX(${v / 100})` }} />
     </div>
   );
 }
@@ -214,12 +220,52 @@ export function StatusDot({ tone }: { tone: "good" | "watch" | "risk" | "info" |
   return <span className={cx("inline-block h-2 w-2 shrink-0 rounded-full", c)} aria-hidden="true" />;
 }
 
+/** The one empty state: a calm line of what is missing and, optionally, what to do about it. */
 export function Empty({ title, children, className }: { title: string; children?: ReactNode; className?: string }) {
   return (
-    <div className={cx("rounded-md border border-dashed border-line-strong px-4 py-6 text-center", className)}>
-      <p className="text-[0.88rem] font-medium text-ink">{title}</p>
-      {children ? <div className="mt-1 text-[0.8rem] text-ink-2">{children}</div> : null}
+    <div className={cx("rounded-lg bg-surface-2 px-4 py-6 text-center", className)}>
+      <p className="text-[0.9rem] font-medium text-ink">{title}</p>
+      {children ? <div className="mt-1 text-[0.84rem] text-ink-2">{children}</div> : null}
     </div>
+  );
+}
+
+/** The one error state: what went wrong in plain words, plus a way forward. */
+export function ErrorNote({ children, action, className }: { children: ReactNode; action?: ReactNode; className?: string }) {
+  return (
+    <div role="alert" className={cx("flex items-center gap-3 rounded-lg bg-risk-soft px-4 py-3 text-[0.86rem] leading-snug text-risk", className)}>
+      <span className="min-w-0 flex-1">{children}</span>
+      {action ? <span className="shrink-0">{action}</span> : null}
+    </div>
+  );
+}
+
+/** A labelled number: label, value, and an optional one-line context. Shared by every page that shows headline figures. */
+export function Stat({ label, value, sub, className, info }: { label: ReactNode; value: ReactNode; sub?: ReactNode; className?: string; info?: string }) {
+  return (
+    <div className={cx("min-w-0", className)}>
+      <p className="flex items-center gap-1.5 text-[0.78rem] text-ink-3">
+        {label}
+        {info ? <InfoTip text={info} label={typeof label === "string" ? label : undefined} /> : null}
+      </p>
+      <p className="num mt-0.5 truncate text-[1.3rem] font-semibold leading-tight tracking-tight">{value}</p>
+      {sub ? <p className="mt-0.5 text-[0.78rem] leading-snug text-ink-2">{sub}</p> : null}
+    </div>
+  );
+}
+
+/** Progressive disclosure: a styled native <details>, keyboard and screen-reader friendly with no JavaScript. */
+export function Disclosure({ summary, children, className, defaultOpen }: { summary: ReactNode; children: ReactNode; className?: string; defaultOpen?: boolean }) {
+  return (
+    <details className={cx("group", className)} open={defaultOpen}>
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md text-[0.84rem] font-medium text-brand-strong hover:underline [&::-webkit-details-marker]:hidden">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="transition-transform duration-200 group-open:rotate-90">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+        {summary}
+      </summary>
+      <div className="anim-fade mt-2">{children}</div>
+    </details>
   );
 }
 

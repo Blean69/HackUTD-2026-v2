@@ -24,9 +24,11 @@ spacetime/
     recompute.ts                     tables <-> finance.ts glue for recompute_household
     finance.ts                       PURE math: indicators, 90-day forecast, rule alerts. No imports.
     sha256.ts                        PURE SHA-256 (the V8 module runtime has no sync crypto)
-    reducers/{lifecycle,room,huddle,family,proposal,plaid,onboarding,recompute,worker,admin,seed}.ts
+    phone.ts                         PURE phone-code helpers: pepper, hashPin, weak-code rules (not exported from index.ts)
+    reducers/{lifecycle,room,huddle,family,proposal,plaid,onboarding,phone,recompute,worker,admin,seed}.ts
     finance.test.ts                  `node --test`, no SpacetimeDB needed
     module.test.ts                   vitest + SpacetimeDB test harness: every reducer path
+    phone.test.ts                    vitest: set/clear_phone_pin rules, the worker view, sandbox cleanup
 ```
 
 Only the schema and reducers are exported from `index.ts` (SpacetimeDB treats every export as part of the module).
@@ -43,7 +45,8 @@ Only the schema and reducers are exported from `index.ts` (SpacetimeDB treats ev
 | `household_profile`, `bank_account_option` (onboarding, docs/contracts.md section 7) | yes | `start_onboarding`, `save_onboarding_answers`, `select_bank_accounts`, `finish_onboarding`, worker `agent_set_account_options` |
 | `proposal`, `vote` (family voting, docs/contracts.md section 6) | yes | `create_proposal`, `cast_vote`, `close_proposal`, worker `agent_update_proposal`, `seed_proposals` / `seed_votes`, `create_sandbox` |
 | `account.source`, `txn.source` = `seed` or `plaid` | yes | seed / Plaid reducers |
-| `worker`, `plaid_item` (tokens), `module_config` (publisher + worker-secret hash override), `dirty_household`, `recompute_tick` | **no** | `register_worker`, `agent_save_plaid_item`, `admin_set_worker_secret_hash`, seed reducers, `init` |
+| `phone_access_status` (household_id, has_pin, updated_at) | yes | `set_phone_pin`, `clear_phone_pin` |
+| `worker`, `plaid_item` (tokens), `phone_access` (salted code hashes), `module_config` (publisher + worker-secret hash override), `dirty_household`, `recompute_tick` | **no** | `register_worker`, `agent_save_plaid_item`, `admin_set_worker_secret_hash`, seed reducers, `init` |
 
 Client bindings turn snake_case into camelCase (`household_id` -> `householdId`, table `health_indicator` ->
 `db.healthIndicator`, reducer `join_room` -> `reducers.joinRoom`).
@@ -52,12 +55,25 @@ Client bindings turn snake_case into camelCase (`household_id` -> `householdId`,
 identity, not the database owner, so it could not otherwise read its tokens back after a restart); everyone else gets an
 empty result.
 
+`worker_phone_access` is the same pattern for the phone line (docs/contracts.md section 8): registered workers get the private `phone_access` rows
+(household id, salt, `pin_hash`), everyone else an empty result. It is a view, not a `verify_phone_pin(pin) -> household_id` reducer, because in
+2.14.1 a reducer cannot return a value to its caller (only procedures can, and this module uses none). The worker subscribes to the view, keeps the
+rows in its client cache and checks a caller's digits with a constant-time compare (`services/worker/src/phone/access.ts`), so a code a family sets in
+the app works on the very next call, and the 3-tries and caller lockouts live in one place (the worker) instead of in a reducer open to every client.
+
 ## Reducer map
 
 Client-callable (any identity): `join_room`, `create_sandbox`, `delete_sandbox` (owner only, extra), `start_huddle`,
 `append_transcript`, `end_huddle`, `request_simulation`, `ask_coach`, `upsert_goal`, `delete_goal`, `ack_alert`,
 `post_advisor_note`, `recompute_household`, `request_bank_sync`, family voting (`create_proposal`, `cast_vote`, `close_proposal`) and
 onboarding (`start_onboarding`, `save_onboarding_answers`, `select_bank_accounts`, `finish_onboarding`).
+
+Phone line (docs/contracts.md section 8): `set_phone_pin(household_id, pin)` and `clear_phone_pin(household_id)`, callable by the household owner or, for a seeded household
+(no owner), by anyone in its room. `pin_hash = sha256_hex("keystone/phone-pin/v1:" + salt + ":" + pin)` with a fresh 24-hex salt per change (`src/phone.ts`; the pepper is a
+public constant, so it is domain separation, not a secret: the protection is that `phone_access` is private). A code must be exactly 5 digits, not weak (same digit, a straight
+run up or down with wrap-around, two alternating digits) and not already used by another household (each other row is re-hashed with its own salt and compared). `delete_sandbox`
+removes the household's code; `create_sandbox` never copies one. The code is never stored, logged or echoed in an error. Known limits (hackathon scope): the "already taken" error is
+an oracle for which codes are in use (a rolled-back reducer cannot keep a counter), and anyone in a seeded household's room may overwrite its code (the env `PHONE_PINS` entry still works).
 
 Operator-only: `admin_set_worker_secret_hash(sha256_hex)` (publisher identity only; see "Worker secret" below).
 

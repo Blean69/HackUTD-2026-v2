@@ -1,13 +1,13 @@
 "use client";
 import type { Ref } from "react";
 import { IconCheck } from "@/components/icons";
-import { Button, Spinner } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { cx } from "@/lib/format";
 import { STEPS, type OnboardingBank } from "@/lib/data/onboarding";
 import type { PresenceView } from "@/lib/data/hooks";
 import type { Household } from "@/lib/types";
 import { AgentResults } from "./AgentResults";
-import { StepHeading } from "./fields";
+import { StepFooter, StepHeading } from "./fields";
 import { SyncStatus } from "./SyncStatus";
 
 const WHAT: Record<number, string> = {
@@ -20,12 +20,13 @@ const WHAT: Record<number, string> = {
 
 /** What a family member sees when they open the shared link: the same progress, live, with a way to pitch in. */
 export function WatchPanel({
-  household, step, bank, owner, onTakeOver, onDashboard, headingRef,
+  household, step, bank, owner, expectedAccounts, onTakeOver, onDashboard, headingRef,
 }: {
   household: Household;
   step: number;
   bank?: OnboardingBank;
   owner?: PresenceView;
+  expectedAccounts: number;
   onTakeOver: () => void;
   onDashboard: () => void;
   headingRef: Ref<HTMLHeadingElement>;
@@ -37,36 +38,34 @@ export function WatchPanel({
     <div>
       <StepHeading headingRef={headingRef} title={`Following ${household.name}`} sub={`${status} This page updates by itself.`} />
 
-      <ol className="mb-5 space-y-1.5" aria-label="Setup steps">
-        {STEPS.map((s, i) => {
+      <ol className="mb-6 space-y-2" aria-label="Setup steps">
+        {STEPS.map((st, i) => {
           const done = i < step || (finished && i === step);
           const active = i === step && !finished;
           return (
-            <li key={s.key} className={cx("flex items-center gap-2.5 text-[0.9rem]", active ? "font-semibold text-ink" : done ? "text-ink-2" : "text-ink-3")} aria-current={active ? "step" : undefined}>
-              <span className={cx("flex h-5 w-5 items-center justify-center rounded-full border text-[0.68rem]", done ? "border-brand bg-brand text-white" : active ? "border-brand-strong text-brand-strong" : "border-line-strong")}>
-                {done ? <IconCheck size={12} strokeWidth={3} /> : active ? <Spinner size={11} /> : <span className="num">{i + 1}</span>}
+            <li key={st.key} className={cx("flex items-center gap-2.5 text-[0.92rem]", active ? "font-semibold text-ink" : done ? "text-ink-2" : "text-ink-3")} aria-current={active ? "step" : undefined}>
+              <span className={cx("flex h-5 w-5 items-center justify-center rounded-full border text-[0.68rem]", done ? "border-brand bg-brand text-white" : active ? "border-brand" : "border-line-strong")}>
+                {done ? <IconCheck size={12} strokeWidth={3} /> : active ? <span className="anim-blink h-1.5 w-1.5 rounded-full bg-brand" /> : <span className="num">{i + 1}</span>}
               </span>
-              {s.label}
+              {st.label}
             </li>
           );
         })}
       </ol>
 
-      {bank && step >= 2 && step < 5 ? <SyncStatus bank={bank} /> : null}
+      {bank && step >= 2 && step < 5 && bank.status !== "selecting" ? <SyncStatus bank={bank} expectedAccounts={expectedAccounts} /> : null}
       {finished ? <AgentResults householdId={household.id} /> : null}
 
-      <div className="pb-safe sticky bottom-0 z-10 -mx-4 mt-6 border-t border-line bg-surface px-4 pt-3 sm:-mx-6 sm:px-6">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {!finished ? (
-            <Button variant="secondary" size="lg" onClick={onTakeOver}>
-              Help set this up
-            </Button>
-          ) : null}
-          <Button size="lg" onClick={onDashboard}>
-            {finished ? "Go to the dashboard" : "Peek at the dashboard"}
+      <StepFooter>
+        {!finished ? (
+          <Button variant="secondary" size="lg" onClick={onTakeOver}>
+            Help set this up
           </Button>
-        </div>
-      </div>
+        ) : null}
+        <Button size="lg" onClick={onDashboard}>
+          {finished ? "Open the dashboard" : "Peek at the dashboard"}
+        </Button>
+      </StepFooter>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { IconChevronDown, IconSend } from "@/components/icons";
 import { NamePrompt } from "@/components/NamePrompt";
 import { AppShell } from "@/components/shell/AppShell";
-import { Avatar, Button, Card, Chip, Empty, PageHeader, Panel, Skeleton, StatusDot, TableScroll, type Tone } from "@/components/ui";
+import { Avatar, Button, Card, Chip, Empty, ErrorNote, PageHeader, Panel, Skeleton, StatusDot, TableScroll, type Tone } from "@/components/ui";
 import { joinRoom, postAdvisorNote } from "@/lib/data/actions";
 import { useAdvisorNotes, useDataReady, useDataScope, useGoals, useHouseholds, useHouseholdSummaries, usePresenceAll, useRuns, type HouseholdSummary } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
@@ -18,11 +18,11 @@ const STATUS: Record<HouseholdSummary["status"], { tone: Tone; label: string }> 
   watch: { tone: "watch", label: "Watch" },
   risk: { tone: "risk", label: "At risk" },
 };
-const NOTE_IDEAS = ["Your Visa utilization is high. Can we talk about a payoff plan?", "Nice progress this month. Keep it up!", "Please review the new alert with me when you have a minute."];
+const NOTE_IDEAS = ["Your Visa utilization is high. Can we talk about a payoff plan?", "Nice progress this month. Keep it up!"];
 const FEAS_LABEL: Record<string, string> = { on_track: "On track", stretch: "Stretch", off_track: "Off track" };
 
 const subHead = "text-[0.72rem] font-semibold uppercase tracking-wide text-ink-3";
-const COLS = 8;
+const COLS = 6;
 
 function Detail({ h, author, now }: { h: HouseholdSummary; author: string; now: number }) {
   const goals = useGoals(h.id);
@@ -67,7 +67,7 @@ function Detail({ h, author, now }: { h: HouseholdSummary; author: string; now: 
       </section>
 
       <section aria-label={`Open alerts and goals for ${h.name}`}>
-        <h3 className={subHead}>Open alerts &amp; goals</h3>
+        <h3 className={subHead}>Alerts and goals</h3>
         <ul className="mt-2 space-y-1.5">
           {h.openAlerts.length ? h.openAlerts.slice(0, 6).map((a) => (
             <li key={a.id} className="flex items-start gap-2 text-[0.82rem] leading-snug">
@@ -90,7 +90,7 @@ function Detail({ h, author, now }: { h: HouseholdSummary; author: string; now: 
       </section>
 
       <section aria-label={`Post a note to ${h.name}`}>
-        <h3 className={subHead}>Post a note to this family</h3>
+        <h3 className={subHead}>Note to this family</h3>
         <form className="mt-2" onSubmit={(e) => { e.preventDefault(); void post(); }}>
           <label htmlFor={`note-${h.id}`} className="sr-only">Note for {h.name}</label>
           <textarea
@@ -113,20 +113,11 @@ function Detail({ h, author, now }: { h: HouseholdSummary; author: string; now: 
             <Link href={`/room/${h.id}`} className="text-[0.82rem] font-medium text-brand-strong hover:underline">Open their room</Link>
           </div>
           {sent ? <p role="status" className="mt-2 text-[0.8rem] font-medium text-good">Posted. It&apos;s live in their room now.</p> : null}
-          {err ? <p role="alert" className="mt-2 text-[0.8rem] text-risk">{err}</p> : null}
+          {err ? <ErrorNote className="mt-2 !py-2">{err}</ErrorNote> : null}
         </form>
         {notes[0] ? <p className="mt-3 border-l-2 border-line-strong pl-2 text-[0.78rem] leading-snug text-ink-2">Last note ({relTime(notes[0].created_at, now)}): {notes[0].text}</p> : null}
       </section>
     </div>
-  );
-}
-
-function Kpi({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <Card className="px-4 py-3">
-      <dt className="text-[0.76rem] text-ink-3">{label}</dt>
-      <dd className={cx("num mt-0.5 text-[1.5rem] font-semibold leading-tight", tone)}>{value}</dd>
-    </Card>
   );
 }
 
@@ -167,24 +158,26 @@ function ConsoleBody() {
     <>
       <PageHeader
         title="Advisor Console"
-        sub="Every household's health, open alerts and goals in one place. Notes you post show up live in that family's room."
+        sub="Households by urgency. A note you post shows up live in that family's room."
         right={name ? (
-          <span className="inline-flex items-center gap-2 rounded-md border border-line bg-surface py-1 pl-1.5 pr-2.5 text-[0.82rem] font-medium">
+          <span className="inline-flex items-center gap-2 text-[0.82rem] font-medium">
             <Avatar name={name} size={22} />
             {name}
-            <Chip tone="brand">Advisor</Chip>
           </span>
         ) : undefined}
       />
 
-      <dl className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Portfolio totals">
-        <Kpi label="Households" value={totals.households} />
-        <Kpi label="Critical alerts" value={totals.critical} tone={totals.critical ? "text-risk" : undefined} />
-        <Kpi label="At risk" value={totals.atRisk} tone={totals.atRisk ? "text-watch" : undefined} />
-        <Kpi label="People online" value={totals.online} tone={totals.online ? "text-good" : undefined} />
-      </dl>
+      <p className="num mb-3 text-[0.86rem] text-ink-2" aria-label="Portfolio totals">
+        <b className="font-semibold text-ink">{totals.households}</b> households
+        <span aria-hidden="true"> · </span>
+        <b className={cx("font-semibold", totals.critical ? "text-risk" : "text-ink")}>{totals.critical}</b> critical alerts
+        <span aria-hidden="true"> · </span>
+        <b className={cx("font-semibold", totals.atRisk ? "text-watch" : "text-ink")}>{totals.atRisk}</b> at risk
+        <span aria-hidden="true"> · </span>
+        <b className="font-semibold text-ink">{totals.online}</b> people online
+      </p>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
         <Card className="overflow-hidden">
           {!ready ? (
             <div className="space-y-2 p-3" aria-busy="true" aria-label="Loading households">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-12" />)}</div>
@@ -196,11 +189,9 @@ function ConsoleBody() {
                   <tr>
                     <th scope="col" className="!pl-4">Household</th>
                     <th scope="col">Health</th>
-                    <th scope="col" className="hidden md:table-cell">Indicators</th>
                     <th scope="col" className="r hidden sm:table-cell">Net worth</th>
                     <th scope="col" className="r">Alerts</th>
-                    <th scope="col" className="r hidden sm:table-cell">Goals</th>
-                    <th scope="col" className="hidden md:table-cell">Online</th>
+                    <th scope="col" className="hidden md:table-cell">In room</th>
                     <th scope="col" className="w-10 !pr-3"><span className="sr-only">Details</span></th>
                   </tr>
                 </thead>
@@ -221,18 +212,12 @@ function ConsoleBody() {
                         <td className="!border-b-0">
                           <span className="flex flex-wrap gap-1">
                             <Chip tone={s.tone}>{s.label}</Chip>
-                            {crit ? <Chip tone="risk">{crit} critical</Chip> : null}
-                          </span>
-                        </td>
-                        <td className="hidden !border-b-0 md:table-cell">
-                          <span className="flex items-center gap-1" role="img" aria-label={`${h.indicators.length} health indicators`}>
-                            {h.indicators.map((i) => <StatusDot key={i.id} tone={i.status} />)}
+                            {crit ? <span className="num text-[0.76rem] font-semibold text-risk">{crit} critical</span> : null}
                           </span>
                         </td>
                         <td className="num r hidden !border-b-0 text-[0.84rem] font-medium sm:table-cell">{usd(h.netWorth)}</td>
                         <td className="num r !border-b-0 text-[0.84rem]"><b className={cx("font-semibold", h.openAlerts.length ? "text-ink" : "text-ink-3")}>{h.openAlerts.length}</b></td>
-                        <td className="num r hidden !border-b-0 text-[0.84rem] sm:table-cell">{h.openGoals}</td>
-                        <td className="hidden !border-b-0 md:table-cell">{h.online ? <Chip tone="good">{h.online} online</Chip> : <span className="text-[0.76rem] text-ink-3">—</span>}</td>
+                        <td className="hidden !border-b-0 text-[0.84rem] md:table-cell">{h.online ? <span className="num font-medium text-good">{h.online} online</span> : <span className="text-ink-3">—</span>}</td>
                         <td className="!border-b-0 !pr-3 text-ink-3"><IconChevronDown size={16} className={cx("transition-transform", isOpen && "rotate-180")} /></td>
                       </tr>
                       {isOpen ? (
@@ -246,14 +231,14 @@ function ConsoleBody() {
               </table>
             </TableScroll>
           ) : (
-            <div className="p-4"><Empty title="No households yet">Households appear here once the demo data has loaded.</Empty></div>
+            <div className="p-4"><Empty title="No households yet">They appear once the demo data has loaded.</Empty></div>
           )}
         </Card>
 
         <aside aria-label="Live agent activity">
-          <Panel title="Live agent activity" sub="Latest runs across every household">
+          <Panel id="advisor-activity" title="Latest agent runs">
             <ul className="space-y-2">
-              {runs.slice(0, 6).map((r) => (
+              {runs.slice(0, 5).map((r) => (
                 <li key={r.run_id} className="flex items-center gap-2 text-[0.82rem]">
                   <span className={cx("h-2 w-2 shrink-0 rounded-full", r.status === "running" ? "anim-blink bg-brand" : r.status === "error" ? "bg-risk" : "bg-good")} aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">
@@ -271,7 +256,7 @@ function ConsoleBody() {
         </aside>
       </div>
 
-      {ready && !name ? <NamePrompt title="Advisor sign-in" context="Your name is shown on the notes you post and in the room's presence list." advisor /> : null}
+      {ready && !name ? <NamePrompt title="Advisor sign-in" context="Your name is shown on the notes you post." advisor /> : null}
     </>
   );
 }

@@ -8,7 +8,7 @@ function Tip({ active, payload }: { active?: boolean; payload?: { payload: CashM
   const m = payload[0].payload;
   return (
     <div className="rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.78rem]">
-      <p className="font-semibold">{m.label}{m.forecast ? " (forecast, est.)" : ""}</p>
+      <p className="font-semibold">{m.label}{m.forecast ? " (forecast)" : ""}</p>
       <p className="num text-ink-2">Income: <span className="font-semibold text-ink">{usd(m.income)}</span></p>
       <p className="num text-ink-2">Expenses: <span className="font-semibold text-ink">{usd(m.expenses)}</span></p>
       <p className="num text-ink-2">Net: <span className={m.net >= 0 ? "font-semibold text-good" : "font-semibold text-risk"}>{usd(m.net, { sign: true })}</span></p>
@@ -27,7 +27,7 @@ export function CashFlowChart({ months, height = 220 }: { months: readonly CashM
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--c1)]" /> Income</li>
         <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--c3)]" /> Expenses</li>
         <li className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-ink" /> Net cash flow</li>
-        {firstForecast ? <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-line-strong bg-surface-2" /> Forecast (est.)</li> : null}
+        {firstForecast ? <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-line-strong bg-surface-2" /> Projected</li> : null}
       </ul>
       <div style={{ height }} role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%" minWidth={0}>

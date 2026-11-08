@@ -19,7 +19,6 @@ import type { DbConnection, SubscriptionHandle } from "@/lib/module_bindings";
 import type { Goal, PresenceRole, ProposalDetails, VoteChoice } from "@/lib/types";
 import type { Actions, Backend, DataScope } from "./backend";
 import { setConnection } from "./connection";
-import { createLocalProposalActions, seedProposals } from "./mock/proposals";
 import * as M from "./spacetime-map";
 import { keyOf, type DataStore, type TableName, type TableRows } from "./store";
 
@@ -61,27 +60,36 @@ const saveToken = (k: string, v: string | undefined): void => {
 const safeId = (s: string) => s.replace(/[^\w:.-]/g, "");
 
 /**
- * Which tables (all filtered by household_id) make up a family room. txn feeds the dashboard's derived history and
- * cash-flow charts; credit_profile feeds the debt/credit ratios.
+ * The room tables every room page needs (the shell reads them): people, accounts, health, alerts, the live huddle and
+ * the run list. Everything else is subscribed on demand by the page or panel that reads it (`useRoomTables`), so
+ * Household does not download 667 transactions and the trace drawer costs nothing until it opens.
  */
-const ROOM_TABLES = [
-  "account", "member", "obligation", "conversation", "health_indicator", "forecast_point", "alert", "goal", "huddle",
-  "transcript_line", "scenario", "coach_message", "advisor_note", "agent_run", "trace_event", "bank_connection", "txn",
-  "credit_profile",
-];
-/** Added to the room subscription only when the published module has them (contracts.md section 6). */
+const BASE_ROOM_TABLES = ["account", "member", "health_indicator", "alert", "huddle", "agent_run"];
+/** Onboarding households are read by the wizard through the plain room scope (goals, bank link, insight trace). */
+const ONBOARDING_EXTRA_TABLES = ["goal", "bank_connection", "trace_event"];
+/** Tables that only exist when the published module has the voting section of contracts.md. */
 const VOTING_TABLES = ["proposal", "vote"];
 
-export function queriesFor(scope: DataScope, withVoting = false): string[] {
+/** One on-demand room table; `trace_event@<run_id>` narrows the steps to a single run. */
+function roomTableQuery(householdId: string, table: string): string {
+  const at = table.indexOf("@");
+  if (at < 0) return `SELECT * FROM ${table} WHERE household_id = '${householdId}'`;
+  return `SELECT * FROM ${table.slice(0, at)} WHERE household_id = '${householdId}' AND run_id = '${safeId(table.slice(at + 1))}'`;
+}
+
+export function queriesFor(scope: DataScope): string[] {
   switch (scope.kind) {
     case "room": {
       const id = safeId(scope.householdId);
-      return [...ROOM_TABLES, ...(withVoting ? VOTING_TABLES : [])].map((t) => `SELECT * FROM ${t} WHERE household_id = '${id}'`);
+      const tables = scope.householdId.startsWith("hh_onb_") ? [...BASE_ROOM_TABLES, ...ONBOARDING_EXTRA_TABLES] : BASE_ROOM_TABLES;
+      return tables.map((t) => `SELECT * FROM ${t} WHERE household_id = '${id}'`);
     }
     case "advisor":
-      return ["health_indicator", "alert", "goal", "account", "advisor_note", "agent_run", "trace_event"].map((t) => `SELECT * FROM ${t}`);
+      // The console lists the latest runs, not their steps: no trace_event here.
+      return ["health_indicator", "alert", "goal", "account", "advisor_note", "agent_run"].map((t) => `SELECT * FROM ${t}`);
     case "agents":
-      return ["agent_run", "trace_event"].map((t) => `SELECT * FROM ${t}`);
+      // Runs only; the wall loads the steps of the runs on screen (`useRunTraces`).
+      return ["SELECT * FROM agent_run"];
     default:
       return ["SELECT * FROM agent_run"];
   }
@@ -276,12 +284,15 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
   // Live reducers + tables when the module has them; otherwise an in-browser stand-in (seeded demo proposals, local
   // votes, a deterministic quick check instead of the agent) so the card still works against an older module.
   const voting = supportsVoting(conn);
+  // The stand-in is only loaded for a module without the voting tables, so the normal path does not ship it.
+  let local: ReturnType<(typeof import("./mock/proposals"))["createLocalProposalActions"]> | null = null;
   if (!voting) {
-    const sp = seedProposals(new Date(), store.rows("household").map((h) => h.id));
+    const stand = await import("./mock/proposals");
+    const sp = stand.seedProposals(new Date(), store.rows("household").map((h) => h.id));
     store.upsertMany("proposal", sp.proposals);
     store.upsertMany("vote", sp.votes);
+    local = stand.createLocalProposalActions(store, () => me);
   }
-  const local = createLocalProposalActions(store, () => me);
 
   // ------------------------------------------------------------------ scope
   let active: { key: string; handle: SubscriptionHandle } | null = null;
@@ -303,7 +314,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       .onError(() => {
         if (mine === generation) setConnection({ synced: true, detail: "A subscription failed; some data may be missing" });
       })
-      .subscribe(queriesFor(scope, voting));
+      .subscribe(queriesFor(scope));
   };
 
   // ------------------------------------------------------------------ actions
@@ -371,7 +382,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
     },
 
     createProposal: async ({ householdId, title, amount, details, closesInDays, authorName }) => {
-      if (!voting) return local.createProposal({ householdId, title, amount, details, closesInDays, authorName });
+      if (local) return local.createProposal({ householdId, title, amount, details, closesInDays, authorName });
       const before = new Set(store.rows("proposal").filter((p) => p.household_id === householdId).map((p) => p.id));
       await r.createProposal({ householdId, title, amount, detailsJson: JSON.stringify(details satisfies ProposalDetails), closesInDays, authorName });
       const made = await poll(() => store.rows("proposal").filter((p) => p.household_id === householdId && !before.has(p.id) && p.title === title)[0]);
@@ -379,12 +390,12 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
     },
 
     castVote: async (proposalId, choice: VoteChoice, voterName) => {
-      if (!voting) return local.castVote(proposalId, choice, voterName);
+      if (local) return local.castVote(proposalId, choice, voterName);
       await r.castVote({ proposalId, choice, voterName });
     },
 
     closeProposal: async (proposalId) => {
-      if (!voting) return local.closeProposal(proposalId);
+      if (local) return local.closeProposal(proposalId);
       await r.closeProposal({ proposalId });
     },
   };
@@ -397,6 +408,30 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       actions,
       setScope: (scope) => {
         applyScope(scope);
+      },
+      subscribeRoomTables: (householdId, tables, onApplied) => {
+        const id = safeId(householdId);
+        const wanted = tables.filter((t) => voting || !VOTING_TABLES.includes(t));
+        if (!wanted.length) {
+          queueMicrotask(onApplied);
+          return () => undefined;
+        }
+        let cancelled = false;
+        let applied = false;
+        const done = () => {
+          applied = true;
+          if (cancelled) unsub(handle);
+          else onApplied();
+        };
+        const handle: SubscriptionHandle = conn
+          .subscriptionBuilder()
+          .onApplied(done)
+          .onError(done)
+          .subscribe(wanted.map((t) => roomTableQuery(id, t)));
+        return () => {
+          cancelled = true;
+          if (applied) unsub(handle);
+        };
       },
       dispose: () => {
         try {

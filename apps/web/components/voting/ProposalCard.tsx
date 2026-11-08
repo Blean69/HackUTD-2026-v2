@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { IconBot, IconCar, IconCheck, IconClose, IconHome, IconPlane, IconTag } from "@/components/icons";
-import { Button, Chip, IconTile, Spinner, type Tone } from "@/components/ui";
+import { Button, Chip, Disclosure, ErrorNote, IconTile, Spinner, type Tone } from "@/components/ui";
 import { castVote, closeProposal } from "@/lib/data/actions";
 import { tallyVotes, useMyVote } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
@@ -21,6 +21,7 @@ const CHOICES: { value: VoteChoice; label: string }[] = [
   { value: "no", label: "No" },
   { value: "abstain", label: "Abstain" },
 ];
+const CHOICE_TEXT: Record<VoteChoice, string> = { yes: "text-good", no: "text-risk", abstain: "text-ink-3" };
 
 export function proposalTerms(p: Proposal): string {
   const d = p.details;
@@ -49,34 +50,34 @@ export function whenText(p: Proposal): string {
   return d <= 0 ? "Closes today" : d === 1 ? "1 day left" : `${d} days left`;
 }
 
-/** The agent's affordability verdict, summary and a link to its run in Agent Trail. */
-export function Verdict({ p, showSummary = true }: { p: Proposal; showSummary?: boolean }) {
+/** The agent's affordability verdict, with a link to its run in Agent Trail. `full` adds the suggestion. */
+export function Verdict({ p, full }: { p: Proposal; full?: boolean }) {
   const v = p.verdict ? VERDICT[p.verdict] : null;
   const summary = p.analysis?.summary ?? p.analysis?.headline;
   const waiting = !v && isOpen(p);
   return (
-    <div className="rounded-md border border-line bg-surface-2 p-3">
-      <div className="flex flex-wrap items-center gap-1.5">
+    <div className="rounded-md bg-surface-2 px-3 py-2.5">
+      <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
         {v ? <Chip tone={v.tone}>{v.label}</Chip> : waiting ? <Chip tone="brand"><Spinner size={11} /> Checking affordability</Chip> : <Chip>No verdict</Chip>}
         {p.run_id ? (
-          <Link href={`/agents?run=${encodeURIComponent(p.run_id)}`} className="inline-flex items-center gap-1 rounded-md border border-transparent bg-brand-soft px-1.5 py-0.5 text-[0.72rem] font-medium leading-4 text-brand-strong hover:underline" title="Open this agent run in Agent Trail">
-            <IconBot size={12} /> Agent analysis
+          <Link href={`/agents?run=${encodeURIComponent(p.run_id)}`} className="inline-flex items-center gap-1 text-[0.78rem] font-medium text-brand-strong hover:underline" title="Open this agent run in Agent Trail">
+            <IconBot size={13} /> Agent analysis
           </Link>
         ) : v ? (
-          <Chip title="A quick estimate from your balances, not a full agent run">Quick estimate</Chip>
+          <span className="text-[0.76rem] text-ink-3">Quick estimate from your balances</span>
         ) : null}
-      </div>
-      {showSummary && summary ? <p className="mt-1.5 text-[0.8rem] leading-snug text-ink-2">{summary}</p> : null}
-      {showSummary && p.analysis?.suggestion ? <p className="mt-1 text-[0.8rem] leading-snug text-ink-2"><span className="font-medium text-ink">Suggestion:</span> {p.analysis.suggestion}</p> : null}
+      </p>
+      {summary ? <p className={cx("mt-1.5 text-[0.82rem] leading-snug text-ink-2", !full && "line-clamp-2")}>{summary}</p> : null}
+      {full && p.analysis?.suggestion ? <p className="mt-1 text-[0.82rem] leading-snug text-ink-2"><span className="font-medium text-ink">Suggestion:</span> {p.analysis.suggestion}</p> : null}
     </div>
   );
 }
 
 /**
- * One proposal. `compact` is the dashboard card layout (single row on desktop); the full layout also shows the agent
- * metrics and who voted what.
+ * One proposal. `compact` is the Dashboard layout (no metrics or voter names); `bare` drops the card chrome when it
+ * already sits inside a Panel.
  */
-export function ProposalCard({ proposal: p, votes, eligible, compact }: { proposal: Proposal; votes: readonly Vote[]; eligible: number; compact?: boolean }) {
+export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { proposal: Proposal; votes: readonly Vote[]; eligible: number; compact?: boolean; bare?: boolean }) {
   const ident = useLocalIdentity();
   const mine = useMyVote(votes);
   const tally = useMemo(() => tallyVotes(votes), [votes]);
@@ -110,78 +111,72 @@ export function ProposalCard({ proposal: p, votes, eligible, compact }: { propos
 
   const outcome = !open ? (tally.yes > tally.no ? { tone: "good" as Tone, label: "Approved" } : tally.total ? { tone: "risk" as Tone, label: "Not approved" } : { tone: "neutral" as Tone, label: "No votes" }) : null;
   const metrics = !compact && p.analysis?.metrics?.length ? p.analysis.metrics : null;
+  const voters = !compact && votes.length ? [...votes].sort((a, b) => a.voter_name.localeCompare(b.voter_name)) : [];
 
   return (
-    <article className="rounded-lg border border-line bg-surface p-3.5" aria-label={`Proposal: ${p.title}`}>
+    <article className={cx(!bare && "rounded-lg border border-line bg-surface p-3.5")} aria-label={`Proposal: ${p.title}`}>
       <div className="flex items-start gap-3">
-        <IconTile tone={open ? "brand" : "neutral"} size={compact ? 40 : 44}><ProposalIcon title={p.title} size={compact ? 20 : 22} /></IconTile>
+        {!compact ? <IconTile tone={open ? "brand" : "neutral"} size={40}><ProposalIcon title={p.title} size={20} /></IconTile> : null}
         <div className="min-w-0 flex-1">
           <h3 className="text-[0.95rem] font-semibold leading-snug">{p.title}</h3>
-          <p className="num mt-0.5 text-[0.8rem] text-ink-2">{proposalTerms(p)}</p>
-          <p className="mt-0.5 text-[0.74rem] text-ink-3">Proposed by {p.created_by_name}</p>
+          <p className="num mt-0.5 text-[0.8rem] text-ink-2">{proposalTerms(p)}{!compact ? <span className="text-ink-3"> · by {p.created_by_name}</span> : null}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {open ? <Chip tone="good">Voting open</Chip> : outcome ? <Chip tone={outcome.tone}>{outcome.label}</Chip> : null}
+          {outcome ? <Chip tone={outcome.tone}>{outcome.label}</Chip> : null}
           <span className="text-[0.74rem] text-ink-3">{whenText(p)}</span>
         </div>
       </div>
 
-      <VoteBar tally={tally} className="mt-3" />
-      <p className="num mt-1 text-[0.72rem] text-ink-3">{tally.total} of {Math.max(eligible, tally.total)} members voted</p>
+      <VoteBar tally={tally} eligible={eligible} className="mt-3" />
 
       {open ? (
-        <div className={cx("mt-3", compact && "sm:flex sm:items-center sm:justify-between sm:gap-3")}>
-          <div role="group" aria-label={`Your vote on ${p.title}`} className="grid grid-cols-3 gap-1.5 sm:w-72">
-            {CHOICES.map((c) => (
-              <Button
-                key={c.value}
-                size="sm"
-                variant={mine === c.value ? "dark" : "secondary"}
-                aria-pressed={mine === c.value}
-                disabled={busy !== null}
-                onClick={() => void vote(c.value)}
-                className="h-9"
-              >
-                {busy === c.value ? <Spinner size={12} /> : mine === c.value ? <IconCheck size={13} /> : c.value === "no" ? <IconClose size={13} /> : null}
-                {c.label}
-              </Button>
-            ))}
-          </div>
-          {mine ? <p className="mt-1.5 text-[0.74rem] text-ink-3 sm:mt-0">You voted <span className="font-semibold text-ink">{mine}</span>. You can change it until voting closes.</p> : <p className="mt-1.5 text-[0.74rem] text-ink-3 sm:mt-0">One vote each; change it any time before it closes.</p>}
+        <div role="group" aria-label={`Your vote on ${p.title}`} className="mt-3 grid grid-cols-3 gap-1.5 sm:max-w-sm">
+          {CHOICES.map((c) => (
+            <Button
+              key={c.value}
+              size="sm"
+              variant={mine === c.value ? "dark" : "secondary"}
+              aria-pressed={mine === c.value}
+              disabled={busy !== null}
+              onClick={() => void vote(c.value)}
+              className="h-10 sm:h-9"
+            >
+              {busy === c.value ? <Spinner size={12} /> : mine === c.value ? <IconCheck size={13} /> : c.value === "no" ? <IconClose size={13} /> : null}
+              {c.label}
+            </Button>
+          ))}
         </div>
       ) : null}
-      {err ? <p role="alert" className="mt-2 text-[0.8rem] text-risk">{err}</p> : null}
+      {err ? <ErrorNote className="mt-2 !py-2">{err}</ErrorNote> : null}
 
-      <div className="mt-3">
-        <Verdict p={p} showSummary />
-      </div>
-
-      {metrics ? (
-        <dl className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {metrics.map((m) => (
-            <div key={m.label} className="rounded-md bg-surface-2 p-2.5">
-              <dt className="text-[0.72rem] leading-tight text-ink-2">{m.label}</dt>
-              <dd className="num mt-1 flex items-baseline gap-1.5">
-                {m.before !== undefined ? <span className="text-[0.78rem] text-ink-3 line-through">{metric(m.before, m.unit)}</span> : null}
-                <span className="text-[1rem] font-semibold">{metric(m.after, m.unit)}</span>
-              </dd>
-            </div>
+      {voters.length ? (
+        <p className="mt-2.5 text-[0.8rem] text-ink-2" aria-label="Who voted">
+          {voters.map((v, i) => (
+            <span key={v.id}>{i ? " · " : ""}{v.voter_name} <span className={cx("font-medium", CHOICE_TEXT[v.choice])}>{v.choice}</span></span>
           ))}
-        </dl>
+        </p>
       ) : null}
 
-      {!compact && votes.length ? (
-        <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Who voted">
-          {[...votes].sort((a, b) => a.voter_name.localeCompare(b.voter_name)).map((v) => (
-            <li key={v.id}>
-              <Chip tone={v.choice === "yes" ? "good" : v.choice === "no" ? "risk" : "neutral"}>{v.voter_name}: {v.choice}</Chip>
-            </li>
-          ))}
-        </ul>
+      <div className="mt-3"><Verdict p={p} full={!compact} /></div>
+
+      {metrics ? (
+        <Disclosure summary="Show the numbers" className="mt-2">
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {metrics.map((m) => (
+              <div key={m.label} className="rounded-md bg-surface-2 p-2.5">
+                <dt className="text-[0.72rem] leading-tight text-ink-2">{m.label}</dt>
+                <dd className="num mt-1 flex items-baseline gap-1.5">
+                  {m.before !== undefined ? <span className="text-[0.78rem] text-ink-3 line-through">{metric(m.before, m.unit)}</span> : null}
+                  <span className="text-[0.98rem] font-semibold">{metric(m.after, m.unit)}</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Disclosure>
       ) : null}
 
       {!compact && open && p.created_by_name === name ? (
-        <div className="mt-3 border-t border-line pt-3">
+        <div className="mt-2">
           <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void close()}>{busy === "close" ? <Spinner size={12} /> : null} Close voting now</Button>
         </div>
       ) : null}

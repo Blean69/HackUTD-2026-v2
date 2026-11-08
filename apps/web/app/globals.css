@@ -41,6 +41,15 @@
   --focus: #17694a;
   --rec: #d92d20;
 
+  /* motion: one easing family, three durations. Opacity and transform only. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 0.75, 0.2);
+  --dur-1: 140ms;
+  --dur-2: 240ms;
+  --dur-3: 400ms;
+  /* stagger step for list and hero reveals */
+  --stagger: 45ms;
+
   /* chart palette: greens first, semantic colours reserved for meaning */
   --c1: #0f4a37;
   --c2: #2f8a5a;
@@ -122,6 +131,11 @@ select:focus-visible {
 .on-dark:focus-visible {
   outline-color: #ffffff;
 }
+/* Headings that receive focus programmatically (step changes) announce themselves without a ring. */
+[tabindex="-1"]:focus,
+[tabindex="-1"]:focus-visible {
+  outline: none;
+}
 
 button,
 [role="button"],
@@ -163,7 +177,9 @@ summary {
   font-weight: 600;
 }
 
-/* --------------------------------------------------------------------------------- motion */
+/* --------------------------------------------------------------------------------- motion
+   Shared by components/motion. Every entrance uses opacity + transform only (no layout shift),
+   and everything collapses to an instant state under prefers-reduced-motion. */
 @keyframes sheet-up {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
@@ -180,6 +196,26 @@ summary {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: none; }
 }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes step-fwd {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes step-back {
+  from { opacity: 0; transform: translateX(-18px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes leave {
+  to { opacity: 0; transform: translateY(-8px); }
+}
+@keyframes pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--rec) 45%, transparent); }
   70% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--rec) 0%, transparent); }
@@ -194,12 +230,16 @@ summary {
 @keyframes soft-pulse {
   50% { opacity: 0.55; }
 }
-.anim-sheet { animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.anim-side { animation: side-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.anim-drawer { animation: drawer-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.anim-fade { animation: fade-in 0.25s ease-out both; }
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+.anim-sheet { animation: sheet-up var(--dur-2) var(--ease-out); }
+.anim-side { animation: side-in var(--dur-2) var(--ease-out); }
+.anim-drawer { animation: drawer-in var(--dur-2) var(--ease-out); }
+.anim-fade { animation: fade-in var(--dur-2) var(--ease-out) both; }
 /* Call sheet: slides up as a bottom sheet on phones, fades in as a centred dialog from md up. */
-.anim-dialog { animation: sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.anim-dialog { animation: sheet-up var(--dur-2) var(--ease-out); }
 @media (min-width: 768px) {
   .anim-dialog { animation: fade-in 0.2s ease-out both; }
 }
@@ -212,14 +252,39 @@ summary {
   animation: soft-pulse 1.6s ease-in-out infinite;
 }
 
+/* Staggered entrance: set --i (0, 1, 2...) on each item. */
+.motion-rise { animation: rise var(--dur-3) var(--ease-out) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+.motion-fade { animation: fade-in var(--dur-2) var(--ease-out) both; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+.motion-step-fwd { animation: step-fwd 300ms var(--ease-out) both; }
+.motion-step-back { animation: step-back 300ms var(--ease-out) both; }
+.motion-leave { animation: leave 200ms var(--ease-in) forwards; pointer-events: none; }
+.motion-page { animation: rise 320ms var(--ease-out) both; }
+.motion-pop { animation: pop 360ms var(--ease-out) both; }
+/* Indeterminate-but-honest progress: a soft sheen moving across a bar that also has a real width. */
+.motion-sheen { position: relative; overflow: hidden; }
+.motion-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+  animation: shimmer 1.4s var(--ease-out) infinite;
+}
+/* Progress fills scale on X (set transform: scaleX(v)), so they tween without layout work. */
+.bar-fill { transform-origin: left center; transition: transform 600ms var(--ease-out); }
+/* Press feedback for buttons and tappable cards. */
+.press { transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1), box-shadow var(--dur-1); }
+.press:active:not(:disabled) { transform: scale(0.985); }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  .motion-sheen::after { display: none; }
 }
 
 /* Hide scrollbars on horizontal chip rows but keep them scrollable. */

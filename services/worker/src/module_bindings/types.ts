@@ -244,6 +244,22 @@ export const Obligation = __t.object("Obligation", {
 });
 export type Obligation = __Infer<typeof Obligation>;
 
+export const PhoneAccess = __t.object("PhoneAccess", {
+  householdId: __t.string(),
+  pinHash: __t.string(),
+  salt: __t.string(),
+  updatedAt: __t.timestamp(),
+  setBy: __t.identity(),
+});
+export type PhoneAccess = __Infer<typeof PhoneAccess>;
+
+export const PhoneAccessStatus = __t.object("PhoneAccessStatus", {
+  householdId: __t.string(),
+  hasPin: __t.bool(),
+  updatedAt: __t.timestamp(),
+});
+export type PhoneAccessStatus = __Infer<typeof PhoneAccessStatus>;
+
 export const PlaidItem = __t.object("PlaidItem", {
   itemId: __t.string(),
   householdId: __t.string(),
@@ -358,6 +374,9 @@ export const Worker = __t.object("Worker", {
   registeredAt: __t.timestamp(),
 });
 export type Worker = __Infer<typeof Worker>;
+
+export const WorkerPhoneAccess = __t.object("WorkerPhoneAccess", {});
+export type WorkerPhoneAccess = __Infer<typeof WorkerPhoneAccess>;
 
 export const WorkerPlaidItems = __t.object("WorkerPlaidItems", {});
 export type WorkerPlaidItems = __Infer<typeof WorkerPlaidItems>;

@@ -1,79 +1,50 @@
 "use client";
-import Link from "next/link";
-import { useState, type Ref } from "react";
-import { IconBank, IconLock, IconReceipt, IconShield } from "@/components/icons";
+import type { Ref } from "react";
+import { IconBank, IconReceipt, IconShield } from "@/components/icons";
 import { Button } from "@/components/ui";
-import { DEMO_HOUSEHOLD_ID } from "@/lib/constants";
-import { Notice, StepFooter, StepHeading } from "../fields";
+import { PRODUCT_NAME } from "@/lib/constants";
+import { StepFooter, StepHeading } from "../fields";
 
 const READS = [
-  { Icon: IconBank, title: "Balances", text: "What is in each checking, savings, retirement and loan account." },
-  { Icon: IconReceipt, title: "Transactions", text: "The last few months of spending and deposits, so we can see where money goes." },
-  { Icon: IconLock, title: "Loans and cards", text: "How much you owe and your monthly payments." },
+  { Icon: IconBank, title: "Balances", text: "Checking, savings, retirement, cards and loans." },
+  { Icon: IconReceipt, title: "Transactions", text: "About six months of spending and deposits." },
+  { Icon: IconShield, title: "Read-only", text: "Nothing can move money or change your bank." },
 ];
 
-export function WelcomeStep({ onContinue, headingRef }: { onContinue: () => void; headingRef: Ref<HTMLHeadingElement> }) {
-  const [agreed, setAgreed] = useState(false);
+/** Step 1: what we read, and consent. The primary button is the consent, so there is nothing to tick first. */
+export function WelcomeStep({ onContinue, onBack, headingRef }: { onContinue: () => void; onBack: () => void; headingRef: Ref<HTMLHeadingElement> }) {
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (agreed) onContinue();
+        onContinue();
       }}
     >
-      <StepHeading
-        headingRef={headingRef}
-        title="Let's set up your family's financial room"
-        sub="It takes about two minutes. You will connect a bank, choose which accounts to include, and answer a few friendly questions. Then your assistant gets to work."
-      />
+      <StepHeading headingRef={headingRef} title="Let's set up your household" sub="Six short steps, about two minutes. Here is what we will read once you connect a bank." />
 
-      <section aria-labelledby="reads-h">
-        <h2 id="reads-h" className="mb-2 text-[0.9rem] font-semibold">
-          What we will read
-        </h2>
-        <ul className="divide-y divide-line rounded-lg border border-line">
-          {READS.map(({ Icon, title, text }) => (
-            <li key={title} className="flex items-start gap-3 px-3.5 py-3">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-strong">
-                <Icon size={17} />
-              </span>
-              <div>
-                <p className="text-[0.9rem] font-medium leading-tight">{title}</p>
-                <p className="mt-0.5 text-[0.82rem] leading-snug text-ink-2">{text}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 flex items-center gap-1.5 text-[0.8rem] text-ink-2">
-          <IconShield size={15} className="shrink-0 text-brand-strong" /> Read-only. We cannot move money or change anything at your bank.
-        </p>
-      </section>
+      <ul className="space-y-4">
+        {READS.map(({ Icon, title, text }, i) => (
+          <li key={title} className="motion-rise flex items-start gap-3.5" style={{ ["--i" as string]: i + 1 }}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-strong">
+              <Icon size={19} />
+            </span>
+            <span className="min-w-0 pt-0.5">
+              <span className="block text-[0.95rem] font-semibold leading-tight">{title}</span>
+              <span className="mt-0.5 block text-[0.88rem] leading-snug text-ink-2">{text}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
 
-      <div className="mt-4">
-        <Notice tone="info">
-          <strong className="font-semibold text-ink">This is a sandbox.</strong> The bank, the accounts and the money are all fake test data. Nothing real is connected, and nothing here can cost you a cent.
-        </Notice>
-      </div>
+      <p className="mt-6 rounded-lg bg-surface-2 px-3.5 py-3 text-[0.86rem] leading-snug text-ink-2">
+        <strong className="font-semibold text-ink">Sandbox only.</strong> The banks, accounts and people are synthetic test data. Nothing real is connected.
+      </p>
 
-      <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-line-strong bg-surface px-3.5 py-3.5 has-[:checked]:border-brand has-[:checked]:bg-brand-soft/40">
-        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-brand" />
-        <span className="text-[0.9rem] leading-snug">
-          <span className="font-medium">I agree.</span> I understand this is a sandbox with fake money, and I am happy for Cosign to read the sandbox bank data described above.
-        </span>
-      </label>
-
-      <StepFooter note={agreed ? undefined : "Tick the box above to continue."}>
-        <Button type="submit" size="lg" disabled={!agreed}>
-          Continue
+      <StepFooter onBack={onBack} note={<>By continuing you agree that {PRODUCT_NAME} may read the sandbox data described above.</>}>
+        <Button type="submit" size="lg">
+          Agree and continue
         </Button>
       </StepFooter>
-
-      <p className="mt-4 text-center text-[0.84rem] text-ink-2">
-        Just looking around?{" "}
-        <Link href={`/room/${DEMO_HOUSEHOLD_ID}`} className="font-semibold text-brand-strong underline underline-offset-2">
-          Explore the demo household instead
-        </Link>
-      </p>
     </form>
   );
 }

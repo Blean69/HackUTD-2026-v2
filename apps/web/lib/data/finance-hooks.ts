@@ -1,15 +1,14 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  accountMoM, assetAllocation, contributionTracking, debtProfile, healthModel, lastUpdated, monthlyCashFlow, netWorthHistory, netWorthTotals,
-  netWorthTrend, recentNetCashFlow, upcomingObligations,
+  HISTORY_MONTHS, HISTORY_WEEKS, healthModel, monthlyCashFlow, netWorthHistory, netWorthTotals, netWorthTrend, recentNetCashFlow, upcomingObligations,
 } from "@/lib/finance";
-import { useRange } from "@/lib/rangeUi";
+import type { RoomTable } from "./backend";
 import {
-  useAccounts, useForecast, useHealth, useHousehold, useMembers, useObligations, useTxns,
+  useAccounts, useForecast, useHealth, useHousehold, useMembers, useObligations, useRoomTables, useTxns,
 } from "./hooks";
 
-/** "Now", refreshed once a minute so relative labels and due dates stay honest without re-rendering constantly. */
+/** "Now", refreshed on an interval for relative labels ("3 min ago"). Use `useToday` for anything date-based. */
 export function useNow(everyMs = 60_000): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -19,42 +18,56 @@ export function useNow(everyMs = 60_000): Date {
   return now;
 }
 
-/** Every derived number the dashboard and analytics pages need, computed once per data change. */
-export function useRoomFinance(householdId: string) {
+/** Today at midnight. Changes once a day, so memoised finance values never churn on a timer. */
+export function useToday(): Date {
+  const [key, setKey] = useState(() => new Date().toDateString());
+  useEffect(() => {
+    const t = setInterval(() => setKey((k) => {
+      const next = new Date().toDateString();
+      return next === k ? k : next;
+    }), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return useMemo(() => new Date(key), [key]);
+}
+
+/** Net worth totals plus the rows behind them. Accounts and household are in the room base set; nothing extra to load. */
+export function useNetWorthSummary(householdId: string) {
   const household = useHousehold(householdId);
-  const members = useMembers(householdId);
   const accounts = useAccounts(householdId);
+  const property = (household?.home_value ?? 0) + (household?.vehicle_value ?? 0);
+  const nw = useMemo(() => netWorthTotals(accounts, property), [accounts, property]);
+  return { household, accounts, property, nw };
+}
+
+/** Tables the dashboard model reads on top of the room base set. */
+export const FINANCE_TABLES: readonly RoomTable[] = ["txn", "obligation", "forecast_point"];
+
+/**
+ * Every derived number the Dashboard needs. Each derivation is its own memo, so a new transaction recomputes the
+ * trend and cash flow but not the health model, and a new alert recomputes nothing here. Registers the tables it reads;
+ * `ready` is false until they have arrived.
+ */
+export function useRoomFinance(householdId: string) {
+  const ready = useRoomTables(householdId, FINANCE_TABLES);
+  const { household, accounts, property, nw } = useNetWorthSummary(householdId);
+  const members = useMembers(householdId);
   const obligations = useObligations(householdId);
   const txns = useTxns(householdId);
   const health = useHealth(householdId);
   const forecast = useForecast(householdId);
-  const { weeks, months } = useRange();
-  const now = useNow();
-  // Day-granularity key so memoised values don't churn every minute.
-  const dayKey = now.toDateString();
+  const today = useToday();
 
-  return useMemo(() => {
-    const today = new Date(dayKey);
-    const property = (household?.home_value ?? 0) + (household?.vehicle_value ?? 0);
-    const nw = netWorthTotals(accounts, property);
-    const history = netWorthHistory(txns, nw.net, today, weeks);
-    const trend = netWorthTrend(history, forecast.points, nw.net);
-    const cash = monthlyCashFlow(txns, accounts, obligations, members, today, months);
-    const flow = recentNetCashFlow(cash);
-    const hm = healthModel(health);
-    return {
-      household, members, accounts, obligations, txns, health, forecast, property, nw,
-      history, trend,
-      allocation: assetAllocation(accounts, household),
-      cash, flow,
-      debt: debtProfile(accounts, members, obligations, health, household),
-      healthModel: hm,
-      upcoming: upcomingObligations(obligations, today, 8),
-      contributions: contributionTracking(members, accounts, flow.value),
-      moM: (a: (typeof accounts)[number]) => accountMoM(a, txns, today),
-      updatedAt: lastUpdated(health),
-      today,
-    };
-  }, [household, members, accounts, obligations, txns, health, forecast, weeks, months, dayKey]);
+  const history = useMemo(() => netWorthHistory(txns, nw.net, today, HISTORY_WEEKS), [txns, nw.net, today]);
+  const trend = useMemo(() => netWorthTrend(history, forecast.points, nw.net), [history, forecast.points, nw.net]);
+  const cash = useMemo(() => monthlyCashFlow(txns, accounts, obligations, members, today, HISTORY_MONTHS), [txns, accounts, obligations, members, today]);
+  const flow = useMemo(() => recentNetCashFlow(cash), [cash]);
+  const hm = useMemo(() => healthModel(health), [health]);
+  const upcoming = useMemo(() => upcomingObligations(obligations, today, 8), [obligations, today]);
+
+  return useMemo(
+    () => ({ ready, household, members, accounts, obligations, txns, health, forecast, property, nw, history, trend, cash, flow, healthModel: hm, upcoming, today }),
+    [ready, household, members, accounts, obligations, txns, health, forecast, property, nw, history, trend, cash, flow, hm, upcoming, today],
+  );
 }
 export type RoomFinance = ReturnType<typeof useRoomFinance>;

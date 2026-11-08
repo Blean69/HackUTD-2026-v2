@@ -1,39 +1,64 @@
 "use client";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/icons";
-import { Chip, Skeleton } from "@/components/ui";
-import { DEMO_HOUSEHOLD_ID, PRODUCT_NAME, SYNTHETIC_NOTE } from "@/lib/constants";
+import { leaveThen, StepTransition } from "@/components/motion";
+import { Avatar, Skeleton } from "@/components/ui";
+import { PRODUCT_NAME } from "@/lib/constants";
 import { useConnection } from "@/lib/data/connection";
 import { joinRoom } from "@/lib/data/actions";
-import { useDataReady, useDataScope, useHousehold, usePresence } from "@/lib/data/hooks";
+import { useDataReady, useDataScope, useHousehold, usePresence, useRoomTables } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
 import {
-  deriveStep, useAccountOptions, useInsightsRun, useOnboardingBank, useOnboardingMode, useOnboardingSubscription, useProfile,
+  deriveStep, findProfile, QUESTION_COUNT, STEPS, useAccountOptions, useInsightsRun, useOnboardingBank, useOnboardingMode, useOnboardingSubscription,
+  useProfile, type StepKey,
 } from "@/lib/data/onboarding";
 import { rememberHousehold } from "@/lib/lastHousehold";
-import { JoinCard } from "./JoinCard";
-import { PresenceBar } from "./PresenceBar";
 import { Stepper } from "./Stepper";
-import { AboutStep } from "./steps/AboutStep";
-import { AccountsStep } from "./steps/AccountsStep";
-import { ConnectStep } from "./steps/ConnectStep";
-import { DoneStep } from "./steps/DoneStep";
 import { HouseholdStep } from "./steps/HouseholdStep";
 import { WelcomeStep } from "./steps/WelcomeStep";
-import { WatchPanel } from "./WatchPanel";
+import { backTo, pushPos, replacePos, syncPos, useWizardPos } from "./wizardUrl";
+
+// The first two steps ship with the page; the rest load in the background once the page is idle, so they are ready
+// long before anyone reaches them and the first load stays small.
+const later = {
+  connect: () => import("./steps/ConnectStep"),
+  accounts: () => import("./steps/AccountsStep"),
+  questions: () => import("./steps/QuestionsStep"),
+  done: () => import("./steps/DoneStep"),
+  watch: () => import("./WatchPanel"),
+  join: () => import("./JoinCard"),
+};
+const ConnectStep = dynamic(() => later.connect().then((m) => m.ConnectStep));
+const AccountsStep = dynamic(() => later.accounts().then((m) => m.AccountsStep));
+const QuestionsStep = dynamic(() => later.questions().then((m) => m.QuestionsStep));
+const DoneStep = dynamic(() => later.done().then((m) => m.DoneStep));
+const WatchPanel = dynamic(() => later.watch().then((m) => m.WatchPanel));
+const JoinCard = dynamic(() => later.join().then((m) => m.JoinCard));
+function preloadSteps(): () => void {
+  const run = () => Object.values(later).forEach((load) => void load());
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+  if (w.requestIdleCallback) {
+    const id = w.requestIdleCallback(run, { timeout: 1200 });
+    return () => w.cancelIdleCallback?.(id);
+  }
+  const t = window.setTimeout(run, 400);
+  return () => window.clearTimeout(t);
+}
 
 const GRACE_MS = 3500;
+const idx = (k: StepKey) => STEPS.findIndex((s) => s.key === k);
 
 function Loading() {
   return (
-    <div role="status" aria-label="Loading setup" className="space-y-3">
-      <Skeleton className="h-7 w-3/4" />
-      <Skeleton className="h-4 w-full" />
-      <Skeleton className="h-4 w-5/6" />
-      <Skeleton className="mt-4 h-24 w-full" />
-      <Skeleton className="h-12 w-full" />
+    <div role="status" aria-label="Loading setup">
+      <Skeleton className="h-8 w-3/4" />
+      <Skeleton className="mt-3 h-4 w-full" />
+      <Skeleton className="mt-2 h-4 w-5/6" />
+      <Skeleton className="mt-6 h-24 w-full !rounded-lg" />
+      <Skeleton className="mt-6 h-12 w-full !rounded-lg sm:ml-auto sm:w-40" />
     </div>
   );
 }
@@ -41,18 +66,16 @@ function Loading() {
 function NotFound({ offline }: { offline: boolean }) {
   return (
     <div>
-      <h1 className="text-[1.3rem] font-semibold leading-tight tracking-tight">We couldn&apos;t find that household</h1>
-      <p className="mt-2 text-[0.92rem] leading-relaxed text-ink-2">
-        {offline
-          ? "You are in the offline demo, which does not keep your progress when the page reloads. Start again, it only takes a minute."
-          : "The link may be mistyped, or the household was removed. You can start a new setup or look around the demo."}
+      <h1 className="text-[1.45rem] font-semibold leading-tight tracking-tight">We couldn&apos;t find that setup</h1>
+      <p className="mt-2 text-[0.95rem] leading-relaxed text-ink-2">
+        {offline ? "The offline demo keeps setups only while the tab is open. Starting again takes about two minutes." : "The link may be mistyped, or the household was removed."}
       </p>
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-        <Link href="/onboarding" className="inline-flex h-12 items-center justify-center rounded-md bg-brand px-5 text-[0.95rem] font-semibold text-brand-ink hover:bg-brand-strong">
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+        <Link href="/onboarding" className="press inline-flex h-12 items-center justify-center rounded-lg bg-brand px-5 text-[0.95rem] font-semibold text-brand-ink hover:bg-brand-strong">
           Start a new setup
         </Link>
-        <Link href={`/room/${DEMO_HOUSEHOLD_ID}`} className="inline-flex h-12 items-center justify-center rounded-md border border-line-strong bg-surface px-5 text-[0.95rem] font-semibold hover:bg-surface-2">
-          Explore the demo household
+        <Link href="/login" className="press inline-flex h-12 items-center justify-center rounded-lg px-5 text-[0.95rem] font-semibold text-ink-2 hover:bg-surface-2 hover:text-ink">
+          Log in instead
         </Link>
       </div>
     </div>
@@ -60,22 +83,26 @@ function NotFound({ offline }: { offline: boolean }) {
 }
 
 /**
- * The whole onboarding stepper (docs/contracts.md section 7). Lives in the /onboarding layout so it survives the
- * move from /onboarding to /onboarding/[householdId] when the household is created.
+ * The registration wizard (docs/contracts.md section 7): Welcome, Your household, Connect your bank, Choose accounts,
+ * A few questions (three short screens), Done. Lives in the /onboarding layout so it survives the move from /onboarding
+ * to /onboarding/[householdId] when the household is created.
  *
- * Step source of truth: the household's stored state (profile status + bank connection + insights run), so a refresh
- * resumes and a family member who opens the link follows along. The driver (the person who created the household,
- * or anyone who taps "Help set this up") moves between steps locally on top of that.
+ * Position: the URL (`?step=`, `&q=`) says where you are, clamped to what the household's stored state allows, so a
+ * refresh resumes and Back works. Without a step in the URL, the stored state decides (resume from a shared link).
+ * Family members who open the link follow along read-only until they tap "Help set this up".
  */
 export function OnboardingFlow() {
   const params = useParams<{ householdId?: string | string[] }>();
   const router = useRouter();
   const raw = Array.isArray(params.householdId) ? params.householdId[0] : params.householdId;
   const householdId = raw ? decodeURIComponent(raw) : undefined;
+  const pos = useWizardPos();
 
   const mode = useOnboardingMode();
   useDataScope(householdId ? "room" : "lobby", householdId ?? "");
   useOnboardingSubscription(householdId, mode);
+  // Beyond the room's base tables, the wizard reads the bank link and the goals written from the answers.
+  useRoomTables(householdId ?? "", householdId ? ["bank_connection", "goal"] : []);
   const dataReady = useDataReady() && mode !== "detecting";
   const conn = useConnection();
   const ident = useLocalIdentity();
@@ -86,7 +113,9 @@ export function OnboardingFlow() {
   const { run } = useInsightsRun(householdId);
   const present = usePresence(householdId ?? "");
 
-  // Only the first load shows a skeleton; later scope changes keep the screen steady.
+  useEffect(preloadSteps, []);
+
+  // Only a household URL waits for data; the first two steps render straight away (and prerender).
   const [booted, setBooted] = useState(false);
   if (dataReady && !booted) setBooted(true);
   const [waited, setWaited] = useState(false);
@@ -95,29 +124,67 @@ export function OnboardingFlow() {
     const t = setTimeout(() => setWaited(true), GRACE_MS);
     return () => clearTimeout(t);
   }, [booted, householdId]);
+  // The household id just arrived in the path: re-read the query the router wrote alongside it.
+  useEffect(() => {
+    syncPos();
+  }, [householdId]);
 
-  const [navStep, setNavStep] = useState<number | null>(null);
   const [takeOver, setTakeOver] = useState(false);
-  const [advancedFor, setAdvancedFor] = useState("");
-
   const isOwner = !!household && (!household.owner || household.owner === conn.identity);
   const drive = !householdId || isOwner || takeOver;
-  const derived = householdId ? deriveStep({ status: profile?.status, bank, hasRun: !!run }) : 0;
-  const step = householdId && !drive ? derived : (navStep ?? derived);
 
-  // Bank found its accounts: move a driver on to choosing them (once per bank connection).
-  if (drive && householdId && step === 2 && bank?.status === "selecting" && options.length > 0 && advancedFor !== bank.item_id) {
-    setAdvancedFor(bank.item_id);
-    setNavStep(3);
-  }
+  // ---- which step: what the URL asks for, clamped to what the stored state allows
+  const hasRun = !!run;
+  const derived = householdId ? deriveStep({ status: profile?.status, bank, hasRun }) : 0;
+  const answered = !!profile?.answers || profile?.status === "done" || hasRun;
+  const canAt = (k: StepKey): boolean => {
+    if (!householdId) return k === "welcome" || k === "household";
+    switch (k) {
+      case "accounts":
+        return !!bank && options.length > 0;
+      case "questions":
+        return bank?.status !== "selecting" && bank?.status !== "linking";
+      case "done":
+        return answered;
+      default:
+        return true;
+    }
+  };
+  const fallback: StepKey = householdId ? STEPS[derived].key : "welcome";
+  const wanted: StepKey = drive ? (pos.step ?? fallback) : STEPS[derived].key;
+  const settled = !householdId || (booted && !!household);
+  const step: StepKey = !settled ? wanted : canAt(wanted) ? wanted : fallback;
+  const q = step === "questions" ? pos.q : 1;
+  const current = idx(step);
 
-  // Presence: everyone with the link shows up as a chip.
+  // Keep the URL honest once we know where we really are (refreshes, stale links).
+  useEffect(() => {
+    if (!drive || !settled || (!householdId && pos.step === null)) return;
+    if (pos.step !== step || (step === "questions" && pos.q !== q)) replacePos({ step, q });
+  }, [drive, settled, householdId, pos.step, pos.q, step, q]);
+
+  // The bank found its accounts: move the driver on to choosing them, once per connection.
+  const advancedFor = useRef("");
+  useEffect(() => {
+    if (!drive || step !== "connect" || bank?.status !== "selecting" || !options.length || advancedFor.current === bank.item_id) return;
+    advancedFor.current = bank.item_id;
+    pushPos({ step: "accounts" });
+  }, [drive, step, bank?.status, bank?.item_id, options.length]);
+
+  // ---- direction of travel for the step transition
+  const key = `${step}:${q}`;
+  const order = current * 10 + q;
+  const [travel, setTravel] = useState({ key, order, dir: "fwd" as "fwd" | "back" });
+  if (travel.key !== key) setTravel({ key, order, dir: order >= travel.order ? "fwd" : "back" });
+
+  // Presence: everyone with the link shows up for everyone else.
   useEffect(() => {
     if (dataReady && householdId && ident.name) void joinRoom(householdId, ident.name, "family").catch(() => undefined);
   }, [dataReady, householdId, ident.name]);
 
-  // Move focus to the new step's heading (keyboard and screen reader users), skipping the first paint.
+  // Focus the new step's heading (keyboard and screen reader users), skipping the first paint.
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const first = useRef(true);
   useEffect(() => {
     if (first.current) {
@@ -127,88 +194,120 @@ export function OnboardingFlow() {
     if (!drive) return;
     headingRef.current?.focus({ preventScroll: true });
     window.scrollTo({ top: 0 });
-  }, [step, drive]);
+  }, [key, drive]);
 
-  const goTo = (n: number) => setNavStep(n);
+  const roomUrl = householdId ? `/room/${encodeURIComponent(householdId)}` : "/";
+  useEffect(() => {
+    if (step === "done" && householdId) router.prefetch(roomUrl);
+  }, [step, householdId, roomUrl, router]);
+
+  const go = (k: StepKey, qq?: number) => pushPos({ step: k, q: qq });
+  const back = (k: StepKey, qq?: number) => backTo({ step: k, q: qq });
   const toDashboard = () => {
     if (!householdId) return;
     rememberHousehold(householdId);
-    router.push(`/room/${encodeURIComponent(householdId)}`);
+    leaveThen(mainRef.current, () => router.push(roomUrl));
   };
 
+  const selectedCount = options.filter((o) => o.selected).length || options.length;
+  const expectedTxns = findProfile(options[0]?.account_id.replace(/_\d+$/, ""))?.txn_count;
+
   let body: ReactNode;
-  const needProfile = !!householdId && navStep === null && !profile && mode === "live" && !waited;
-  if (!booted) {
+  if (householdId && !booted) {
     body = <Loading />;
   } else if (householdId && !household) {
     body = waited ? <NotFound offline={mode === "mock"} /> : <Loading />;
   } else if (householdId && household && !ident.name && ident.ready) {
     body = <JoinCard householdName={household.name} />;
-  } else if (needProfile) {
-    body = <Loading />;
   } else if (householdId && household && !drive) {
     const ownerPresence = present.find((p) => p.identity === household.owner);
-    body = <WatchPanel household={household} step={derived} bank={bank} owner={ownerPresence} onTakeOver={() => setTakeOver(true)} onDashboard={toDashboard} headingRef={headingRef} />;
-  } else if (!householdId && step >= 2) {
-    body = <Loading />; // household created; the URL is about to gain its id
-  } else if (step === 0 || (!householdId && step < 1)) {
-    body = <WelcomeStep onContinue={() => goTo(1)} headingRef={headingRef} />;
-  } else if (step === 1 || !householdId) {
+    body = <WatchPanel household={household} step={derived} bank={bank} owner={ownerPresence} expectedAccounts={selectedCount} onTakeOver={() => setTakeOver(true)} onDashboard={toDashboard} headingRef={headingRef} />;
+  } else if (step === "welcome") {
+    body = <WelcomeStep onBack={() => router.push("/")} onContinue={() => go("household")} headingRef={headingRef} />;
+  } else if (step === "household") {
     body = (
       <HouseholdStep
         household={household}
         defaultName={ident.name ?? ""}
-        onBack={() => goTo(0)}
-        onCreated={(id) => {
-          setNavStep(2);
-          router.replace(`/onboarding/${encodeURIComponent(id)}`);
-        }}
-        onContinue={() => goTo(2)}
+        onBack={() => back("welcome")}
+        onCreated={(id) => router.replace(`/onboarding/${encodeURIComponent(id)}?step=connect`)}
+        onContinue={() => go("connect")}
         headingRef={headingRef}
       />
     );
-  } else if (step === 2 && householdId) {
-    body = <ConnectStep householdId={householdId} bank={bank} mode={mode} onBack={() => goTo(1)} onSkip={() => goTo(4)} onContinue={() => goTo(3)} headingRef={headingRef} />;
-  } else if (step === 3 && householdId) {
-    body = <AccountsStep householdId={householdId} bank={bank} options={options} onBack={() => goTo(2)} onBackToConnect={() => goTo(2)} onDone={() => goTo(4)} headingRef={headingRef} />;
-  } else if (step === 4 && householdId) {
-    body = <AboutStep householdId={householdId} bank={bank} profile={profile} defaultName={ident.name ?? ""} onBack={() => goTo(bank?.status === "selecting" ? 3 : 2)} onDone={() => goTo(5)} headingRef={headingRef} />;
+  } else if (step === "connect" && householdId) {
+    body = <ConnectStep householdId={householdId} bank={bank} mode={mode} onBack={() => back("household")} onContinue={() => go("accounts")} onSkip={() => go("questions")} headingRef={headingRef} />;
+  } else if (step === "accounts" && householdId) {
+    body = <AccountsStep householdId={householdId} bank={bank} options={options} onBack={() => back("connect")} onDone={() => go("questions")} headingRef={headingRef} />;
+  } else if (step === "questions" && householdId) {
+    body = (
+      <QuestionsStep
+        householdId={householdId}
+        q={q}
+        bank={bank}
+        options={options}
+        profile={profile}
+        defaultName={ident.name ?? ""}
+        expectedTxns={expectedTxns}
+        onBack={() => (q > 1 ? back("questions", q - 1) : back(bank ? "accounts" : "connect"))}
+        onNext={(n) => go("questions", n)}
+        onDone={() => go("done")}
+        headingRef={headingRef}
+      />
+    );
   } else if (householdId) {
-    body = <DoneStep householdId={householdId} bank={bank} profile={profile} name={ident.name ?? ""} onDashboard={toDashboard} onChooseAccounts={() => goTo(3)} headingRef={headingRef} />;
+    body = (
+      <DoneStep
+        householdId={householdId}
+        householdName={household?.name}
+        bank={bank}
+        profile={profile}
+        name={ident.name ?? ""}
+        expectedAccounts={selectedCount}
+        expectedTxns={expectedTxns}
+        onDashboard={toDashboard}
+        onChooseAccounts={() => go("accounts")}
+        headingRef={headingRef}
+      />
+    );
   }
 
-  const showProgress = booted && (!householdId || !!household);
+  const others = householdId ? present.filter((p) => !p.isMe) : [];
+  const showProgress = drive && (!householdId || (booted && !!household));
   return (
-    <div className="min-h-dvh bg-bg text-ink">
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex h-14 w-full max-w-2xl items-center gap-2.5 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2 rounded-md" aria-label={`${PRODUCT_NAME} home`}>
-            <BrandMark size={26} />
-            <span className="text-[1.05rem] font-semibold tracking-tight">{PRODUCT_NAME}</span>
-          </Link>
-          <span className="text-[0.9rem] text-ink-3" aria-hidden="true">/</span>
-          <span className="text-[0.9rem] text-ink-2">Setup</span>
-          <span className="flex-1" />
-          {mode === "mock" ? <Chip tone="watch" title="No backend reachable: everything here runs in your browser">Offline demo</Chip> : <Chip tone="neutral" title="Sandbox data, no real money">Sandbox</Chip>}
-          <Link href="/" className="rounded-md px-2 py-1 text-[0.82rem] font-medium text-ink-2 hover:bg-surface-2 hover:text-ink">
-            Exit
-          </Link>
-        </div>
+    <div className="min-h-dvh bg-surface text-ink sm:bg-bg">
+      <header className="mx-auto flex h-16 w-full max-w-xl items-center gap-3 px-4 sm:px-0">
+        <Link href="/" className="flex items-center gap-2 rounded-md" aria-label={`${PRODUCT_NAME} home`}>
+          <BrandMark size={26} />
+          <span className="text-[1.05rem] font-semibold tracking-tight">{PRODUCT_NAME}</span>
+        </Link>
+        <span className="flex-1" />
+        {others.length ? (
+          <span className="flex items-center gap-2 text-[0.78rem] text-ink-3">
+            <span className="hidden sm:inline">Here with you</span>
+            <span className="flex -space-x-1.5">
+              {others.slice(0, 3).map((p) => (
+                <Avatar key={p.identity} name={p.display_name} size={26} ring dot="online" />
+              ))}
+              {others.length > 3 ? <span className="num relative flex h-[26px] min-w-[26px] items-center justify-center rounded-full bg-line px-1 text-[0.68rem] font-semibold text-ink-2 ring-2 ring-surface">+{others.length - 3}</span> : null}
+            </span>
+          </span>
+        ) : null}
       </header>
 
-      <div className="mx-auto w-full max-w-2xl px-4 pb-12 pt-5 sm:px-6">
-        {showProgress ? <Stepper current={Math.min(step, 5)} /> : <div className="h-9" aria-hidden="true" />}
-        {householdId && household && ident.name ? (
-          <div className="mt-4">
-            <PresenceBar householdId={householdId} householdName={household.name} />
-          </div>
-        ) : null}
-        <main id="main" className="mt-4 rounded-lg border border-line bg-surface p-4 sm:p-6">
-          {body}
-        </main>
-        <p className="mt-4 text-center text-[0.76rem] leading-snug text-ink-3">{SYNTHETIC_NOTE}</p>
+      <div className="mx-auto w-full max-w-xl px-4 pb-10 sm:px-0">
+        {showProgress ? <Stepper current={current} sub={step === "questions" ? q / QUESTION_COUNT : step === "done" && run?.status === "done" ? 1 : 0} /> : <div className="h-[1.65rem]" aria-hidden="true" />}
+        <div ref={mainRef} className="mt-5 [overflow-x:clip] sm:mt-6 sm:overflow-visible">
+          <main id="main" className="sm:rounded-xl sm:border sm:border-line sm:bg-surface sm:p-8">
+            <StepTransition k={drive ? key : "watch"} dir={travel.dir}>
+              {body}
+            </StepTransition>
+          </main>
+        </div>
+        <p className="mt-5 text-center text-[0.76rem] leading-snug text-ink-3">
+          Synthetic sandbox data only.{mode === "mock" ? " Offline demo: your setup lives in this tab." : ""}
+        </p>
       </div>
     </div>
   );
 }
-

@@ -6,9 +6,13 @@ import { friendlyError, onboarding } from "@/lib/data/onboarding";
 import { setLocalIdentity } from "@/lib/data/identity";
 import type { Household } from "@/lib/types";
 import { BusyLabel, Notice, StepFooter, StepHeading, TextField } from "../fields";
-import { InviteButton } from "../PresenceBar";
 
-/** Step 2: create the household (`start_onboarding`). Revisiting it after creation shows who is here and how to invite. */
+const suggested = (name: string) => {
+  const first = name.trim().split(/\s+/)[0];
+  return first ? `${first}'s household` : "";
+};
+
+/** Step 2: your name, and a household name that fills itself in from it (`start_onboarding`). */
 export function HouseholdStep({
   household, defaultName, onBack, onCreated, onContinue, headingRef,
 }: {
@@ -19,26 +23,20 @@ export function HouseholdStep({
   onContinue: () => void;
   headingRef: Ref<HTMLHeadingElement>;
 }) {
-  const [hName, setHName] = useState("");
   const [me, setMe] = useState(defaultName);
+  const [hName, setHName] = useState<string | null>(null); // null: follow the suggestion
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   if (household) {
     return (
       <div>
-        <StepHeading headingRef={headingRef} title="Your household is ready" sub="Anyone with the link can open this setup and watch it fill in live. Send it to a family member now, or later." />
-        <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-good-soft text-good">
+        <StepHeading headingRef={headingRef} title="Your household is ready" sub="You can rename it and add family members from the dashboard at any time." />
+        <div className="motion-rise flex items-center gap-3 rounded-lg border border-line px-4 py-3.5">
+          <span className="motion-pop flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-good-soft text-good">
             <IconCheck size={18} strokeWidth={2.4} />
           </span>
-          <div className="min-w-0">
-            <p className="truncate text-[0.95rem] font-semibold">{household.name}</p>
-            <p className="text-[0.8rem] text-ink-2">Created just now</p>
-          </div>
-        </div>
-        <div className="mt-4">
-          <InviteButton householdId={household.id} householdName={household.name} />
+          <p className="min-w-0 truncate text-[1rem] font-semibold">{household.name}</p>
         </div>
         <StepFooter onBack={onBack}>
           <Button size="lg" onClick={onContinue}>
@@ -49,13 +47,14 @@ export function HouseholdStep({
     );
   }
 
-  const ok = hName.trim().length > 0 && me.trim().length > 0;
+  const householdName = (hName ?? suggested(me)).trim();
+  const ok = me.trim().length > 0 && householdName.length > 0;
   async function submit() {
     if (!ok || busy) return;
     setBusy(true);
     setErr(null);
     try {
-      const id = await onboarding.start(hName.trim(), me.trim());
+      const id = await onboarding.start(householdName, me.trim());
       setLocalIdentity(me.trim(), "family");
       onCreated(id);
     } catch (e) {
@@ -71,20 +70,29 @@ export function HouseholdStep({
         void submit();
       }}
     >
-      <StepHeading headingRef={headingRef} title="Who are we setting up?" sub="Just two names to start. You can add the rest of the household in a minute." />
-      <div className="space-y-4">
-        <TextField id="household-name" label="Household name" value={hName} onChange={setHName} placeholder="The Garcia household" autoComplete="off" hint="Whatever your family calls itself." required autoFocus />
-        <TextField id="your-name" label="Your name" value={me} onChange={setMe} placeholder="Alex" autoComplete="given-name" maxLength={32} required />
+      <StepHeading headingRef={headingRef} title="Who is setting this up?" sub="Your name is shown to family members who join you." />
+      <div className="space-y-5">
+        <TextField id="your-name" label="Your first name" value={me} onChange={setMe} placeholder="Alex" autoComplete="given-name" maxLength={32} required autoFocus />
+        <TextField
+          id="household-name"
+          label="Household name"
+          value={hName ?? suggested(me)}
+          onChange={setHName}
+          placeholder="Alex's household"
+          autoComplete="off"
+          hint="Change it to whatever your family calls itself."
+          required
+        />
       </div>
       {err ? (
-        <div className="mt-4">
+        <div className="mt-5">
           <Notice tone="error">{err}</Notice>
         </div>
       ) : null}
-      <StepFooter onBack={onBack} note={ok ? undefined : "Fill in both names to continue."}>
+      <StepFooter onBack={onBack}>
         <Button type="submit" size="lg" disabled={!ok || busy}>
           <BusyLabel busy={busy} busyText="Creating…">
-            Create household
+            Continue
           </BusyLabel>
         </Button>
       </StepFooter>

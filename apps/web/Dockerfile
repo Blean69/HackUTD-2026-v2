@@ -4,7 +4,8 @@
 #     --build-arg NEXT_PUBLIC_SPACETIME_URI=wss://db.example.com \
 #     --build-arg NEXT_PUBLIC_SPACETIME_DB=keystone \
 #     --build-arg NEXT_PUBLIC_WORKER_URL=https://keystone.example.com/worker \
-#     --build-arg NEXT_PUBLIC_VOICE_URL=https://keystone.example.com/voice .
+#     --build-arg NEXT_PUBLIC_VOICE_URL=https://keystone.example.com/voice \
+#     --build-arg NEXT_PUBLIC_PHONE_NUMBER=+18444681795 .
 # NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so they must be build args.
 
 FROM node:22-alpine AS deps
@@ -19,11 +20,13 @@ ARG NEXT_PUBLIC_SPACETIME_URI=ws://localhost:3000
 ARG NEXT_PUBLIC_SPACETIME_DB=keystone
 ARG NEXT_PUBLIC_WORKER_URL=http://localhost:8787
 ARG NEXT_PUBLIC_VOICE_URL=http://localhost:7860
+ARG NEXT_PUBLIC_PHONE_NUMBER=+18444681795
 ARG NEXT_PUBLIC_USE_MOCKS=
 ENV NEXT_PUBLIC_SPACETIME_URI=$NEXT_PUBLIC_SPACETIME_URI \
     NEXT_PUBLIC_SPACETIME_DB=$NEXT_PUBLIC_SPACETIME_DB \
     NEXT_PUBLIC_WORKER_URL=$NEXT_PUBLIC_WORKER_URL \
     NEXT_PUBLIC_VOICE_URL=$NEXT_PUBLIC_VOICE_URL \
+    NEXT_PUBLIC_PHONE_NUMBER=$NEXT_PUBLIC_PHONE_NUMBER \
     NEXT_PUBLIC_USE_MOCKS=$NEXT_PUBLIC_USE_MOCKS
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

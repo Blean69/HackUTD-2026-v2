@@ -5,7 +5,7 @@ import { IconActivity, IconArrowRight } from "@/components/icons";
 import { SlideOver } from "@/components/shell/SlideOver";
 import { Chip, Empty } from "@/components/ui";
 import { PRODUCT_NAME } from "@/lib/constants";
-import { useRun, useTraceEvents } from "@/lib/data/hooks";
+import { useRoomTables, useRun, useTraceEvents } from "@/lib/data/hooks";
 import { duration, relTime } from "@/lib/format";
 import { WORKFLOW_LABEL } from "@/lib/types";
 import { runProviders, ProviderBadge } from "./badges";
@@ -19,6 +19,8 @@ export function AgentActivityPanel({ open, runId, onClose }: { open: boolean; ru
   // Nothing is derived while the panel is closed.
   const id = open ? runId : null;
   const run = useRun(id);
+  // The steps are the heaviest table in a room, so only this run's load, when the drawer opens, and let go shortly after it closes.
+  const stepsReady = useRoomTables(run?.household_id ?? "", id ? [`trace_event@${id}`] : []);
   const events = useTraceEvents(id);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -93,7 +95,7 @@ export function AgentActivityPanel({ open, runId, onClose }: { open: boolean; ru
           {events.length ? (
             <TraceTimeline events={events} running={running} autoScroll scrollRef={bodyRef} />
           ) : run ? (
-            <p className="py-6 text-center text-[0.84rem] text-ink-2" role="status">Waiting for the first step…</p>
+            <p className="py-6 text-center text-[0.84rem] text-ink-2" role="status">{stepsReady ? "Waiting for the first step…" : "Loading steps…"}</p>
           ) : (
             <Empty title="No agent run yet">
               Start Table Mode, run a what-if or ask {PRODUCT_NAME} a question. Every agent step lands here, live.

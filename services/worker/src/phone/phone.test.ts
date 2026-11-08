@@ -67,7 +67,7 @@ describe('PIN check', () => {
   it('accepts the right PIN and resets the counter', () => {
     const c = new PinChecker(pins, 3);
     expect(c.check('call1', '', '0000')).toMatchObject({ ok: false, triesLeft: 2, locked: false });
-    expect(c.check('call1', '', '1234')).toEqual({ ok: true, entry: { householdId: 'hh_rivera', memberId: 'mem_a' } });
+    expect(c.check('call1', '', '1234')).toEqual({ ok: true, entry: { householdId: 'hh_rivera', memberId: 'mem_a' }, source: 'env' });
     expect(c.check('call1', '', '0000')).toMatchObject({ triesLeft: 2 });
   });
   it('locks the call after 3 wrong tries, even for the right PIN', () => {

@@ -4,21 +4,16 @@
  * estimate the UI labels it "est."
  */
 import { LIABILITY_TYPES } from "@/lib/format";
-import type {
-  Account, ForecastPoint, Goal, HealthIndicator, HealthKey, HealthStatus, Household, Member, Obligation, Transaction,
-} from "@/lib/types";
+import type { Account, ForecastPoint, Goal, HealthIndicator, HealthKey, HealthStatus, Member, Obligation, Transaction } from "@/lib/types";
 
 const DAY = 86_400_000;
 /** Rows beyond this are import errors (the Patels' -$9,999,623 line). They never enter a total. */
 export const TXN_CAP = 500_000;
 const NET_FACTOR = 0.78;
 
-export type RangeKey = "3m" | "6m" | "12m";
-export const RANGE_OPTIONS: { value: RangeKey; label: string; weeks: number; months: number }[] = [
-  { value: "3m", label: "Last 3 months", weeks: 13, months: 3 },
-  { value: "6m", label: "Last 6 months", weeks: 26, months: 6 },
-  { value: "12m", label: "Last 12 months", weeks: 52, months: 12 },
-];
+/** The dashboard trend shows six months of history (that is all the seed data has) and 90 days of forecast. */
+export const HISTORY_WEEKS = 26;
+export const HISTORY_MONTHS = 6;
 
 export const isoDay = (d: Date): string => {
   const y = d.getFullYear();
@@ -126,30 +121,6 @@ export function netWorthTrend(history: readonly SeriesPoint[], forecast: readonl
   return { rows, today, forecastEnd: end, bestPct: ((end + spread - netNow) / denom) * 100, worstPct: ((end - spread * 1.25 - netNow) / denom) * 100, change };
 }
 
-// ------------------------------------------------------------------------------------------------ allocation
-
-export interface Slice {
-  key: string;
-  label: string;
-  value: number;
-  color: string;
-}
-export function assetAllocation(accounts: readonly Account[], household?: Pick<Household, "home_value" | "vehicle_value">): Slice[] {
-  let cash = 0;
-  let invest = 0;
-  for (const a of accounts) {
-    if (a.type === "checking" || a.type === "savings") cash += a.balance;
-    else if (a.type === "cd" || a.type === "ira") invest += a.balance;
-  }
-  const slices: Slice[] = [
-    { key: "cash", label: "Checking & savings", value: cash, color: "var(--c1)" },
-    { key: "invest", label: "CDs & IRAs", value: invest, color: "var(--c2)" },
-    { key: "home", label: "Home value (est.)", value: household?.home_value ?? 0, color: "var(--c3)" },
-    { key: "vehicle", label: "Vehicles (est.)", value: household?.vehicle_value ?? 0, color: "var(--c5)" },
-  ];
-  return slices.filter((s) => s.value > 0);
-}
-
 // ------------------------------------------------------------------------------------------------ cash flow
 
 export interface CashMonth {
@@ -231,51 +202,6 @@ export function recentNetCashFlow(months: readonly CashMonth[]): { value: number
   return { value: Math.round(value), change: before.length >= 2 ? Math.round(value - avg(before)) : null, basis: recent.length };
 }
 
-// ------------------------------------------------------------------------------------------------ debt
-
-export interface DebtRatio {
-  key: "dti" | "utilization" | "ltv";
-  label: string;
-  value: number | null;
-  status: HealthStatus;
-  hint: string;
-}
-export interface DebtProfile {
-  totalDebt: number;
-  monthlyPayments: number;
-  ratios: DebtRatio[];
-  dti: number | null;
-}
-const statusLow = (v: number, good: number, watch: number): HealthStatus => (v <= good ? "good" : v <= watch ? "watch" : "risk");
-
-export function debtProfile(
-  accounts: readonly Account[], members: readonly Member[], obligations: readonly Obligation[], health: readonly HealthIndicator[], household?: Pick<Household, "home_value">,
-): DebtProfile {
-  const debts = accounts.filter((a) => LIABILITY_TYPES.has(a.type));
-  const totalDebt = debts.reduce((s, a) => s + a.balance, 0);
-  let monthlyPayments = debts.reduce((s, a) => s + (a.monthly_payment ?? 0), 0);
-  if (!monthlyPayments) monthlyPayments = obligations.filter((o) => o.kind === "loan").reduce((s, o) => s + o.amount, 0);
-  const gross = members.reduce((s, m) => s + m.income_annual, 0) / 12;
-  const h = (k: HealthKey) => health.find((x) => x.key === k);
-  const dti = h("debt_to_income")?.value ?? (gross > 0 ? (monthlyPayments / gross) * 100 : null);
-  const cards = accounts.filter((a) => a.type === "credit_card" && (a.credit_limit ?? 0) > 0);
-  const limit = cards.reduce((s, a) => s + (a.credit_limit ?? 0), 0);
-  const util = h("credit_utilization")?.value ?? (limit > 0 ? (cards.reduce((s, a) => s + a.balance, 0) / limit) * 100 : null);
-  const mortgage = accounts.filter((a) => a.type === "mortgage").reduce((s, a) => s + a.balance, 0);
-  const home = household?.home_value ?? 0;
-  const ltv = home > 0 && mortgage > 0 ? (mortgage / home) * 100 : null;
-  return {
-    totalDebt,
-    monthlyPayments,
-    dti,
-    ratios: [
-      { key: "dti", label: "Debt-to-income", value: dti, status: dti === null ? "good" : statusLow(dti, 36, 43), hint: "Lenders like 36% or less" },
-      { key: "utilization", label: "Credit utilization", value: util, status: util === null ? "good" : statusLow(util, 30, 50), hint: "Under 30% protects your score" },
-      { key: "ltv", label: "Loan-to-value (home)", value: ltv, status: ltv === null ? "good" : statusLow(ltv, 80, 90), hint: "Mortgage balance vs home value (est.)" },
-    ],
-  };
-}
-
 // ------------------------------------------------------------------------------------------------ health
 
 export interface HealthRow {
@@ -292,7 +218,6 @@ export interface HealthModel {
   label: string;
   tone: "good" | "watch" | "risk" | "neutral";
   rows: HealthRow[];
-  axes: { axis: string; score: number }[];
 }
 
 function interp(x: number, pts: readonly (readonly [number, number])[]): number {
@@ -340,16 +265,6 @@ export function indicatorScore(h: HealthIndicator): number {
   return Math.round(v);
 }
 
-const AXES: { axis: string; keys: HealthKey[] }[] = [
-  { axis: "Liquidity", keys: ["liquidity_runway"] },
-  { axis: "Savings", keys: ["savings_rate"] },
-  { axis: "Credit", keys: ["credit_score", "credit_utilization"] },
-  { axis: "Debt", keys: ["debt_to_income"] },
-  { axis: "Growth", keys: ["net_worth_trend"] },
-  { axis: "Resilience", keys: ["emergency_fund"] },
-  { axis: "Cash safety", keys: ["forecast_low_point"] },
-];
-
 export function scoreLabel(score: number): { label: string; tone: "good" | "watch" | "risk" } {
   if (score >= 85) return { label: "Excellent", tone: "good" };
   if (score >= 70) return { label: "Good", tone: "good" };
@@ -362,14 +277,10 @@ export function healthModel(indicators: readonly HealthIndicator[]): HealthModel
   const rows: HealthRow[] = indicators.map((h) => ({
     key: h.key, label: h.label, score: indicatorScore(h), status: h.status, value: h.value, unit: h.unit, explanation: h.explanation,
   }));
-  if (!rows.length) return { score: null, label: "Calculating", tone: "neutral", rows: [], axes: AXES.map((a) => ({ axis: a.axis, score: 0 })) };
+  if (!rows.length) return { score: null, label: "Calculating", tone: "neutral", rows: [] };
   const score = Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length);
-  const axes = AXES.map((a) => {
-    const hit = rows.filter((r) => a.keys.includes(r.key));
-    return { axis: a.axis, score: hit.length ? Math.round(hit.reduce((s, r) => s + r.score, 0) / hit.length) : Math.round(score) };
-  });
   const l = scoreLabel(score);
-  return { score, label: l.label, tone: l.tone, rows, axes };
+  return { score, label: l.label, tone: l.tone, rows };
 }
 
 // ------------------------------------------------------------------------------------------------ obligations
@@ -407,66 +318,27 @@ export function upcomingObligations(obligations: readonly Obligation[], today: D
   return rows.sort((a, b) => a.days - b.days || b.amount - a.amount).slice(0, limit);
 }
 
-// ------------------------------------------------------------------------------------------------ accounts
-
-/** Change in an account over the last 30 days, as a percent of its balance a month ago. null if no activity. */
-export function accountMoM(account: Account, txns: readonly Transaction[], today: Date): number | null {
-  const from = isoDay(new Date(startOfDay(today).getTime() - 30 * DAY));
-  const clean = cleanTxns(txns, today).filter((t) => t.account_id === account.id && t.date > from);
-  if (!clean.length) return null;
-  const sum = clean.reduce((s, t) => s + t.amount, 0);
-  const debt = LIABILITY_TYPES.has(account.type);
-  const change = debt ? -sum : sum;
-  const prev = account.balance - change;
-  if (Math.abs(prev) < 1) return null;
-  return Math.max(-999, Math.min(999, (change / Math.abs(prev)) * 100));
-}
-
-// ------------------------------------------------------------------------------------------------ contributions
-
-export interface ContributionRow {
-  member: Member;
-  income: number;
-  contribution: number;
-  contribShare: number;
-  goalShare: number;
-  variance: number;
-}
-export interface ContributionModel {
-  rows: ContributionRow[];
-  pool: number;
-  totalIncome: number;
-  dependents: number;
-}
-
-/**
- * Income is real (member records). Goal share follows income; contribution (est.) splits the household's monthly
- * surplus by each earner's ownership of savings balances. Variance is the gap, in points.
- */
-export function contributionTracking(members: readonly Member[], accounts: readonly Account[], pool: number): ContributionModel {
-  const earners = members.filter((m) => m.income_annual > 0);
-  const dependents = members.length - earners.length;
-  const totalIncome = earners.reduce((s, m) => s + m.income_annual / 12, 0);
-  if (!earners.length) return { rows: [], pool, totalIncome, dependents };
-  const weight = new Map<string, number>(earners.map((m) => [m.id, 0]));
-  for (const a of accounts) {
-    if (!(a.type === "savings" || a.type === "cd")) continue;
-    const owners = a.owner_member_ids;
-    if (!owners.length) continue;
-    for (const id of owners) if (weight.has(id)) weight.set(id, (weight.get(id) ?? 0) + a.balance / owners.length);
-  }
-  const wTotal = [...weight.values()].reduce((s, v) => s + v, 0);
-  const surplus = Math.max(0, pool);
-  const rows = earners.map((m) => {
-    const income = m.income_annual / 12;
-    const goalShare = totalIncome ? income / totalIncome : 0;
-    const contribShare = wTotal > 0 ? (weight.get(m.id) ?? 0) / wTotal : goalShare;
-    return { member: m, income, contribution: surplus * contribShare, contribShare, goalShare, variance: (contribShare - goalShare) * 100 };
-  });
-  return { rows, pool: surplus, totalIncome, dependents };
-}
-
 // ------------------------------------------------------------------------------------------------ goals
+
+/** Same conversation, same quote: a Table Mode rerun re-extracts the goal with a slightly different title. */
+const goalKey = (g: Goal): string => {
+  const quote = (g.evidence_quote ?? "").replace(/^[\w .'’-]{1,24}:\s*/, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 64);
+  return quote.length >= 24 ? `q:${quote}` : `t:${g.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+};
+/**
+ * Collapses goals the agents extracted twice (reruns of the same Table Mode conversation). Keeps the one that is
+ * furthest along (has a target and a feasibility verdict, then newest) and preserves the incoming order.
+ */
+export function dedupeGoals(goals: readonly Goal[]): Goal[] {
+  const rank = (g: Goal) => (g.target_amount ? 2 : 0) + (g.feasibility ? 1 : 0);
+  const best = new Map<string, Goal>();
+  for (const g of goals) {
+    const k = goalKey(g);
+    const cur = best.get(k);
+    if (!cur || rank(g) > rank(cur) || (rank(g) === rank(cur) && (g.updated_at || g.created_at) > (cur.updated_at || cur.created_at))) best.set(k, g);
+  }
+  return goals.filter((g) => best.get(goalKey(g)) === g);
+}
 
 export interface GoalProgress {
   saved: number;
@@ -504,10 +376,4 @@ export function goalProgress(goal: Goal, accounts: readonly Account[], now: Date
 
 export function daysLeft(closesAt: string, now = Date.now()): number {
   return Math.max(0, Math.ceil((new Date(closesAt).getTime() - now) / DAY));
-}
-
-export function lastUpdated(health: readonly HealthIndicator[], fallback?: string): string | undefined {
-  let best = fallback;
-  for (const h of health) if (!best || h.updated_at > best) best = h.updated_at;
-  return best;
 }

@@ -7,6 +7,13 @@ export type DataScope =
   | { kind: "advisor" }
   | { kind: "agents" };
 
+/** Room tables a page can ask for on top of the base set (`useRoomTables` in hooks.ts). All are filtered by household_id. */
+export type RoomTable =
+  | "txn" | "obligation" | "forecast_point" | "goal" | "credit_profile" | "bank_connection" | "advisor_note"
+  | "conversation" | "transcript_line" | "scenario" | "coach_message" | "trace_event" | "proposal" | "vote"
+  /** The steps of one agent run only: `trace_event@<run_id>`. Cheaper than the whole household's trace. */
+  | `trace_event@${string}`;
+
 /**
  * Everything the UI can do. 1:1 with the client-callable reducers in docs/contracts.md section 3.
  * The mock engine and the SpacetimeDB adapter both implement this; components never talk to either directly.
@@ -51,5 +58,10 @@ export interface Backend {
   actions: Actions;
   /** Switch the active subscription set. Resolves the connection's `synced` flag when the first rows arrive. */
   setScope?(scope: DataScope): void;
+  /**
+   * Subscribe to extra room tables for one household. Returns the release function; `onApplied` fires once the rows
+   * have landed (also when the module lacks a table, so a page never waits forever). Ref-counting lives in runtime.ts.
+   */
+  subscribeRoomTables?(householdId: string, tables: readonly RoomTable[], onApplied: () => void): () => void;
   dispose(): void;
 }

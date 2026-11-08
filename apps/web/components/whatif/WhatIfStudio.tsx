@@ -1,14 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
 import { IconAlert, IconArrowRight, IconCheck, IconSend, IconSpark } from "@/components/icons";
-import { Button, Chip, Empty, inputCls, PageHeader, Panel, Skeleton, Spinner, type Tone } from "@/components/ui";
-import { AskOutLoudCard } from "@/components/voice/AskOutLoudCard";
+import { ScenarioChart } from "@/components/charts/lazy";
+import { Button, Chip, Empty, ErrorNote, inputCls, PageHeader, Panel, Skeleton, Spinner, type Tone } from "@/components/ui";
 import { requestSimulation } from "@/lib/data/actions";
-import { useRuns, useScenarios } from "@/lib/data/hooks";
+import { useRoomTables, useRuns, useScenarios } from "@/lib/data/hooks";
 import { cx, metric, relTime } from "@/lib/format";
 import { openTrace } from "@/lib/traceUi";
 import type { AgentRun, Scenario } from "@/lib/types";
-import { ScenarioChart } from "./ScenarioChart";
 
 const CHIPS = ["Buy a $32k car in March", "Open a second bakery location", "Pay off the Visa", "Lose $1,000 a month of income"];
 
@@ -42,15 +41,22 @@ function StatusChip({ s }: { s: Scenario }) {
   return v ? <Chip tone={v.tone}>{v.label}</Chip> : <Chip tone="good">Done</Chip>;
 }
 
+/** Quiet one-word status for list rows; the full chip is reserved for the open result. */
+function StatusText({ s }: { s: Scenario }) {
+  if (isPending(s)) return <span className="inline-flex items-center gap-1 text-brand-strong"><Spinner size={10} />{s.status === "queued" ? "Queued" : "Simulating"}</span>;
+  if (s.status === "error") return <span className="text-risk">Failed</span>;
+  const v = s.result?.verdict ? VERDICT[s.result.verdict] : null;
+  return <span className={v ? (v.tone === "good" ? "text-good" : v.tone === "watch" ? "text-watch" : "text-risk") : "text-good"}>{v ? v.label : "Done"}</span>;
+}
+
 function ResultSkeleton({ status }: { status: Scenario["status"] }) {
   return (
     <div aria-busy="true" aria-live="polite">
       <p className="flex items-center gap-2 text-[0.88rem] font-medium text-ink-2">
-        <Spinner size={15} /> {status === "queued" ? "Queued. Waiting for an agent to pick this up…" : "Agents simulating your next 90 days…"}
+        <Spinner size={15} /> {status === "queued" ? "Queued. Waiting for an agent…" : "Simulating your next 90 days…"}
       </p>
       <Skeleton className="mt-3 h-14" />
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
-      <Skeleton className="mt-3 h-56" />
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>
     </div>
   );
 }
@@ -70,9 +76,7 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
       {pending ? (
         <div className="mt-3"><ResultSkeleton status={s.status} /></div>
       ) : s.status === "error" ? (
-        <p role="alert" className="mt-3 flex items-start gap-2 rounded-md bg-risk-soft px-3 py-2.5 text-[0.86rem] text-risk">
-          <IconAlert size={16} className="mt-0.5 shrink-0" /> The agents couldn&apos;t finish this simulation. Try rephrasing it or run it again.
-        </p>
+        <ErrorNote className="mt-3">The agents couldn&apos;t finish this one. Try rephrasing it.</ErrorNote>
       ) : r ? (
         <>
           {v ? (
@@ -88,12 +92,12 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
           ) : null}
 
           {r.metrics?.length ? (
-            <dl className="mt-3 grid gap-2 sm:grid-cols-3">
+            <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {r.metrics.map((m) => {
                 const changed = m.before !== undefined && m.after !== m.before;
                 const worse = changed && m.before !== undefined && (m.label.toLowerCase().includes("payments") ? m.after > m.before : m.after < m.before);
                 return (
-                  <div key={m.label} className="rounded-md border border-line bg-surface-2 px-3 py-2.5">
+                  <div key={m.label} className="rounded-md bg-surface-2 px-3 py-2.5">
                     <dt className="text-[0.76rem] leading-tight text-ink-3">{m.label}</dt>
                     <dd className="num mt-1 flex flex-wrap items-center gap-x-1.5">
                       {m.before !== undefined ? (
@@ -112,8 +116,8 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
           ) : null}
 
           {r.series?.length ? (
-            <div className="mt-4 rounded-md border border-line p-3">
-              <h4 className="mb-2 text-[0.8rem] font-semibold text-ink-2">Cash balance: baseline vs with this change</h4>
+            <div className="mt-4">
+              <h4 className="mb-2 text-[0.8rem] font-semibold text-ink-2">Cash balance, with and without this change</h4>
               <ScenarioChart series={r.series} lowPoint={r.low_point} verdict={r.verdict} />
             </div>
           ) : null}
@@ -122,14 +126,14 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
             <div className="mt-3 flex items-start gap-2.5 rounded-md bg-brand-soft p-3 text-brand-strong">
               <IconSpark size={16} className="mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <p className="text-[0.74rem] font-semibold uppercase tracking-wide">Agent suggestion</p>
+                <p className="text-[0.76rem] font-semibold">Suggestion</p>
                 <p className="mt-0.5 text-[0.88rem] leading-snug">{r.suggestion}</p>
               </div>
             </div>
           ) : null}
 
           {!r.summary && !r.metrics?.length && !r.series?.length && !r.suggestion ? (
-            <div className="mt-3"><Empty title="No details came back">The simulation finished without a breakdown. Run it again to retry.</Empty></div>
+            <div className="mt-3"><Empty title="No details came back">Run it again to retry.</Empty></div>
           ) : null}
 
           <div className="mt-3">
@@ -145,6 +149,7 @@ function Result({ s, run }: { s: Scenario; run?: AgentRun }) {
 
 /** What-If Studio: describe a decision in plain English, agents replay the next 90 days, and the room sees the result. */
 export function WhatIfStudio({ householdId }: { householdId: string }) {
+  const ready = useRoomTables(householdId, ["scenario"]);
   const scenarios = useScenarios(householdId);
   const runs = useRuns({ householdId, workflow: "what_if" });
   const [prompt, setPrompt] = useState("");
@@ -174,15 +179,9 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader
-        title="What-If Studio"
-        sub="Describe a decision in plain English. Agents replay your next 90 days with it and show what changes."
-        right={<Button variant="secondary" onClick={() => openTrace()}>Agent activity</Button>}
-      />
+      <PageHeader title="What-If Studio" sub="Describe a decision. The agents replay your next 90 days with it." />
 
-      <AskOutLoudCard className="mb-4" />
-
-      <Panel title="Describe a decision" sub="Try a suggestion or write your own. Results appear for everyone in the room.">
+      <Panel id="whatif-ask" title="What if we…">
         <form onSubmit={(e) => { e.preventDefault(); void submit(prompt); }}>
           <label htmlFor="whatif-in" className="sr-only">What-if scenario</label>
           <div className="flex gap-2">
@@ -207,52 +206,54 @@ export function WhatIfStudio({ householdId }: { householdId: string }) {
               type="button"
               disabled={busy}
               onClick={() => void submit(c)}
-              className="rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-[0.8rem] font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
+              className="min-h-9 rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-[0.8rem] font-medium text-ink-2 transition-colors hover:border-brand hover:bg-brand-soft hover:text-ink disabled:opacity-50"
             >
               {c}
             </button>
           ))}
         </div>
-        {err ? <p role="alert" className="mt-2 text-[0.84rem] text-risk">{err}</p> : null}
+        {err ? <ErrorNote className="mt-2">{err}</ErrorNote> : null}
       </Panel>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-        <Panel title="Result" sub={selected ? undefined : "Pick a suggestion above to run your first what-if."}>
-          {selected ? (
-            <Result s={selected} run={run} />
-          ) : (
-            <Empty title="No what-ifs yet">Tap a suggestion or describe a decision. The agents will show the effect on cash, runway and payments.</Empty>
-          )}
-        </Panel>
+      {!ready ? (
+        <Skeleton className="mt-3 h-64 !rounded-lg" />
+      ) : (
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+          <Panel id="whatif-result" title="Result">
+            {selected ? (
+              <Result s={selected} run={run} />
+            ) : (
+              <Empty title="No what-ifs yet">Tap a suggestion above. The agents will show the effect on cash, runway and payments.</Empty>
+            )}
+          </Panel>
 
-        <Panel title="History" sub={scenarios.length ? `${scenarios.length} scenario${scenarios.length === 1 ? "" : "s"} in this household` : undefined}>
-          {scenarios.length ? (
-            <ul className="-my-1 divide-y divide-line" aria-label="Scenario history, newest first">
-              {scenarios.map((s) => {
-                const on = s.id === selected?.id;
-                return (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(s.id)}
-                      aria-current={on ? "true" : undefined}
-                      className={cx("-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-2.5 text-left transition-colors", on ? "bg-brand-soft" : "hover:bg-surface-2")}
-                    >
-                      <span className="line-clamp-2 text-[0.86rem] font-medium leading-snug">{s.prompt}</span>
-                      <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <StatusChip s={s} />
-                        <span className="text-[0.74rem] text-ink-3">{s.requested_by_name} · {relTime(s.created_at)}</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-[0.84rem] text-ink-3">Scenarios you run show up here, newest first.</p>
-          )}
-        </Panel>
-      </div>
+          {scenarios.length > 1 ? (
+            <Panel id="whatif-history" title="Earlier what-ifs">
+              <ul className="-my-1 divide-y divide-line" aria-label="Scenario history, newest first">
+                {scenarios.slice(0, 6).map((s) => {
+                  const on = s.id === selected?.id;
+                  return (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(s.id)}
+                        aria-current={on ? "true" : undefined}
+                        className={cx("-mx-2 block w-[calc(100%+1rem)] rounded-md px-2 py-2.5 text-left transition-colors", on ? "bg-brand-soft" : "hover:bg-surface-2")}
+                      >
+                        <span className="line-clamp-2 text-[0.86rem] font-medium leading-snug">{s.prompt}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[0.76rem] text-ink-3">
+                          <StatusText s={s} />
+                          <span>{s.requested_by_name} · {relTime(s.created_at)}</span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Panel>
+          ) : null}
+        </div>
+      )}
     </>
   );
 }

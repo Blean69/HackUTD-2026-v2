@@ -1,9 +1,7 @@
-import type { Metadata } from "next";
-import { ObligationsPage } from "@/components/obligations/ObligationsPage";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Obligations" };
-
+/** Folded into My Picture (one home for accounts, bills and spending). Old links and bookmarks land on the right tab. */
 export default async function Page({ params }: { params: Promise<{ householdId: string }> }) {
   const { householdId } = await params;
-  return <ObligationsPage householdId={decodeURIComponent(householdId)} />;
+  redirect(`/room/${householdId}/picture?tab=bills`);
 }

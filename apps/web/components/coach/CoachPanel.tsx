@@ -1,10 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconCheck, IconSend, IconSpark, IconWrench } from "@/components/icons";
-import { Avatar, Button, Chip, inputCls } from "@/components/ui";
+import { Avatar, Button, inputCls } from "@/components/ui";
 import { PRODUCT_NAME } from "@/lib/constants";
 import { askCoach } from "@/lib/data/actions";
-import { useCoachMessages, useLatestRun, useTraceEvents } from "@/lib/data/hooks";
+import { useCoachMessages, useLatestRun, useRoomTables, useTraceEvents } from "@/lib/data/hooks";
 import { cx } from "@/lib/format";
 import { openTrace } from "@/lib/traceUi";
 import type { CoachMessage, TraceEvent } from "@/lib/types";
@@ -73,8 +73,18 @@ function Bubble({ m, me }: { m: CoachMessage; me: string }) {
  * slide-over: messages scroll, the suggestion chips and the input stay pinned to the bottom.
  */
 export function CoachPanel({ householdId, me }: { householdId: string; me: string }) {
+  // Mounted only while the slide-over is open, so the conversation and its tool calls load on open, not on every page.
+  const ready = useRoomTables(householdId, ["coach_message"]);
   const messages = useCoachMessages(householdId);
   const run = useLatestRun(householdId, "coach");
+  // Tool calls under each answer come from that answer's run: load the last few runs, not the whole household's trace.
+  const latestRunId = run?.run_id;
+  const traceKeys = useMemo(() => {
+    const ids = new Set(messages.map((m) => m.run_id).filter(Boolean).slice(-4));
+    if (latestRunId) ids.add(latestRunId);
+    return [...ids].map((id) => `trace_event@${id}` as const);
+  }, [messages, latestRunId]);
+  useRoomTables(householdId, traceKeys);
   const events = useTraceEvents(run?.run_id);
   const pending = run?.status === "running";
   const [text, setText] = useState("");
@@ -107,10 +117,11 @@ export function CoachPanel({ householdId, me }: { householdId: string; me: strin
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4" role="log" aria-live="polite" aria-label={`Conversation with ${PRODUCT_NAME}`}>
-        {messages.length === 0 && !pending ? (
+        {!ready ? <p className="py-6 text-center text-[0.82rem] text-ink-3" role="status">Loading the conversation…</p> : null}
+        {ready && messages.length === 0 && !pending ? (
           <div className="rounded-md border border-dashed border-line-strong px-4 py-5 text-center">
             <p className="text-[0.88rem] font-medium">Ask about your money</p>
-            <p className="mt-1 text-[0.8rem] text-ink-2">Try one of the questions below. Everyone in the household sees the conversation.</p>
+            <p className="mt-1 text-[0.8rem] text-ink-2">Pick a question below. The whole household sees the answer.</p>
           </div>
         ) : null}
         <ul className="space-y-3">
@@ -149,11 +160,6 @@ export function CoachPanel({ householdId, me }: { householdId: string; me: strin
             <IconSend size={17} />
           </Button>
         </form>
-        {pending ? (
-          <p className="mt-2 flex items-center gap-1.5 text-[0.74rem] text-ink-3" role="status">
-            <Chip tone="brand">Live</Chip> Tool calls appear as the agent makes them.
-          </p>
-        ) : null}
       </div>
     </div>
   );

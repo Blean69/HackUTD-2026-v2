@@ -7,7 +7,7 @@
 //  - Every household-scoped table has a btree index on household_id (subscribe with
 //    `SELECT * FROM <table> WHERE household_id = '...'`).
 //  - Everything the app needs to render is `public`. The private tables are `worker`, `module_config`,
-//    `plaid_item`, `dirty_household` and `recompute_tick`. Row-level security is P1.
+//    `plaid_item`, `phone_access`, `dirty_household` and `recompute_tick`. Row-level security is P1.
 import { schema, table, t } from 'spacetimedb/server';
 
 // --- seed / domain data -------------------------------------------------------------------------------------------
@@ -437,6 +437,33 @@ export const plaid_item = table(
   },
 );
 
+/**
+ * "Call Brian by phone": one salted hash of the household's 5-digit keypad code (docs/contracts.md section 8).
+ * PRIVATE. The code itself is never stored or logged; `set_phone_pin` writes `pin_hash = sha256(PEPPER:salt:pin)` (src/phone.ts)
+ * with a fresh per-row `salt`. Registered workers read these rows through the `worker_phone_access` view (reducers/phone.ts)
+ * to verify a caller's code; clients see only `phone_access_status`.
+ */
+export const phone_access = table(
+  { name: 'phone_access' },
+  {
+    household_id: t.string().primaryKey(),
+    pin_hash: t.string(), // 64 hex chars
+    salt: t.string(),
+    updated_at: t.timestamp(),
+    set_by: t.identity(),
+  },
+);
+
+/** What the UI shows about a household's phone code: whether one is set, and when it last changed. Never the code or its hash. */
+const phone_access_status = table(
+  { name: 'phone_access_status', public: true },
+  {
+    household_id: t.string().primaryKey(),
+    has_pin: t.bool(),
+    updated_at: t.timestamp(),
+  },
+);
+
 /** Households whose underlying rows changed since the last recompute (picked up by `tick_recompute`). */
 const dirty_household = table(
   { name: 'dirty_household' },
@@ -482,6 +509,8 @@ const spacetimedb = schema({
   household_profile,
   bank_account_option,
   plaid_item,
+  phone_access,
+  phone_access_status,
   worker,
   module_config,
   dirty_household,
