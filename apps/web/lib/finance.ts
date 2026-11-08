@@ -138,8 +138,10 @@ export function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/** Monthly bills: the plain sum, exactly like the worker's get_obligations total and the SpacetimeDB forecast (which charges
+ *  every obligation monthly on its due day), so the Bills tab, Brian and Ask quote the same figure. */
 export function fixedMonthly(obligations: readonly Obligation[]): number {
-  return obligations.reduce((s, o) => s + (o.kind === "tax" ? o.amount / 12 : o.amount), 0);
+  return obligations.reduce((s, o) => s + (o.amount > 0 ? o.amount : 0), 0);
 }
 
 /**
