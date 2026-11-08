@@ -230,7 +230,13 @@ export class PhoneService {
       provider: clean(req.llm?.provider, 24) || this.d.llm.primary('fast').provider,
       model: clean(req.llm?.model, 80) || this.d.llm.primary('fast').model,
     };
-    const toolContext: ToolContext = { data, external: this.d.external };
+    // Brian may change the kids' chores and jars when a parent asks and confirms (tools/kids.ts); nobody else gets `act`.
+    const sink = this.d.sink;
+    const act: NonNullable<ToolContext['act']> = {
+      addKidTask: (member_id, title, reward) => sink.addKidTask({ household_id: householdId, member_id, title, reward, author_name: 'Brian (AI)' }),
+      depositKidJar: (member_id, amount) => sink.depositKidJar({ household_id: householdId, member_id, amount }),
+    };
+    const toolContext: ToolContext = { data, external: this.d.external, act };
     const run = new RunContext(
       { runId, workflow: 'phone', householdId, subjectId: callId },
       { sink: this.d.sink, llm: this.d.llm, registry: this.d.registry, toolContext, primary: primary as { provider: string; model: string } },

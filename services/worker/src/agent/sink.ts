@@ -61,6 +61,9 @@ export interface WorkerSink {
   createProposal(p: ProposalInput): Promise<void>;
   /** Family voting: attach the affordability verdict ('' | fine | tight | risky) and analysis to a proposal. */
   updateProposal(proposalId: string, verdict: string, analysisJson: string, runId: string): Promise<void>;
+  /** Kids and teens, called as the worker when a parent asks Brian: the client reducers add_kid_task and deposit_kid_jar. */
+  addKidTask(t: { household_id: string; member_id: string; title: string; reward: number; author_name: string }): Promise<void>;
+  depositKidJar(d: { household_id: string; member_id: string; amount: number }): Promise<void>;
   setHuddleStatus(huddleId: string, status: 'live' | 'analyzing' | 'done'): Promise<void>;
   purgeTranscript(huddleId: string): Promise<void>;
   finishRun(runId: string, status: 'done' | 'error', providersJson: string, resultJson: string): Promise<void>;
@@ -83,6 +86,8 @@ export class MemorySink implements WorkerSink {
   coachReply = (h: string, text: string, runId: string) => this.rec('coachReply', h, text, runId);
   createProposal = (p: ProposalInput) => this.rec('createProposal', p);
   updateProposal = (id: string, verdict: string, analysisJson: string, runId: string) => this.rec('updateProposal', id, verdict, analysisJson, runId);
+  addKidTask = (t: { household_id: string; member_id: string; title: string; reward: number; author_name: string }) => this.rec('addKidTask', t);
+  depositKidJar = (d: { household_id: string; member_id: string; amount: number }) => this.rec('depositKidJar', d);
   setHuddleStatus = (id: string, status: string) => this.rec('setHuddleStatus', id, status);
   purgeTranscript = (id: string) => this.rec('purgeTranscript', id);
   finishRun = (runId: string, status: string, p: string, r: string) => this.rec('finishRun', runId, status, p, r);

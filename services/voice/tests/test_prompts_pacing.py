@@ -89,7 +89,7 @@ def test_brief_is_humanized_before_the_model_reads_it():
 
 
 def test_prompt_size_stays_modest():
-    assert len(prompt().split()) < 1250  # a 3B-active model follows a short prompt better (raised for the humor examples and grounding rules)
+    assert len(prompt().split()) < 1350  # a 3B-active model follows a short prompt better (raised for humor, grounding and the kid tools)
 
 
 def test_disclosure_is_brief_natural_and_complete():
@@ -183,3 +183,10 @@ def test_prompt_grounds_every_figure_and_never_moves_money():
     for line in (prompts.CALLBACK_OPENING, prompts.CALLBACK_VOICEMAIL):
         assert "Brianotron" in line and "on your account" not in line  # the family's own app, not "your account"
     assert "call me back" not in prompts.CALLBACK_VOICEMAIL.lower()  # a voicemail that asks for a callback is the scam pattern
+
+
+def test_kid_tools_need_a_spoken_yes():
+    p = prompt()
+    assert "get_kids" in p and "add_kid_chore" in p and "add_to_kid_jar" in p
+    assert "wait for a yes, then call it with confirmed true" in p
+    assert "The one exception is the kids' allowance jars in the app" in p

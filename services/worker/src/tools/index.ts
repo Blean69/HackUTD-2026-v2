@@ -2,6 +2,7 @@ import { detectTransactionAnomalies } from './anomalies.js';
 import { creditTools } from './credit.js';
 import { externalTools } from './external.js';
 import { goalFeasibilityTool } from './feasibility.js';
+import { kidTools } from './kids.js';
 import { ledgerTools } from './ledger.js';
 import { ToolRegistry } from './registry.js';
 import { detectScamSignalsTool } from './scam.js';
@@ -17,8 +18,10 @@ export function buildRegistry(): ToolRegistry {
     detectTransactionAnomalies,
     detectScamSignalsTool,
     ...externalTools,
+    ...kidTools,
   );
 }
 
 export * from './registry.js';
+export { WRITE_TOOLS } from './kids.js';
 export type { ExternalApis } from './external.js';

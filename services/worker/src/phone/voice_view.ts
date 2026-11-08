@@ -3,7 +3,7 @@
 import { fitJson, nextDueLabel, truncate } from '../util.js';
 
 /** Tools the phone/voice agent may use (7 to 8 is plenty for a 3B-active model). Order = order in the model's tool list. */
-export const PHONE_TOOLS = ['get_health_indicators', 'get_forecast', 'get_obligations', 'get_accounts', 'get_credit_score', 'simulate_scenario', 'goal_feasibility', 'detect_scam_signals'] as const;
+export const PHONE_TOOLS = ['get_health_indicators', 'get_forecast', 'get_obligations', 'get_accounts', 'get_credit_score', 'simulate_scenario', 'goal_feasibility', 'detect_scam_signals', 'get_kids', 'add_kid_chore', 'add_to_kid_jar'] as const;
 export type PhoneTool = (typeof PHONE_TOOLS)[number];
 export const isPhoneTool = (name: string): name is PhoneTool => (PHONE_TOOLS as readonly string[]).includes(name);
 

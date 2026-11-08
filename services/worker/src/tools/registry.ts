@@ -9,6 +9,11 @@ import type { ExternalApis } from './external.js';
 export interface ToolContext {
   data: HouseholdData;
   external: ExternalApis;
+  /** Writes a tool may make for the family. Only Brian's call session provides them; elsewhere write tools refuse. */
+  act?: {
+    addKidTask(member_id: string, title: string, reward: number): Promise<void>;
+    depositKidJar(member_id: string, amount: number): Promise<void>;
+  };
 }
 
 export interface ToolDef<S extends z.ZodType = z.ZodType> {

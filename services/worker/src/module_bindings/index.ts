@@ -63,6 +63,7 @@ import CreateSandboxReducer from "./create_sandbox_reducer";
 import DeleteGoalReducer from "./delete_goal_reducer";
 import DeleteKidTaskReducer from "./delete_kid_task_reducer";
 import DeleteSandboxReducer from "./delete_sandbox_reducer";
+import DepositKidJarReducer from "./deposit_kid_jar_reducer";
 import EmitTraceReducer from "./emit_trace_reducer";
 import EndHuddleReducer from "./end_huddle_reducer";
 import FinishOnboardingReducer from "./finish_onboarding_reducer";
@@ -650,6 +651,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_goal", DeleteGoalReducer),
   __reducerSchema("delete_kid_task", DeleteKidTaskReducer),
   __reducerSchema("delete_sandbox", DeleteSandboxReducer),
+  __reducerSchema("deposit_kid_jar", DepositKidJarReducer),
   __reducerSchema("emit_trace", EmitTraceReducer),
   __reducerSchema("end_huddle", EndHuddleReducer),
   __reducerSchema("finish_onboarding", FinishOnboardingReducer),

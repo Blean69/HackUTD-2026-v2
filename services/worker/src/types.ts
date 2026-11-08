@@ -105,6 +105,21 @@ export interface CreditScoreRow {
 }
 
 /** One dated point of a member's score history (daily recompute plus the monthly backfill). */
+export interface KidTaskRow {
+  id: string;
+  member_id: string;
+  title: string;
+  reward: number;
+  status: string; // open | done | approved
+}
+export interface KidJarRow {
+  member_id: string;
+  balance: number;
+  earned_total: number;
+  goal_title: string;
+  goal_target: number;
+}
+
 export interface CreditHistoryRow {
   member_id: string;
   date: string;
@@ -138,6 +153,9 @@ export interface HouseholdData {
   /** Simulated credit scores per member and their history. Optional: absent in fixtures and before the module computed any. */
   credit_scores?: CreditScoreRow[];
   credit_history?: CreditHistoryRow[];
+  /** Kids and teens (contracts.md section 12): chores and allowance jars. Optional like the credit rows. */
+  kid_tasks?: KidTaskRow[];
+  kid_jars?: KidJarRow[];
   /** "Today" for this household's data (YYYY-MM-DD). */
   asOf: string;
 }

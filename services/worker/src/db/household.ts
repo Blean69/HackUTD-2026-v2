@@ -8,7 +8,7 @@ import { subscribeAndWait } from './connection.js';
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
-const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'coach_message', 'credit_score', 'credit_score_history'];
+const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'coach_message', 'credit_score', 'credit_score_history', 'kid_task', 'kid_jar'];
 
 export class HouseholdLoader {
   private subs = new Map<string, Promise<unknown>>();
@@ -82,6 +82,8 @@ export class HouseholdLoader {
       credit_history: mine(db.creditScoreHistory.iter())
         .map((h) => ({ member_id: h.memberId, date: h.date, score: h.score }))
         .sort((a, b) => (a.member_id < b.member_id ? -1 : a.member_id > b.member_id ? 1 : a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+      kid_tasks: mine(db.kidTask.iter()).map((k) => ({ id: k.id, member_id: k.memberId, title: k.title, reward: k.reward, status: k.status })),
+      kid_jars: mine(db.kidJar.iter()).map((j) => ({ member_id: j.memberId, balance: j.balance, earned_total: j.earnedTotal, goal_title: j.goalTitle, goal_target: j.goalTarget })),
       asOf,
     };
   }

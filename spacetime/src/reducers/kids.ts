@@ -62,6 +62,22 @@ export const delete_kid_task = spacetimedb.reducer({ task_id: t.string() }, (ctx
   if (ctx.db.kid_task.id.find(task_id)) ctx.db.kid_task.id.delete(task_id);
 });
 
+const MAX_DEPOSIT = 500;
+
+/**
+ * A parent puts money straight into a kid's jar (an allowance, a birthday gift), from the Kids page or by asking Brian.
+ * The jar is allowance bookkeeping inside the app, not a bank transfer.
+ */
+export const deposit_kid_jar = spacetimedb.reducer(
+  { household_id: t.string(), member_id: t.string(), amount: t.f64() },
+  (ctx, { household_id, member_id, amount }) => {
+    requireHousehold(ctx, household_id);
+    memberIn(ctx, household_id, member_id);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_DEPOSIT) fail(`amount must be more than 0 and at most ${MAX_DEPOSIT}`);
+    creditJar(ctx, household_id, member_id, Math.round(amount * 100) / 100);
+  },
+);
+
 /** What the kid is saving for. target 0 clears it. */
 export const set_kid_goal = spacetimedb.reducer(
   { household_id: t.string(), member_id: t.string(), title: t.string(), target: t.f64() },
