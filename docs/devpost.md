@@ -31,7 +31,9 @@ The name is in memory of Brian. B.R.I.A.N. stands for "Be Rich In A Night", whic
 **Brianotron is one live, shared financial room for a family.**
 
 - **Link a bank in one tap.** Plaid Sandbox brings in the accounts and months of transactions. Bills are detected from the family's own recurring payments, and the dashboard scores their financial health right away.
-- **The 360° dashboard.** Net worth, assets and debts, monthly cash flow, eight health indicators, and a 90-day cash forecast with the low point called out. Plus Analytics, a simulated credit score per family member, and Goals. One number for each thing, computed once in the database, so every screen, agent and voice says the same figure.
+- **The 360° dashboard.** Every account in one view, in six product tiles (checking, savings, CDs & IRAs, loans, cards, mortgage) with status, utilization and maturity. Net worth, assets and debts, monthly cash flow, eight health indicators with "show the math", and a 90-day cash forecast with the low point called out. Plus Analytics, a simulated credit score per family member, and Goals. One number for each thing, computed once in the database, so every screen, agent and voice says the same figure.
+- **Your next move.** The health indicators become ranked, dollar-sized actions that show the score after each one ("build a 6-month cushion: $2,750 a month, health 79 → 84"). One tap simulates it in What-If Studio or asks Brian about it.
+- **Make it yours.** On desktop, drag any dashboard card to reorder it, or drop it in the card bank to hide it and bring it back later. The layout is saved per viewer.
 - **Live on every phone.** Family members join the room from their own phones. A vote, a goal or an agent result shows up everywhere at once.
 - **Table Mode.** The family talks it out; every phone shows the transcript. When they finish, Nemotron agents pull out the goals, check each one against the real balances, and post goal cards marked On track, Stretch or Not advised. Then the transcript is deleted. Gambling is never a plan.
 - **What-If Studio and family votes.** "Open a second bakery location" becomes a structured scenario, simulated month by month, with a verdict (fine, tight, risky or not advised) before anyone signs anything.
@@ -111,6 +113,12 @@ We built it as a team working alongside Claude Code and Codex, against one bindi
 - Real bank connections, which need consent flows and a security review first.
 - A warm handoff from Brian to a human advisor.
 - Goals that update themselves as new transactions arrive.
+
+---
+
+## Built with
+
+SpacetimeDB (self-hosted, TypeScript module) · NVIDIA Nemotron 3 Ultra · NVIDIA Nemotron 3.5 Lightning · NVIDIA Nemotron ASR · NVIDIA Parakeet · NVIDIA Brev (L40S, vLLM, NVFP4) · NVIDIA API Catalog · ElevenLabs · Pipecat · SignalWire · WebRTC · Plaid Sandbox · FRED API · College Scorecard API · Next.js · React · TypeScript · Tailwind CSS · Node.js · Python · Vitest · pytest · Docker Compose · Caddy · Let's Encrypt · AWS EC2 · Remotion · Claude Code · Codex
 
 ---
 
