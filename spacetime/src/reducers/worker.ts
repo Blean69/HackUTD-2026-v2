@@ -76,6 +76,25 @@ export const claim_job = spacetimedb.reducer({ job_id: t.u64() }, (ctx, { job_id
   ctx.db.agent_job.id.update({ ...job, status: 'claimed', claimed_by: ctx.sender });
 });
 
+/**
+ * Called by a worker once at startup. Any job still claimed by this worker's identity was in flight when it stopped (a deploy
+ * restarts it mid-run), so nothing will ever finish it: its unfinished run is closed as an error and the job goes back to
+ * queued, to run again instead of leaving "Checking your accounts" on screen forever. A phone job is closed, not re-queued:
+ * that call is gone.
+ */
+export const release_my_claims = spacetimedb.reducer({}, (ctx) => {
+  requireWorker(ctx);
+  for (const job of [...ctx.db.agent_job.status.filter('claimed')]) {
+    if (!job.claimed_by || !job.claimed_by.isEqual(ctx.sender)) continue;
+    const run = job.run_id ? ctx.db.agent_run.run_id.find(job.run_id) : undefined;
+    if (run && run.status === 'running') {
+      ctx.db.agent_run.run_id.update({ ...run, status: 'error', finished_at: ctx.timestamp, result_json: JSON.stringify({ error: 'the worker restarted mid-run; the job was queued again' }) });
+    }
+    if (job.workflow === 'phone') ctx.db.agent_job.id.update({ ...job, status: 'error' });
+    else ctx.db.agent_job.id.update({ ...job, status: 'queued', claimed_by: undefined, run_id: '' });
+  }
+});
+
 export const start_run = spacetimedb.reducer(
   { run_id: t.string(), job_id: t.u64() },
   (ctx, { run_id, job_id }) => {

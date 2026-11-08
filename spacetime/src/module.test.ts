@@ -397,6 +397,23 @@ describe('phone calls: agent_enqueue_job', () => {
     expect(test.db.agent_job.count()).toBe(0n);
   });
 
+  it('release_my_claims: a job left claimed by a restarted worker runs again (a phone job is closed instead)', () => {
+    const test = seeded();
+    enqueue(test, { workflow: 'coach', subject_id: 'msg_1', input_json: '{"text":"hi"}' });
+    enqueue(test, { subject_id: 'call_9' });
+    const [coach, phone] = [...test.db.agent_job.iter()].sort((a, b) => Number(a.id - b.id));
+    for (const [j, r] of [[coach!, 'run_c'], [phone!, 'run_p']] as const) {
+      test.withReducerTx(worker, (ctx) => m.claim_job(ctx, { job_id: j.id }));
+      test.withReducerTx(worker, (ctx) => m.start_run(ctx, { run_id: r, job_id: j.id }));
+    }
+    test.withReducerTx(worker, (ctx) => m.release_my_claims(ctx, {})); // the worker restarted mid-run
+    expect(test.db.agent_job.id.find(coach!.id)).toMatchObject({ status: 'queued', run_id: '' });
+    expect(test.db.agent_job.id.find(phone!.id)!.status).toBe('error');
+    expect(test.db.agent_run.run_id.find('run_c')!.status).toBe('error');
+    test.withReducerTx(worker, (ctx) => m.claim_job(ctx, { job_id: coach!.id })); // and it can be claimed and run again
+    test.withReducerTx(worker, (ctx) => m.start_run(ctx, { run_id: 'run_c2', job_id: coach!.id }));
+  });
+
   it('queues a phone job; the worker claims it, starts the run, traces it and finishes it', () => {
     const test = seeded();
     enqueue(test);

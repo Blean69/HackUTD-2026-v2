@@ -124,6 +124,12 @@ async function run(conn: DbConnection): Promise<void> {
   };
   conn.db.agentJob.onInsert((_ctx, row) => offer(row));
   conn.db.agentJob.onUpdate((_ctx, _old, row) => offer(row));
+  // Jobs this worker had claimed before it restarted (a deploy mid-run) go back to queued and are picked up below.
+  try {
+    await conn.reducers.releaseMyClaims({});
+  } catch (e) {
+    console.warn(`[jobs] could not release stale claims: ${e instanceof Error ? e.message : String(e)}`);
+  }
   await subscribeAndWait(conn, ["SELECT * FROM agent_job WHERE status = 'queued'"]);
   for (const row of conn.db.agentJob.iter()) offer(row);
   console.log(`[worker] ready. Workflows: ${workflowNames().join(', ')}. Providers: ${llm.providers.map((p) => `${p.id}(${p.modelFor('agent')})`).join(' -> ')}. DEMO_MODE=${cfg.demoMode}`);

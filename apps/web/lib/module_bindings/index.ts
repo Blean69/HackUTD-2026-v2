@@ -74,6 +74,7 @@ import PurgeTranscriptReducer from "./purge_transcript_reducer";
 import RecomputeHouseholdReducer from "./recompute_household_reducer";
 import RedeemKidGoalReducer from "./redeem_kid_goal_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
+import ReleaseMyClaimsReducer from "./release_my_claims_reducer";
 import ReopenKidTaskReducer from "./reopen_kid_task_reducer";
 import RequestBankSyncReducer from "./request_bank_sync_reducer";
 import RequestSimulationReducer from "./request_simulation_reducer";
@@ -662,6 +663,7 @@ const reducersSchema = __reducers(
   __reducerSchema("recompute_household", RecomputeHouseholdReducer),
   __reducerSchema("redeem_kid_goal", RedeemKidGoalReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
+  __reducerSchema("release_my_claims", ReleaseMyClaimsReducer),
   __reducerSchema("reopen_kid_task", ReopenKidTaskReducer),
   __reducerSchema("request_bank_sync", RequestBankSyncReducer),
   __reducerSchema("request_simulation", RequestSimulationReducer),
