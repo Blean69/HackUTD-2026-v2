@@ -50,7 +50,7 @@ export function compressDelays(tsMs: number[], maxMs = MAX_REPLAY_MS): number[] 
   const gaps = tsMs.map((t, i) => (i === 0 ? 0 : Math.max(0, t - tsMs[i - 1]!)));
   const total = gaps.reduce((s, g) => s + g, 0);
   const scale = total > maxMs ? maxMs / total : 1;
-  return gaps.map((g) => Math.round(g * scale));
+  return gaps.map((g) => Math.floor(g * scale)); // floor, never round: rounding each gap up can push the sum past maxMs
 }
 
 export async function replayRun(

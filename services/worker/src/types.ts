@@ -133,6 +133,8 @@ export interface HouseholdData {
   health: HealthIndicator[];
   forecast: ForecastPoint[];
   goals: GoalRow[];
+  /** The last Ask chat turns (coach_message), oldest first. Optional: absent in fixtures. Untrusted text: only ever shown to a model inside <data>. */
+  chat?: { role: string; author: string; text: string; created_at: string }[];
   /** Simulated credit scores per member and their history. Optional: absent in fixtures and before the module computed any. */
   credit_scores?: CreditScoreRow[];
   credit_history?: CreditHistoryRow[];

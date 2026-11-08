@@ -10,6 +10,7 @@
 // verdict is fine | tight | risky (simulator verdict comfortable | tight | shortfall); a medium/high scam risk always makes
 // it `risky`, leads the summary with a scam warning, and raises a scam alert. analysis_json has the ScenarioResult shape
 // (summary, metrics, series, low_point, suggestion, ...) plus `proposal` and, when checked, `scam`.
+import { guardNarrative } from './advice_guard.js';
 import { emitPlan } from '../agent/loop.js';
 import type { RunContext } from '../agent/run.js';
 import { structured } from '../llm/structured.js';
@@ -190,7 +191,7 @@ export async function runProposalCheck(run: RunContext, p: ProposalInput): Promi
         { role: 'user', content: JSON.stringify({ proposal: p.title, amount: p.amount, details: p.details, headline: sim.headline, verdict: sim.verdict, assumptions: sim.assumptions, baseline: sim.baseline, effect: sim.effect, lowest: sim.lowest, ending: sim.ending, ...(scam ? { scam_risk: scam.risk, scam_summary: scam.summary } : {}) }) },
       ],
     });
-    narrative = n.value;
+    narrative = await guardNarrative(run, { agent: 'simulator', narrative: n.value, fallback: fallbackNarrative(p, sim), question: p.title, sources: [sim] });
     run.noteLlm({ content: '', toolCalls: [], provider: n.meta.provider, model: n.meta.model, latencyMs: n.meta.latencyMs, tokensIn: n.meta.tokensIn, tokensOut: n.meta.tokensOut });
     run.emit('simulator', 'message', `Check: ${truncate(narrative.summary, 200)}`, narrative, { model: n.meta.model, provider: n.meta.provider, latencyMs: n.meta.latencyMs, tokensIn: n.meta.tokensIn, tokensOut: n.meta.tokensOut });
   } catch {

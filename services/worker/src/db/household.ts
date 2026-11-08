@@ -8,7 +8,7 @@ import { subscribeAndWait } from './connection.js';
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
-const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'credit_score', 'credit_score_history'];
+const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'coach_message', 'credit_score', 'credit_score_history'];
 
 export class HouseholdLoader {
   private subs = new Map<string, Promise<unknown>>();
@@ -74,6 +74,10 @@ export class HouseholdLoader {
       health: mine(db.healthIndicator.iter()).map((h) => ({ key: h.key, label: h.label, value: h.value, unit: h.unit, status: h.status, explanation: h.explanation })),
       forecast: forecast.map((f) => ({ date: f.date, balance: f.balance, obligations_due: f.obligationsDue })),
       goals: mine(db.goal.iter()).map((g) => ({ id: g.id, title: g.title, target_amount: g.targetAmount, target_date: g.targetDate, priority: g.priority, feasibility: g.feasibility })),
+      chat: mine(db.coachMessage.iter())
+        .sort((a, b) => Number(a.id - b.id))
+        .slice(-12)
+        .map((c) => ({ role: c.role, author: c.authorName, text: c.text, created_at: c.createdAt.toDate().toISOString() })),
       credit_scores: mine(db.creditScore.iter()).map((c) => ({ member_id: c.memberId, score: c.score, band: c.band, factors: safeFactors(c.factorsJson) })),
       credit_history: mine(db.creditScoreHistory.iter())
         .map((h) => ({ member_id: h.memberId, date: h.date, score: h.score }))

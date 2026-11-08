@@ -108,7 +108,7 @@ export function GoalsCard({ goals, fin, householdId, className }: { goals: reado
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="truncate text-body font-medium">{g.title}</span>
-                    {f ? <span className={cx("shrink-0 text-caption font-medium", f.cls)}>{f.text}</span> : <span className="shrink-0 text-caption text-ink-3">Checking</span>}
+                    {f ? <span className={cx("shrink-0 text-caption font-medium", f.cls)}>{f.text}</span> : <span className="shrink-0 text-caption text-ink-3">{g.target_amount ? "Checking" : "Needs an amount"}</span>}
                   </span>
                   {prog ? (
                     <span className="mt-2 flex items-center gap-2.5">

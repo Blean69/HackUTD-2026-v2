@@ -1,5 +1,6 @@
 // what_if: natural-language question -> structured Scenario -> simulate against real cash flow -> narrative + chart data.
 // A what_if job whose input carries a `proposal_id` is a Family-voting affordability check (proposal_check.ts) instead.
+import { guardNarrative } from './advice_guard.js';
 import { emitPlan } from '../agent/loop.js';
 import type { RunContext } from '../agent/run.js';
 import { structured } from '../llm/structured.js';
@@ -80,7 +81,7 @@ export const whatIfWorkflow: WorkflowDef = {
           { role: 'user', content: JSON.stringify({ question: prompt, headline: sim.headline, verdict: sim.verdict, assumptions: sim.assumptions, baseline: sim.baseline, effect: sim.effect, lowest: sim.lowest, ending: sim.ending }) },
         ],
       });
-      narrative = n.value;
+      narrative = await guardNarrative(run, { agent: 'simulator', narrative: n.value, fallback: fallbackNarrative(sim), question: prompt, sources: [sim] });
       run.noteLlm({ content: '', toolCalls: [], provider: n.meta.provider, model: n.meta.model, latencyMs: n.meta.latencyMs, tokensIn: n.meta.tokensIn, tokensOut: n.meta.tokensOut });
       run.emit('simulator', 'message', `Answer: ${truncate(narrative.summary, 200)}`, narrative, { model: n.meta.model, provider: n.meta.provider, latencyMs: n.meta.latencyMs, tokensIn: n.meta.tokensIn, tokensOut: n.meta.tokensOut });
     } catch {
