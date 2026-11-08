@@ -2,7 +2,7 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Tiny global for the two right-hand slide-over panels: "Agent activity" (trace) and "Ask Cosign" (coach).
+ * Tiny global for the two right-hand slide-over panels: "Agent activity" (trace) and "Ask Brianotron" (coach).
  * Only one is open at a time. Any component can open them ("Agent analysis" badge, a tool-call chip, ...).
  */
 type Panel = "none" | "trace" | "coach";

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { IconAlert, IconArrowRight, IconCheck, IconChevronDown, IconClose, IconLock, IconMic, IconMicOff, IconPhone, IconSpark } from "@/components/icons";
 import { Button, IconTile, LivePill, Spinner } from "@/components/ui";
-import { PRODUCT_NAME } from "@/lib/constants";
+import { VOICE_NAME } from "@/lib/constants";
 import { useLocalIdentity } from "@/lib/data/identity";
 import { cx } from "@/lib/format";
 import { openCoach } from "@/lib/traceUi";
@@ -192,7 +192,7 @@ interface ErrorCopy {
 function errorCopy(kind: CallErrorKind): ErrorCopy {
   switch (kind) {
     case "mic-blocked":
-      return { title: "Microphone is blocked", body: `${PRODUCT_NAME} can't hear you until this site is allowed to use the microphone. To fix it:`, steps: micSteps(), primary: "retry" };
+      return { title: "Microphone is blocked", body: `${VOICE_NAME} can't hear you until this site is allowed to use the microphone. To fix it:`, steps: micSteps(), primary: "retry" };
     case "mic-missing":
       return { title: "No microphone found", body: "Plug in or switch on a microphone (a headset works), then try again. You can also use the Ask panel to type instead.", primary: "retry" };
     case "mic-busy":
@@ -291,7 +291,7 @@ function Bubble({ c }: { c: Caption }) {
   return (
     <li className={cx("anim-fade flex", mine ? "justify-end" : "justify-start")}>
       <div className={cx("max-w-[88%] rounded-lg px-3 py-2", mine ? "bg-brand-soft" : "border border-line bg-surface-2")}>
-        <p className="mb-0.5 text-2xs font-semibold text-ink-3">{mine ? "You" : PRODUCT_NAME}</p>
+        <p className="mb-0.5 text-2xs font-semibold text-ink-3">{mine ? "You" : VOICE_NAME}</p>
         <p className="break-words text-body leading-relaxed text-ink">
           {c.text}
           {c.interim ? <span className="text-ink-3">{c.text ? " " : ""}{c.interim}</span> : null}
@@ -332,7 +332,7 @@ function IdleView({ householdId, name }: { householdId: string; name: string }) 
   return (
     <div className="space-y-4 p-4">
       <p className="text-lead leading-snug text-ink">
-        Ask {PRODUCT_NAME} about your accounts, bills and big purchases. It answers out loud, and every step it takes shows up in the Agent Trail.
+        Ask {VOICE_NAME} about your accounts, bills and big purchases. He answers out loud, and every step he takes shows up in the Agent Trail.
       </p>
       <div className="space-y-2.5">
         <Button size="lg" className="w-full" onClick={start} data-autofocus><IconMic size={18} /> Start call</Button>
@@ -362,7 +362,7 @@ function ExplainerView({ householdId, name }: { householdId: string; name: strin
         <IconTile size={40}><IconMic size={20} /></IconTile>
         <div className="min-w-0">
           <h3 className="text-h3 font-semibold">Allow your microphone</h3>
-          <p className="mt-1 text-body leading-snug text-ink-2">{PRODUCT_NAME} needs to hear you. Your browser will ask first, and only this tab can use the microphone.</p>
+          <p className="mt-1 text-body leading-snug text-ink-2">{VOICE_NAME} needs to hear you. Your browser will ask first, and only this tab can use the microphone.</p>
         </div>
       </div>
       <ol className="list-decimal space-y-2 rounded-md border border-line bg-surface-2 py-3 pl-8 pr-3 text-body leading-snug text-ink marker:font-semibold marker:text-ink-3">
@@ -400,7 +400,7 @@ function micText(call: CallState): string {
   if (call.micLive) return call.pushToTalk ? "Mic live. Release to send" : "Mic live";
   if (call.muted) return "Muted";
   if (call.pushToTalk) return "Mic closed. Hold to talk";
-  if (call.botSpeaking) return `Mic paused while ${PRODUCT_NAME} speaks`;
+  if (call.botSpeaking) return `Mic paused while ${VOICE_NAME} speaks`;
   return "Mic closed";
 }
 
@@ -534,7 +534,7 @@ function LiveFooter({ call }: { call: CallState }) {
 
 function EndedView({ call, householdId, name }: { call: CallState; householdId: string; name: string }) {
   const reason =
-    call.endReason === "bot" ? `${PRODUCT_NAME} ended the call.` : call.endReason === "lost" ? "The connection dropped." : "You hung up.";
+    call.endReason === "bot" ? `${VOICE_NAME} ended the call.` : call.endReason === "lost" ? "The connection dropped." : "You hung up.";
   const length = call.startedAt && call.endedAt ? clockText(call.endedAt - call.startedAt) : null;
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -579,7 +579,7 @@ function SheetContent({ call, householdId }: { call: CallState; householdId: str
   const voice = useVoiceStatus();
   const name = ident.name ?? "Guest";
   const live = call.phase === "live";
-  const title = `Talk to ${PRODUCT_NAME}`;
+  const title = `Talk to ${VOICE_NAME}`;
   const subtitle =
     call.phase === "live" ? "On a call" :
     call.phase === "connecting" ? "Connecting" :

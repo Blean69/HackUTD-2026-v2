@@ -2,7 +2,6 @@
 
 **Fill-ins before pasting**
 
-- `{{NAME}}`: product name, still undecided.
 - `{{URL}}`: `https://52-72-164-85.sslip.io` until the new domain is live.
 - `[verify]` marks a claim the repo docs do not confirm. Resolve or delete every one before the final submit (Sun 12:00 PM).
 - Features tagged *(shipping tonight)* must be cut from the text if they are not on the deployed build by then.
@@ -14,7 +13,7 @@
 
 ## Title
 
-{{NAME}}
+Brianotron
 
 ## Tagline (159 characters)
 
@@ -22,7 +21,7 @@ A live money room for the whole family: link a bank, then plan, vote and run wha
 
 ## Initial submission, 11 PM (short version)
 
-{{NAME}} is a shared financial room: a family links a bank, sees every account, health indicator and 90-day cash forecast in one place, and plans together on their own phones. Nemotron agents plan, call tools and check each goal, what-if and scam signal against the real balances, and every step shows up in an Agent Trail. All state, the AI job queue and the finance math run in SpacetimeDB, self-hosted on one EC2 box, and the code is public at https://github.com/Blean69/HackUTD-2026. [verify public]
+Brianotron is a shared financial room: a family links a bank, sees every account, health indicator and 90-day cash forecast in one place, and plans together on their own phones. Nemotron agents plan, call tools and check each goal, what-if and scam signal against the real balances, and every step shows up in an Agent Trail. All state, the AI job queue and the finance math run in SpacetimeDB, self-hosted on one EC2 box, and the code is public at https://github.com/Blean69/HackUTD-2026. [verify public]
 
 ---
 
@@ -36,7 +35,7 @@ Then there is the call nobody plans for. In our synthetic data, a retired couple
 
 ## What it does
 
-{{NAME}} is one live space that a family and a team of Nemotron agents share.
+Brianotron is one live space that a family and a team of Nemotron agents share.
 
 - **Onboarding.** Link a bank through Plaid (Sandbox), choose which accounts to import, and answer a few questions while the sync runs. The dashboard fills itself and Nemotron writes the first three to five insights in plain English. *(shipping tonight)*
 - **Dashboard.** Accounts across eight account types (checking, savings, CD, IRA, auto loan, personal loan, credit card, mortgage), eight health indicators with a one-line explanation each, and a 90-day cash forecast with bills and loan payments marked and the low point called out. The math runs inside the database.
@@ -45,7 +44,7 @@ Then there is the call nobody plans for. In our synthetic data, a retired couple
 - **What-If Studio.** Type a scenario in plain words ("open a second bakery location"). An agent turns it into a structured scenario, runs the simulator over 12 to 24 months, and shares the verdict, the low point and a suggestion with the whole family.
 - **Scam check and data quality.** Rules inside the database catch duplicates, garbled merchants, impossible values and card testing. Agents link the Nguyens' "grandson in jail" call to the $2,000 of gift cards.
 - **Agent Trail.** Every plan, tool call, result, model, provider, latency and token count for every run, streaming live from every session.
-- **Ask {{NAME}}.** A coach panel that answers by calling tools on the family's own data, with each call visible in the trail.
+- **Ask Brianotron.** A coach panel that answers by calling tools on the family's own data, with each call visible in the trail.
 - **Credit monitoring.** A simulated 300–850 score per family member, mostly driven by the household's financial health, with the factors explained, a 6-month trend and alerts on big moves.
 - **Brian calls you back.** About 15 seconds after a phone call, Brian rings back with a critical alert from your own accounts and stays on the line.
 
@@ -108,7 +107,7 @@ SpacetimeDB 2.14.1 (TypeScript module, self-hosted) · NVIDIA Nemotron 3 Ultra �
 
 ## Track fit
 
-**PNC: 360° Financial Health Navigator.** A judge can link the demo bank on their own phone and watch the dashboard fill itself with accounts, eight health indicators and a 90-day forecast, then read the first insights Nemotron wrote. PNC listed a coach, health indicators, a forecast and a what-if simulator; each is a screen: Ask {{NAME}}, the Dashboard, the cash forecast, What-If Studio. The new parts are Table Mode (the family plans out loud, agents check it), the Family vote with an affordability verdict, and the Nguyens' scam check. Check the numbers on the Riveras: six institutions and a net worth of $344,800 on the seed. The forecast low point lands around December 1, when the mortgage and several other bills post together. [verify against the live card]
+**PNC: 360° Financial Health Navigator.** A judge can link the demo bank on their own phone and watch the dashboard fill itself with accounts, eight health indicators and a 90-day forecast, then read the first insights Nemotron wrote. PNC listed a coach, health indicators, a forecast and a what-if simulator; each is a screen: Ask Brianotron, the Dashboard, the cash forecast, What-If Studio. The new parts are Table Mode (the family plans out loud, agents check it), the Family vote with an affordability verdict, and the Nguyens' scam check. Check the numbers on the Riveras: six institutions and a net worth of $344,800 on the seed. The forecast low point lands around December 1, when the mortgage and several other bills post together. [verify against the live card]
 
 **NVIDIA: Use Nemotron beyond a chatbot.** Most runs start without a chat message: finishing onboarding, ending a Table Mode session, creating a proposal, opening a sandbox. Open the Agent Trail and pick any run to see plan, tool calls, tool results and the decision, each with model, provider, latency and token counts. Nemotron 3 Ultra plans and calls tools, Nemotron 3.5 Lightning extracts structured fields, the tools reach FRED and College Scorecard, the `plaid_sync` workflow reaches Plaid Sandbox, and voice goes through NVIDIA ASR [verify ASR path tested live]. All five workflows pass on real Nemotron in 9 to 31 seconds. `{{URL}}/worker/health` lists the live providers and models. Qwen on tenvor.io is a labelled fallback, and our own Nemotron on NVIDIA Brev is configured as the tier with no shared rate limit. [verify `brev` appears as a provider in the trace]
 

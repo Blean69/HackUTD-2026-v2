@@ -1,5 +1,7 @@
 /** Product name lives in exactly one place. */
-export const PRODUCT_NAME = "Cosign";
+export const PRODUCT_NAME = "Brianotron";
+/** The voice agent (browser Talk button and the phone line). */
+export const VOICE_NAME = "Brian";
 
 export const PITCH =
   "A shared financial room for the whole household: one live picture of your money, with every AI decision in plain view.";

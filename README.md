@@ -1,7 +1,9 @@
-# Keystone (codename) · HackUTD 2026
+# Brianotron · HackUTD 2026
 
 **A family's financial room.** One live, shared space where the whole family and a team of Nemotron agents see the full
 financial picture together and plan out loud.
+
+`keystone` (database, containers) is the old codename and stays in the infrastructure.
 
 Tracks: **PNC** (360° Financial Health Navigator) · **NVIDIA** (Nemotron beyond a chatbot) · **Spacetime** (main track)
 

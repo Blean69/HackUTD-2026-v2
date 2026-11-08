@@ -5,7 +5,7 @@ import { IconAlert, IconArrowDown, IconArrowUp, IconChevron, IconInfo } from "./
 import { InfoTip } from "./InfoTip";
 
 /* ------------------------------------------------------------------------------------------------
-   Cosign UI kit ("Ledger", docs/design-system.md). Hairline cards on a cool canvas, one cobalt accent,
+   Brianotron UI kit ("Ledger", docs/design-system.md). Hairline cards on a cool canvas, one cobalt accent,
    no card shadows. Money is always tabular (`num`); headline figures use `.figure` (wide display face).
 
    Scales (use these, not one-off values):

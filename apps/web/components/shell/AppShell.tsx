@@ -64,7 +64,7 @@ function Drawer({ open, onClose, householdId }: { open: boolean; onClose: () => 
 
 /**
  * Chrome shared by every signed-in page: a canvas-flush sidebar (md and up), a top bar + bottom tab bar on phones, and
- * the two slide-over panels ("Ask Cosign" and "Agent activity") that any page can open.
+ * the two slide-over panels ("Ask Brianotron" and "Agent activity") that any page can open.
  */
 export function AppShell({ householdId, header, children }: { householdId: string; header?: ReactNode; children: ReactNode }) {
   const path = usePathname() ?? "/";

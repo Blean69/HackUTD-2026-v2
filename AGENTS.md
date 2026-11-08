@@ -3,7 +3,7 @@
 Read this first. It is the source of truth for what we are building and the rules we build by.
 `docs/contracts.md` is binding for any code that crosses the web / SpacetimeDB / worker boundary.
 
-## The product (codename: Keystone — rename freely)
+## The product: Brianotron (codename Keystone, still used for the database and containers)
 
 **A family's financial room: one live, shared space where the whole family and a team of Nemotron agents see the
 full financial picture together and plan out loud.**

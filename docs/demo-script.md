@@ -1,13 +1,13 @@
 # Demo script: 3 minutes per judge panel
 
-Fill-ins: `{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is live. `{{NAME}}` is the undecided product name.
+Fill-ins: `{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is live.
 `[verify]` marks a step or label to check on the deployed build before judging; fix the script, not the judge.
 
 Hand out the QR code first, so judges hold the app while we talk. Every path opens the same way (the onboarding opener),
 then splits by track. Each path works on its own. Close with the 20-second kicker.
 
 **Names to use out loud.** Table Mode (was Huddle), What-If Studio, Agent Trail (was the glass box), Credit, Analytics,
-Ask {{NAME}} (the coach panel). Code and tables still say `huddle`, so a Table Mode run shows `workflow: huddle` in the
+Ask Brianotron (the coach panel). Code and tables still say `huddle`, so a Table Mode run shows `workflow: huddle` in the
 Agent Trail and in SQL. Say so if a judge asks.
 
 **Where things are.** Side nav: Dashboard, Table Mode, What-If Studio, Goals, Credit, Analytics, Agent Trail. The Family voting
@@ -32,7 +32,7 @@ Angle: the whole financial picture, understood, then acted on.
 1. **0:00** Opener. Onboarding on the judge's own phone.
 2. **0:55** Read their dashboard together: "Seven kinds of account, eight health indicators and a 90-day forecast with the low point marked, built a minute ago." Read one first insight aloud. [verify the demo bank covers the account types you name]
 3. **1:20** Hop to the Riveras (`/me`): "This family has been here for months. They run a bakery in Oak Cliff and keep money in six places." Show net worth ($344,800) and the forecast low point (around Dec 1). [verify against the live card]
-4. **1:35** **Table Mode**: tap the sample conversation. The transcript streams in. End it, and the agents pull out "second location", "college fund" and "Grandma's care". Each goal gets a feasibility chip from the real balances. "Families already plan out loud. {{NAME}} joins only when they ask." [verify the sample button label]
+4. **1:35** **Table Mode**: tap the sample conversation. The transcript streams in. End it, and the agents pull out "second location", "college fund" and "Grandma's care". Each goal gets a feasibility chip from the real balances. "Families already plan out loud. Brianotron joins only when they ask." [verify the sample button label]
 5. **2:05** **What-If Studio**: tap "Open a second bakery location" for the runway impact and an SBA-loan suggestion.
 6. **2:25** Switch to the Nguyens: the scam alert links the "grandson in jail" call to a $2,000 gift-card purchase.
 7. **2:40** Kicker.
@@ -70,7 +70,7 @@ Spare beats if a judge asks: open a Table Mode run and point at `goal_feasibilit
 
 ## Kicker (20 s)
 
-"{{NAME}} is a room the whole family shares, live, with a team of Nemotron agents that never stop checking the plan against the numbers."
+"Brianotron is a room the whole family shares, live, with a team of Nemotron agents that never stop checking the plan against the numbers."
 
 ## If a judge asks
 

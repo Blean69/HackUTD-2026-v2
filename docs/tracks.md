@@ -1,7 +1,7 @@
-# Tracks → how {{NAME}} wins each
+# Tracks → how Brianotron wins each
 
 Paraphrased from the opening-ceremony slides (Nov 7, 2026). If anything here is wrong, ask a sponsor mentor.
-`{{NAME}}` is the undecided product name. `{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is live.
+`{{URL}}` is `https://52-72-164-85.sslip.io` until the new domain is live.
 
 > **Verify first:** can one Devpost submission enter PNC + NVIDIA + Spacetime at the same time? Ask at the Help Desk
 > before the 11:00 PM initial Devpost deadline. (Spacetime's slide says you can enter both of *its* tracks; check the others.)
@@ -11,7 +11,7 @@ Paraphrased from the opening-ceremony slides (Nov 7, 2026). If anything here is 
 submit and cut it from the pitch if it is not live. *Planned* = designed, not built; never present it as working.
 
 **Names.** Huddle is now **Table Mode**. The glass box is now **Agent Trail**. The simulator is **What-If Studio**. The coach
-panel is **Ask {{NAME}}**. The code keeps the old names (`huddle` workflow and table, `/agents` route), so a Table Mode run
+panel is **Ask Brianotron**. The code keeps the old names (`huddle` workflow and table, `/agents` route), so a Table Mode run
 reads `huddle` in the trail and in SQL.
 
 ## PNC: 360° Financial Health Navigator
@@ -23,7 +23,7 @@ obligations, a "what if" simulator, or something nobody has thought of yet.
 | Their example | Our feature | Status | Evidence a judge can check |
 |---|---|---|---|
 | Whole picture across institutions | **Onboarding**: link a bank through Plaid Sandbox (one-tap demo bank, or Plaid Link) → choose accounts → answer questions → the dashboard fills itself → first insights | Sync verified; onboarding flow building | Plaid sync: 7 accounts, 331 transactions. Judge links the demo bank on their own phone at `{{URL}}/onboarding` and watches the dashboard fill. The demo bank is a Plaid Sandbox custom user [verify it exists and the one-tap path works] |
-| Conversational coach | **Ask {{NAME}}** panel: answers by calling tools on the family's own (synthetic) data | Verified (coach workflow); panel building | Every tool call is visible in the Agent Trail |
+| Conversational coach | **Ask Brianotron** panel: answers by calling tools on the family's own (synthetic) data | Verified (coach workflow); panel building | Every tool call is visible in the Agent Trail |
 | 3+ health indicators | **Eight** indicators computed in the database: liquidity runway, debt-to-income, credit utilization, savings rate, net-worth trend, emergency fund, forecast low point, credit score. (This file said six before; the module computes eight.) | Verified | Dashboard cards each carry a one-line explanation. Math is in `spacetime/src/finance.ts` |
 | Forecast balances & obligations | 90-day cash forecast with bills and loan payments marked, plus the low point | Verified | Riveras' low point lands around Dec 1 [verify on the live card]. Patel's room should show an overdraft alert when the forecast goes negative [verify] |
 | What-if simulator | **What-If Studio**: plain-language scenarios → simulated impact, shared with the whole family | Verified (what_if workflow); studio UI building | "Open a second bakery location" returns runway impact and an SBA-loan suggestion |
@@ -33,7 +33,7 @@ obligations, a "what if" simulator, or something nobody has thought of yet.
 | *Something new* | **Credit monitoring**: a simulated 300–850 score per family member, driven mostly by the household's financial health, with a 6-month trend, the factors behind it and alerts on big moves. **Brian calls you back** about 15 s after a call with a critical alert from your own data | Built tonight |
 | *Something new* | **Phone line**: call a number, a human-sounding voice explains the household's finances and runs a what-if by voice | **Planned. Not built.** | Constraints are set in contracts.md section 8: same tools as the coach, traced as `phone` runs, caller matched by phone number plus PIN, spoken AI disclosure on every call |
 
-Judge pitch: *"Families already plan out loud at the table. {{NAME}} joins only when they ask, and checks every plan against their real accounts."*
+Judge pitch: *"Families already plan out loud at the table. Brianotron joins only when they ask, and checks every plan against their real accounts."*
 
 Bank-judge question to be ready for: voice is opt-in per session, with named consent and a visible recording indicator. The transcript is deleted after analysis. We keep goals and short evidence quotes.
 

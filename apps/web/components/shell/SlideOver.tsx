@@ -3,7 +3,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { IconClose } from "@/components/icons";
 
 /**
- * Right-hand slide-over (full-width sheet on phones). Used for "Ask Cosign" and "Agent activity".
+ * Right-hand slide-over (full-width sheet on phones). Used for "Ask Brianotron" and "Agent activity".
  * Escape or a click on the scrim closes it; focus moves in on open and returns to whatever opened it.
  */
 export function SlideOver({

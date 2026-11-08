@@ -3,7 +3,7 @@ import { useId } from "react";
 import { IconMic, IconPhone } from "@/components/icons";
 import { useNow } from "@/lib/data/finance-hooks";
 import { cx } from "@/lib/format";
-import { PRODUCT_NAME } from "@/lib/constants";
+import { VOICE_NAME } from "@/lib/constants";
 import { isCallActive, openCallSheet, useCall } from "@/lib/voiceCall/session";
 import { useVoiceStatus } from "@/lib/voiceCall/health";
 
@@ -35,7 +35,7 @@ export function TalkButton({ variant, className }: { variant: "header" | "card" 
   const tipId = useId();
   const active = isCallActive(call);
   const down = voice === "down" && !active;
-  const label = `Talk to ${PRODUCT_NAME}`;
+  const label = `Talk to ${VOICE_NAME}`;
   const aria = active ? (call.phase === "live" ? "Return to your call" : "Return to the call that is connecting") : down ? `${label} (voice is offline)` : label;
 
   const inCall = active ? (

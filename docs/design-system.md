@@ -1,4 +1,4 @@
-# Cosign design system ("Ledger")
+# Brianotron design system ("Ledger")
 
 Owner: design lead. Consumers: pages lead (room pages, Agent Trail, Analytics, Credit) and anyone touching `apps/web`.
 This file is the source of truth for tokens, type, primitives and layout patterns. If code and this file disagree, tell the
@@ -264,7 +264,7 @@ Nothing is removed. These spots hard-code colours that break in dark mode:
 2. Swap hand-rolled list rows for `ListRow` where you rebuild cards, and `Notice` for inline callouts.
 3. Fix the four dark-mode spots in §10 when you touch those files.
 4. Use `font-display`/`.figure` for headline numbers only; body numbers stay in the UI face with `num`.
-5. `CoachPanel` (Ask Cosign) prints the model's markdown raw (`**$35,700 in savings**` shows the asterisks). Render bold/lists, or
+5. `CoachPanel` (Ask Brianotron) prints the model's markdown raw (`**$35,700 in savings**` shows the asterisks). Render bold/lists, or
    strip `**` before display. The slide-over frame around it is mine and is done.
 6. When you need a new primitive, add the request in §12 rather than a local copy; small one-offs can live in your file.
 
@@ -315,7 +315,7 @@ _(Reserved for the voice agent's push-to-talk / half-duplex API notes.)_
 `holdToTalkProps` from `lib/voiceCall/hold`):** a "Noisy room? Hold to talk" switch in the idle view and the live footer;
 when it is on, a 64-px "Hold to talk" button (pointer, touch, Space/Enter held) replaces Mute and turns `--rec` red while held;
 a mic pill under the orb driven by `micLive` ("Mic live" with a pulsing red dot, or "Mic closed. Hold to talk" / "Mic paused
-while Cosign speaks" / "Muted"); and on phones an "Interrupt" button under the orb while `botSpeaking` (hidden in
+while Brian speaks" / "Muted"); and on phones an "Interrupt" button under the orb while `botSpeaking` (hidden in
 hold-to-talk, where pressing the button is the barge-in). The floating call pill's dot follows `micLive` too.
 
 **Voice agent's API notes (echo and noise).** Everything below lives in `lib/voice.ts` (Table Mode) and `lib/voiceCall/*` (the Talk call).
