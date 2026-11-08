@@ -43,6 +43,28 @@ def _f(name: str, default: float) -> float:
         return default
 
 
+def pin_lengths(raw: str) -> list[int]:
+    """Digit counts of the PINs in PHONE_PINS ("1234:hh_rivera,56789:hh_nguyen"), parsed like the worker does (4 to 8 digits, then ':household').
+    Only lengths, never the digits, leave this function."""
+    out: list[int] = []
+    for item in raw.replace(";", ",").replace(" ", ",").split(","):
+        pin, _, rest = item.strip().partition(":")
+        if rest and pin.isdigit() and 4 <= len(pin) <= 8:
+            out.append(len(pin))
+    return out
+
+
+def derive_pin_length(explicit: str, phone_pins: str) -> tuple[int, bool]:
+    """(digits to collect, variable). PHONE_PIN_LENGTH wins when set. Otherwise it follows PHONE_PINS: all the same length -> that length;
+    different lengths -> the longest, with `variable` set so '#' submits a shorter one. Neither set -> 4."""
+    if explicit.strip().isdigit() and int(explicit) > 0:
+        return int(explicit), False
+    lens = pin_lengths(phone_pins)
+    if lens:
+        return max(lens), len(set(lens)) > 1
+    return 4, False
+
+
 def _list(name: str, default: str = "") -> list[str]:
     return [x.strip() for x in _s(name, default).replace(";", ",").split(",") if x.strip()]
 
@@ -87,20 +109,39 @@ class Settings:
     llm_api_key: str = ""
     llm_temperature: float = 0.7
     llm_top_p: float = 0.95
-    llm_max_tokens: int = 80  # hard backstop against rambling (about 55 spoken words); the prompt asks for ~30
+    llm_max_tokens: int = 80  # backstop against rambling, applied to PLAIN-TEXT replies only (about 55 spoken words); the prompt asks for ~30
+    llm_api_max_tokens: int = 400  # what the API is allowed to generate: a tool call cut at 80 tokens is invalid JSON and silences the bot
     turn_cap_words: int = 32  # a spoken turn stops at the first sentence end after this many words (pacing.SentenceCap)
-    llm_retry_secs: float = 4.0
+    # first-token stalls on the hosted endpoint (seen: 38 s with no error): hedge, retry, hard-cap, then fail over (llm.py)
+    llm_providers: list[str] = field(default_factory=lambda: ["brev", "nvidia_lightning", "nvidia_nano"])
+    llm_hedge_secs: float = 1.5  # no first token after this long: send a second identical request and use whichever answers first (0 = off)
+    llm_retry_secs: float = 4.0  # still nothing: bring in the next provider (or one more request when there is none); 0 = off
+    llm_timeout_secs: float = 8.0  # hard cap per provider: no first token by then, drop its requests and use the next provider
+    llm_cooldown_secs: float = 30.0  # a provider that stalled or errored is tried last for this long, so one outage costs one slow turn
+    llm_hedge_until: str = "sentence"  # what a request must deliver to win the race: "sentence" (first speakable unit) | "token" (first chunk)
+    llm_warm: bool = True  # warm the LLM connections (and the prompt cache) in the background when a call connects
+    brev_base_url: str = ""  # BREV_BASE_URL / BREV_API_KEY / BREV_NEMOTRON_MODEL: our own Nemotron on a Brev GPU; empty = provider skipped
+    brev_api_key: str = ""
+    brev_model: str = ""
+    brev_label: str = "nemotron-3.5-lightning (Brev L40S)"  # what the trace shows for the model served by our Brev GPU (vLLM calls it "nemotron")
+    nano_base_url: str = "https://integrate.api.nvidia.com/v1"
+    # another Nemotron on the hosted API (a different route from Lightning). nvidia/nemotron-nano-3-30b-a3b is in /v1/models but 404s on
+    # completions for our key (checked 2026-11-07); the Nano-3 omni model answers, calls tools and honours enable_thinking=false.
+    nano_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
     # turn-taking: Silero decides "silence", Smart Turn v3 (local ONNX, CPU) decides "finished"; barge-in needs `barge_in_words` words
     vad_stop_secs: float = 0.2
     smart_turn: bool = True
     smart_turn_stop_secs: float = 2.0  # longest silence tolerated when Smart Turn thinks the caller is mid-thought
     barge_in_words: int = 2
-    turn_hold_secs: float = 0.0  # >0: also require this much quiet after the caller's last word (Smart Turn AND timer), for hesitant callers
+    turn_hold_secs: float | None = None  # also require this much quiet after the caller's last word (Smart Turn AND timer). None = auto: 0.6 on the phone, 0 in the browser
+    hesitation_hold_secs: float = 1.5  # extra wait when the last words are a filler or dangling word ("uh", "so", "and the"); 0 = off
+    acks: bool = True  # pre-rendered "Mm-hm." / "Got it." the moment the caller's turn ends (acks.py)
     # calls
     max_call_secs: int = 300
     max_sessions: int = 3
     idle_secs: int = 20
-    pin_length: int = 4
+    pin_length: int = 4  # PHONE_PIN_LENGTH, else derived from PHONE_PINS (config.derive_pin_length)
+    pin_variable: bool = False  # the configured PINs differ in length: the gate collects up to pin_length digits and '#' submits early
     caller_hash_salt: str = ""
     known_caller_hashes: list[str] = field(default_factory=list)
     # webhook signature check on /twiml: SIGNALWIRE_SIGNING_KEY (or a Twilio auth token). Empty = skipped with a logged warning;
@@ -160,17 +201,33 @@ def load_settings() -> Settings:
         llm_temperature=_f("VOICE_LLM_TEMPERATURE", 0.7),
         llm_top_p=_f("VOICE_LLM_TOP_P", 0.95),
         llm_max_tokens=_i("VOICE_LLM_MAX_TOKENS", 80),
+        llm_api_max_tokens=max(_i("VOICE_LLM_API_MAX_TOKENS", 400), _i("VOICE_LLM_MAX_TOKENS", 80)),
         turn_cap_words=_i("VOICE_TURN_CAP_WORDS", 32),
         vad_stop_secs=_f("VOICE_VAD_STOP_SECS", 0.2),
         smart_turn=_s("VOICE_SMART_TURN", "1") != "0",
         smart_turn_stop_secs=_f("VOICE_SMART_TURN_STOP_SECS", 2.0),
         barge_in_words=_i("VOICE_BARGE_IN_WORDS", 2),
-        turn_hold_secs=_f("VOICE_TURN_HOLD_SECS", 0.0),
-        llm_retry_secs=_f("VOICE_LLM_RETRY_SECS", 4.0),
+        turn_hold_secs=_f("VOICE_TURN_HOLD_SECS", -1.0) if _s("VOICE_TURN_HOLD_SECS") else None,
+        hesitation_hold_secs=max(0.0, _f("VOICE_HESITATION_HOLD_SECS", 1.5)),
+        llm_providers=[x.lower() for x in _list("VOICE_LLM_PROVIDERS", "brev,nvidia_lightning,nvidia_nano")] or ["nvidia_lightning"],
+        llm_hedge_secs=max(0.0, _f("VOICE_LLM_HEDGE_SECS", 1.5)),
+        llm_retry_secs=max(0.0, _f("VOICE_LLM_RETRY_SECS", _f("LLM_RETRY_SECS", 4.0))),
+        llm_timeout_secs=max(0.0, _f("VOICE_LLM_TIMEOUT_SECS", 8.0)),
+        llm_cooldown_secs=max(0.0, _f("VOICE_LLM_COOLDOWN_SECS", 30.0)),
+        llm_hedge_until="token" if _s("VOICE_LLM_HEDGE_UNTIL", "sentence").lower() == "token" else "sentence",
+        llm_warm=_s("VOICE_LLM_WARM", "1") != "0",
+        brev_base_url=_s("BREV_BASE_URL").rstrip("/"),
+        brev_api_key=_s("BREV_API_KEY"),
+        brev_model=_s("BREV_NEMOTRON_MODEL"),
+        brev_label=_s("VOICE_BREV_LABEL", "nemotron-3.5-lightning (Brev L40S)"),
+        nano_base_url=_s("VOICE_LLM_NANO_BASE_URL", "https://integrate.api.nvidia.com/v1").rstrip("/"),
+        nano_model=_s("VOICE_LLM_NANO_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"),
+        acks=_s("VOICE_ACKS", "1") != "0",
         max_call_secs=_i("VOICE_MAX_CALL_SECS", 300),
         max_sessions=_i("VOICE_MAX_SESSIONS", 3),
         idle_secs=_i("VOICE_IDLE_SECS", 20),
-        pin_length=_i("PHONE_PIN_LENGTH", 4),
+        pin_length=derive_pin_length(_s("PHONE_PIN_LENGTH"), _s("PHONE_PINS"))[0],
+        pin_variable=derive_pin_length(_s("PHONE_PIN_LENGTH"), _s("PHONE_PINS"))[1],
         caller_hash_salt=_s("PHONE_CALLER_SALT") or _s("CALLER_HASH_SALT"),
         known_caller_hashes=_list("KNOWN_CALLER_HASHES"),
         signature_token=_s("SIGNALWIRE_SIGNING_KEY") or _s("TWILIO_AUTH_TOKEN"),

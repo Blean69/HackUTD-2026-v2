@@ -95,7 +95,7 @@ def test_prompt_size_stays_modest():
 def test_disclosure_is_brief_natural_and_complete():
     for line in (prompts.DISCLOSURE_WEB, prompts.DISCLOSURE_PHONE):
         low = line.lower()
-        assert "ai money helper" in low and "not a person" in low and "licensed advisor" in low and "made-up data" in low and "nothing's recorded" in low
+        assert line.startswith("Hi, I'm Brian, your personal finance assistant.") and "i'm an ai" in low and "keystone" not in low  # named, and never implied human
         assert len(line.split()) <= 40 and "—" not in line
     assert "PIN" in prompts.DISCLOSURE_PHONE and "PIN" not in prompts.DISCLOSURE_WEB
     assert prompts.DISCLOSURE_WEB.endswith("?")

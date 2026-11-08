@@ -38,8 +38,8 @@ class TraceReporter:
     def heard(self, text: str, asr_ms: float | None = None) -> None:
         self.add("heard", text=text, asr_ms=_ms(asr_ms), model="nemotron-asr-streaming", provider="nvidia")
 
-    def said(self, text: str, *, model: str, asr_ms=None, llm_ms=None, tts_ms=None, v2v_ms=None, tokens_in=None, tokens_out=None, interrupted=False, voice="", tts_model=None, tts_provider=None) -> None:
-        self.add("said", text=text, model=model, provider="nvidia", asr_ms=_ms(asr_ms), llm_ms=_ms(llm_ms), tts_ms=_ms(tts_ms), v2v_ms=_ms(v2v_ms), tokens_in=tokens_in, tokens_out=tokens_out, interrupted=interrupted or None, tts_voice=voice, tts_model=tts_model, tts_provider=tts_provider)
+    def said(self, text: str, *, model: str, provider: str = "nvidia", asr_ms=None, llm_ms=None, tts_ms=None, v2v_ms=None, tokens_in=None, tokens_out=None, interrupted=False, voice="", tts_model=None, tts_provider=None) -> None:
+        self.add("said", text=text, model=model, provider=provider, asr_ms=_ms(asr_ms), llm_ms=_ms(llm_ms), tts_ms=_ms(tts_ms), v2v_ms=_ms(v2v_ms), tokens_in=tokens_in, tokens_out=tokens_out, interrupted=interrupted or None, tts_voice=voice, tts_model=tts_model, tts_provider=tts_provider)
 
     def note(self, title: str, **data: Any) -> None:
         self.add("note", title=title, data=data or None)

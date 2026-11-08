@@ -78,3 +78,56 @@ async def test_worker_down_during_pin_check_ends_politely():
     gate = PinGate(verify=verify, on_unlocked=nop, on_locked=on_locked)
     down, up = await run_test(gate, frames_to_send=keys("1234"), expected_down_frames=[TTSSpeakFrame], expected_up_frames=[EndTaskFrame])
     assert down[0].text == prompts.PIN_UNAVAILABLE and reasons and reasons[0].startswith("error")
+
+
+async def test_five_digit_pin_submits_on_the_fifth_digit_not_the_fourth():
+    gate, pins = make_gate([], [], pin_length=5)
+    await run_test(gate, frames_to_send=[*keys("1234")], expected_down_frames=[])
+    assert pins == [] and gate.locked is True  # four digits of a five-digit PIN are not an attempt
+    unlocked = []
+    gate, pins = make_gate([PinOutcome(ok=True, info={"household_id": "hh_rivera"})], unlocked, pin_length=5)
+    await run_test(gate, frames_to_send=[*keys("12345")], expected_down_frames=[])
+    assert pins == ["12345"] and unlocked == [{"household_id": "hh_rivera"}] and gate.locked is False
+
+
+async def test_mixed_length_pins_accept_the_longest_and_hash_submits_a_shorter_one():
+    gate, pins = make_gate([PinOutcome(ok=True, info={})], [], pin_length=5)
+    await run_test(gate, frames_to_send=[*keys("1234#")], expected_down_frames=[])
+    assert pins == ["1234"]  # '#' sends what was keyed, whatever its length
+
+
+def test_pin_length_follows_the_configured_pins(monkeypatch):
+    import config
+    import prompts
+
+    assert config.pin_lengths("12345:hh_rivera,56789:hh_nguyen:mem_x") == [5, 5]
+    assert config.pin_lengths("123:hh,12345678901:hh,abcd:hh,1234") == []  # too short / too long / not digits / no household
+    assert config.derive_pin_length("", "12345:hh_rivera,56789:hh_nguyen") == (5, False)
+    assert config.derive_pin_length("", "1234:hh_a,56789:hh_b") == (5, True)  # differ: longest, '#' for the short one
+    assert config.derive_pin_length("", "1234:hh_a, 5678:hh_b") == (4, False)
+    assert config.derive_pin_length("6", "12345:hh_a") == (6, False)  # explicit PHONE_PIN_LENGTH wins
+    assert config.derive_pin_length("", "") == (4, False) and config.derive_pin_length("x", "") == (4, False)
+    for k in ("PHONE_PIN_LENGTH", "PHONE_PINS"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("PHONE_PINS", "24680:hh_rivera,13579:hh_nguyen")
+    s = config.load_settings()
+    assert s.pin_length == 5 and s.pin_variable is False
+    assert "five digit PIN" in prompts.disclosure_phone(s.pin_length, s.pin_variable)
+    assert "then press pound" in prompts.disclosure_phone(5, True) and "four digit PIN" in prompts.disclosure_phone()
+    assert prompts.disclosure_phone().startswith("Hi, I'm Brian, your personal finance assistant. Just so you know, I'm an AI") and prompts.disclosure_phone() == prompts.DISCLOSURE_PHONE
+    monkeypatch.setenv("PHONE_PIN_LENGTH", "4")
+    assert config.load_settings().pin_length == 4
+
+
+async def test_only_the_digit_count_is_logged():
+    from loguru import logger
+
+    lines = []
+    sink = logger.add(lambda m: lines.append(str(m)), level="INFO")
+    try:
+        gate, _ = make_gate([PinOutcome(ok=False, tries_left=2)], [], pin_length=5)
+        await run_test(gate, frames_to_send=[*keys("24680")], expected_down_frames=[TTSSpeakFrame])
+    finally:
+        logger.remove(sink)
+    text = "".join(lines)
+    assert "5 digits keyed" in text and "24680" not in text

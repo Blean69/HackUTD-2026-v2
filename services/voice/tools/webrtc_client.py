@@ -97,6 +97,7 @@ async def main() -> None:
     ap.add_argument("--max-secs", type=float, default=90)
     ap.add_argument("--linger", type=float, default=2.0, help="seconds to stay on the call after the last answer (use 40 to watch the idle prompt and hang-up)")
     ap.add_argument("--camel", action="store_true", help="send requestData instead of request_data")
+    ap.add_argument("--ask-after", type=float, default=None, help="ask the first question this many seconds after the answer arrives instead of waiting for the greeting to finish (a judge who talks over it)")
     args = ap.parse_args()
 
     t_start = time.monotonic()
@@ -189,8 +190,12 @@ async def main() -> None:
 
     results = []
     deadline = time.monotonic() + args.max_secs
-    ok = await bot_idle(1.5, 40)
-    log("disclosure-finished" if ok else "disclosure-timeout")
+    if args.ask_after is not None:
+        await asyncio.sleep(args.ask_after)
+        log("asking-over-the-greeting")
+    else:
+        ok = await bot_idle(1.5, 40)
+        log("disclosure-finished" if ok else "disclosure-timeout")
     for i, path in enumerate(args.wav):
         # a fresh turn: forget previous bot audio markers
         state["first_loud_after"] = None

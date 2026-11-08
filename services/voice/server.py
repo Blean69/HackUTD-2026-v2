@@ -30,10 +30,13 @@ from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams, FastAPIWebsocketTransport
 
 import prompts
-from bot import CallInit, VoiceCall
+import acks
+from bot import CallInit, VoiceCall, fetch_tools
 from config import Settings, load_env, load_settings
 from ice import parse_ice_servers
-from tts import choose_tts
+from llm import build_providers
+from tts import choose_tts, resolve_elevenlabs_voice
+from worker_client import WorkerClient
 from twiml import build_twiml, caller_hash, make_stream_token, say_and_hangup, url_variants, valid_stream_token, verify_webhook
 
 SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
@@ -56,6 +59,42 @@ async def _form_fields(request: Request, raw: bytes) -> dict[str, str]:
         return {}
 
 
+async def _keep_warm(s: Settings) -> None:
+    """Things a call would otherwise wait for at its start, kept ready in the background: the ElevenLabs voice probe (cached for 10 min, one
+    HTTP round trip) and the worker's tool list (cached for 5 min). Refreshed before they expire; failures are ignored (the call does its own)."""
+    client = WorkerClient(s.worker_url, s.shared_secret, timeout=5.0)
+    try:
+        tick = 0
+        while True:
+            engine = choose_tts(s, phone=False)
+            if engine.provider == "elevenlabs" and tick % 2 == 0:  # every 8 min; the probe's cache lives 10
+                try:
+                    await resolve_elevenlabs_voice(s.elevenlabs_api_key, engine.model, engine.voice, ttl=0)
+                except Exception:
+                    pass
+            try:
+                await fetch_tools(client, max_age=0)
+            except Exception:
+                pass
+            if s.acks and tick == 0:  # render the acknowledgement clips once per voice, for the browser rate and the phone rate
+                for phone in (False, True):
+                    try:
+                        choice = choose_tts(s, phone=phone)
+                        if choice.provider == "elevenlabs":  # the voice the call will really use (probe result is cached just above)
+                            picked = await resolve_elevenlabs_voice(s.elevenlabs_api_key, choice.model, choice.voice)
+                            if not picked:
+                                choice = choose_tts(s.with_overrides(tts_provider="magpie"), phone=phone)
+                            else:
+                                choice = type(choice)(choice.provider, choice.model, picked[0], choice.sample_rate, choice.warnings)
+                        await acks.ensure_clips(s, choice)
+                    except Exception:
+                        pass
+            tick += 1
+            await asyncio.sleep(240)
+    finally:
+        await client.aclose()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or load_settings()
     active: dict[str, asyncio.Task] = {}  # call_id -> bot task
@@ -68,14 +107,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = choose_tts(s, phone=False)
         for w in engine.warnings:
             logger.warning(w)
-        logger.info(f"voice service up: transports={s.transports} ice={[i.urls for i in ice]} worker={s.worker_url} tts={engine.provider}:{engine.model}:{engine.voice or 'auto'} llm={s.llm_model} smart_turn={s.smart_turn}")
+        logger.info(f"voice service up: transports={s.transports} ice={[i.urls for i in ice]} worker={s.worker_url} tts={engine.provider}:{engine.model}:{engine.voice or 'auto'} llm={s.llm_model} smart_turn={s.smart_turn} llm_chain={[p.key + ':' + p.model for p in build_providers(s)[0]]} hedge={s.llm_hedge_secs}s retry={s.llm_retry_secs}s cap={s.llm_timeout_secs}s")
         if not s.shared_secret:
             logger.warning("VOICE_SHARED_SECRET is not set: the worker will refuse every /phone/* call")
         if not s.signature_token:
             logger.warning("SIGNALWIRE_SIGNING_KEY is empty: /twiml does not verify the webhook signature (the media socket still needs the signed stream token)")
         if not s.nvidia_api_key:
             logger.warning("no NVIDIA_VOICE_API_KEY / NVIDIA_API_KEY: speech and the LLM will fail")
+        warm = asyncio.create_task(_keep_warm(s), name="keep-warm")
         yield
+        warm.cancel()
         for t in list(active.values()):
             t.cancel()
         await handler_holder["h"].close()
@@ -109,6 +150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "tts_provider": choose_tts(s, phone=False).provider,  # the engine a call will start with (a key the engine rejects falls back to magpie at call time)
             "tts_voice": s.tts_voice if choose_tts(s, phone=False).provider == "magpie" else choose_tts(s, phone=False).voice or "auto",
             "llm_model": s.llm_model,
+            "llm_chain": [{"provider": p.key, "model": p.model} for p in build_providers(s)[0]],  # the Nemotron models a turn can fail over through, in order
             "worker": s.worker_url,
             "nvidia_key": bool(s.nvidia_api_key),
             "worker_secret": bool(s.shared_secret),

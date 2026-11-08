@@ -29,11 +29,12 @@ def test_settings_from_env(monkeypatch):
 
 def test_prompts_disclose_and_carry_the_brief():
     for line in (prompts.DISCLOSURE_WEB, prompts.DISCLOSURE_PHONE):
-        assert line.startswith("Hi, I'm Keystone, the family's AI money helper") and "not a person" in line and "licensed advisor" in line and "made-up data" in line
+        assert line.startswith("Hi, I'm Brian, your personal finance assistant. Just so you know, I'm an AI") and "double-check" in line
     assert "PIN" in prompts.DISCLOSURE_PHONE and "PIN" not in prompts.DISCLOSURE_WEB
     p = prompts.system_prompt(family="Rivera family", first_name="Marisol", brief=["Cushion: about 3.3 months of spending covered by cash (watch)."], today="2026-11-07", channel="phone")
     assert "Marisol from the Rivera family" in p and "- Cushion: a little over three months of spending covered by cash, watch." in p and "by phone" in p and "2026-11-07" in p
-    assert "AI, not a person" in p
+    assert "AI, not a person" in p and p.startswith("You are Brian, the family's personal finance assistant") and "Keystone" not in p
+    assert "real person or a human, say plainly that you are an AI" in p and "Never imply you are human" in p
     assert len({prompts.filler() for _ in range(60)}) > 1
 
 

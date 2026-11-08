@@ -20,7 +20,7 @@ from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import EndFrame, Frame, LLMFullResponseEndFrame, LLMFullResponseStartFrame, LLMTextFrame, MetricsFrame, TTSSpeakFrame
+from pipecat.frames.frames import TTSAudioRawFrame, TTSStartedFrame, TTSStoppedFrame, EndFrame, Frame, FunctionCallsStartedFrame, InterruptionFrame, LLMFullResponseEndFrame, LLMFullResponseStartFrame, LLMTextFrame, MetricsFrame, TTSSpeakFrame
 from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -36,17 +36,21 @@ from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy, TurnAnaly
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
+import acks
 import prompts
 from config import Settings
-from llm import build_llm
+from llm import build_llm, sanitize_messages
 from pacing import SentenceCap
 from pin_gate import PinGate, PinOutcome
 from reporter import TraceReporter
 from speech import SpeechNormalizer
 from tts import TTSChoice, build_tts
+from turns import HesitationAwareStop
 from worker_client import WorkerClient, WorkerError
 
 _tools_cache: tuple[float, list[dict]] | None = None
+ACK_DELAY_SECS = 0.25  # an acknowledgement waits this long for the real answer to start before it plays
+REPLY_WATCHDOG_SECS = 6.0  # a caller turn that has produced no audio after this long gets the recovery line
 
 
 @dataclass
@@ -60,11 +64,11 @@ class CallInit:
     caller: str = "new"  # known | new (never the number itself)
 
 
-async def fetch_tools(client: WorkerClient) -> list[dict]:
-    """The phone tool specs come from the worker (one registry, schemas never duplicated); cached for 5 minutes."""
+async def fetch_tools(client: WorkerClient, max_age: float = 300) -> list[dict]:
+    """The phone tool specs come from the worker (one registry, schemas never duplicated); cached for 5 minutes (max_age=0 forces a refresh)."""
     global _tools_cache
     now = time.monotonic()
-    if _tools_cache and now - _tools_cache[0] < 300:
+    if _tools_cache and now - _tools_cache[0] < max_age:
         return _tools_cache[1]
     try:
         specs = await client.tools()
@@ -84,14 +88,19 @@ def to_tools_schema(specs: list[dict]) -> ToolsSchema:
     return ToolsSchema(standard_tools=out)
 
 
-def _stop_strategies(s: Settings) -> list:
-    """Smart Turn v3 decides when the caller is finished (a timer alone cuts people off at a pause). `turn_hold_secs` > 0 adds a timer
-    that must ALSO have run out (pipecat's default stop_mode is ALL), so a one-word "wait" followed by a breath is not taken as a whole turn."""
+def _stop_strategies(s: Settings, phone: bool = False) -> list:
+    """Smart Turn v3 decides when the caller is finished (a timer alone cuts people off at a pause), with two guards against a hesitant caller
+    being split into several turns: a transcript that trails off ("uh", "so", "and the") gets `hesitation_hold_secs` more (turns.py), and
+    `turn_hold_secs` > 0 adds a timer that must ALSO have run out (pipecat's default stop_mode is ALL), so a one-word "wait" followed by a
+    breath is not taken as a whole turn. turn_hold_secs unset = 0.6 s on the phone (long pauses, 8 kHz audio), none in the browser."""
     if not s.smart_turn:
         return [SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.8)]
-    stops: list = [TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=s.smart_turn_stop_secs)))]
-    if s.turn_hold_secs > 0:
-        stops.append(SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=s.turn_hold_secs))
+    analyzer = LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=s.smart_turn_stop_secs))
+    first = HesitationAwareStop(turn_analyzer=analyzer, hesitation_hold_secs=s.hesitation_hold_secs) if s.hesitation_hold_secs > 0 else TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)
+    stops: list = [first]
+    hold = s.turn_hold_secs if s.turn_hold_secs is not None else (0.6 if phone else 0.0)
+    if hold > 0:
+        stops.append(SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=hold))
     return stops
 
 
@@ -100,9 +109,13 @@ class LLMTap(FrameProcessor):
     the token usage of the last completion, and enforces the spoken-turn cap (SentenceCap: once a turn has said enough, the current
     sentence is allowed to finish and the rest of the reply is dropped before it reaches the voice)."""
 
-    def __init__(self, max_words: int = 32, **kw: Any):
+    def __init__(self, max_words: int = 32, on_empty: Any = None, **kw: Any):
         super().__init__(**kw)
         self.cap = SentenceCap(max_words=max_words)
+        self.on_empty = on_empty  # async callable: a reply finished with nothing for the caller to hear (see process_frame)
+        self._saw_call = False
+        self._interrupted = False
+        self._line = False
         self.capped_turns = 0
         self.spoke = False
         self.tokens_in = 0
@@ -110,8 +123,15 @@ class LLMTap(FrameProcessor):
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
-        if isinstance(frame, LLMFullResponseStartFrame):
+        if isinstance(frame, InterruptionFrame):
+            self._interrupted = True
+        elif isinstance(frame, FunctionCallsStartedFrame):
+            self._saw_call = True
+        elif isinstance(frame, TTSSpeakFrame):
+            self._line = True  # a fixed line (the LLM service's apology, a filler) is already on its way to the caller
+        elif isinstance(frame, LLMFullResponseStartFrame):
             self.spoke = False
+            self._saw_call = self._interrupted = self._line = False
             self.cap.reset()
         elif isinstance(frame, LLMTextFrame):
             if not self.cap.allow(frame.text):
@@ -124,12 +144,50 @@ class LLMTap(FrameProcessor):
                 self.spoke = True
         elif isinstance(frame, LLMFullResponseEndFrame):
             self._logged_cap = False
+            if self.on_empty and not (self.spoke or self._saw_call or self._interrupted or self._line):
+                await self.push_frame(frame, direction)
+                await self.on_empty()  # empty, malformed or truncated reply: nothing was said and no tool is running
+                return
         elif isinstance(frame, MetricsFrame):
             for d in frame.data:
                 usage = getattr(d, "value", None)
                 if usage is not None and hasattr(usage, "prompt_tokens"):
                     self.tokens_in, self.tokens_out = int(usage.prompt_tokens or 0), int(usage.completion_tokens or 0)
         await self.push_frame(frame, direction)
+
+
+    async def say(self, text: str) -> None:
+        """Speak a fixed line from HERE (after the LLM), so it is not queued behind a request that is still in flight."""
+        await self.push_frame(TTSSpeakFrame(text, append_to_context=False))
+
+
+class AckPlayer(FrameProcessor):
+    """Sits between the TTS and the transport. Everything passes through; play() puts a pre-rendered clip straight on the wire (no TTS, no LLM)."""
+
+    def __init__(self, on_speech: Any = None, **kw: Any):
+        super().__init__(**kw)
+        self._n = 0
+        self.on_speech = on_speech  # called (sync) when REAL speech audio (not an acknowledgement clip) goes past
+        self.tts_ttfb: float | None = None  # last TTS time-to-first-byte seen (the latency observer's breakdown is consumed by the acknowledgement)
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TTSAudioRawFrame) and not str(frame.context_id or "").startswith("ack-") and self.on_speech:
+            self.on_speech()
+        elif isinstance(frame, MetricsFrame):
+            for d in frame.data:
+                if d.__class__.__name__ == "TTFBMetricsData" and "TTS" in str(getattr(d, "processor", "")):
+                    self.tts_ttfb = float(d.value)
+        await self.push_frame(frame, direction)  # a pure pass-through: the TTS audio must reach the transport untouched
+
+    async def play(self, clip: "acks.Clip") -> None:
+        self._n += 1
+        ctx = f"ack-{self._n}"
+        await self.push_frame(TTSStartedFrame(context_id=ctx, append_to_context=False))
+        step = clip.rate // 5 * 2  # 200 ms per frame, so an interruption can cut the rest
+        for i in range(0, len(clip.pcm), step):
+            await self.push_frame(TTSAudioRawFrame(audio=clip.pcm[i : i + step], sample_rate=clip.rate, num_channels=1, context_id=ctx))
+        await self.push_frame(TTSStoppedFrame(context_id=ctx))
 
 
 class VoiceCall:
@@ -149,7 +207,7 @@ class VoiceCall:
         self._rtvi_ready = False
         self._activated = asyncio.Event()
         self._turn: dict[str, Any] = {}
-        self._tap = LLMTap(max_words=settings.turn_cap_words)
+        self._tap = LLMTap(max_words=settings.turn_cap_words, on_empty=self._on_empty_reply)
         self.speech = SpeechNormalizer()  # dates follow the demo's as_of once the run starts
         self.fillers = prompts.FillerPicker()
         self._filled = False  # one filler per caller turn, even when the model chains two tools
@@ -157,9 +215,19 @@ class VoiceCall:
         self._tts: Any = None
         self._rtvi: RTVIProcessor | None = None
         self._watchdog: asyncio.Task | None = None
+        self._lag_task: asyncio.Task | None = None
+        self._reply_watchdog: asyncio.Task | None = None
+        self._ack = AckPlayer(on_speech=self._on_real_speech)
+        self._ack_picker = acks.AckPicker()
+        self._ack_clips: list = []
+        self._ack_until = 0.0
+        self._bot_audible = False
+        self._turn_end_t = 0.0
+        self._answer_logged = True
+        self._last_recovery = 0.0
         self.worker: PipelineWorker | None = None
         self.runner: WorkerRunner | None = None
-        self.llm = build_llm(settings)
+        self.llm = build_llm(settings, on_event=self._on_llm_event, on_slow=self._slow_line)
         self.context = LLMContext(messages=[{"role": "system", "content": "You are a voice assistant. The caller has not been verified yet; do not discuss anyone's finances."}])
 
     # ---- lifecycle ------------------------------------------------------------------------------------------------------
@@ -170,6 +238,10 @@ class VoiceCall:
         tts, self.tts_choice = await build_tts(s, phone=phone, normalizer=self.speech)
         self._tts = tts
         self.stats["tts_voice"] = self.tts_choice.label
+        if s.acks:
+            self._ack_clips = acks.cached(self.tts_choice)
+            if not self._ack_clips:  # not primed yet (first call after a restart): render in the background, usable from the next turn on
+                asyncio.create_task(self._load_acks(), name="ack-clips")
         user_agg, asst_agg = LLMContextAggregatorPair(
             self.context,
             user_params=LLMUserAggregatorParams(
@@ -179,7 +251,7 @@ class VoiceCall:
                 user_turn_strategies=UserTurnStrategies(
                     # barge-in needs two words while the bot is talking, so a cough or hall noise does not cut it off
                     start=[MinWordsUserTurnStartStrategy(min_words=s.barge_in_words)],
-                    stop=_stop_strategies(s),
+                    stop=_stop_strategies(s, phone),
                 ),
                 user_idle_timeout=float(s.idle_secs),
             ),
@@ -188,7 +260,7 @@ class VoiceCall:
         gate = None
         if phone:
             gate = PinGate(verify=self._verify_pin, on_unlocked=self._on_pin_ok, on_locked=self._on_pin_locked, pin_length=s.pin_length)
-        procs = [self.transport.input(), *( [gate] if gate else [] ), stt, user_agg, self.llm, self._tap, tts, self.transport.output(), asst_agg]
+        procs = [self.transport.input(), *( [gate] if gate else [] ), stt, user_agg, self.llm, self._tap, tts, self._ack, self.transport.output(), asst_agg]
 
         latency = UserBotLatencyObserver()
         rate = {"audio_in_sample_rate": 8000, "audio_out_sample_rate": 8000} if phone else {"audio_in_sample_rate": 16000, "audio_out_sample_rate": 24000}
@@ -212,16 +284,27 @@ class VoiceCall:
         # ---- events ----------------------------------------------------------------------------------------------------
         @latency.event_handler("on_latency_breakdown")
         async def _breakdown(_obs, b):
+            self._on_bot_audible()
+            parts = " | ".join(f"{c.label} {c.duration_secs:.2f}s" for c in b.contributions)
+            if getattr(b.measured_from, "value", b.measured_from) == "client_connected":
+                logger.info(f"greeting started {b.total_secs:.2f}s after the client connected: {parts}")
+                return  # the greeting is not a caller turn: keep it out of the voice-to-voice numbers
             m: dict[str, Any] = {"v2v": b.total_secs}
+            llm_total = 0.0
             for t in b.ttfb:
                 name = t.processor
                 if "STT" in name:
                     m["asr"] = t.duration_secs
                 elif "LLM" in name:
-                    m["llm"] = t.duration_secs
+                    llm_total += t.duration_secs  # a tool turn has two requests; the wait is the sum, not just the last one
                 elif "TTS" in name:
                     m["tts"] = t.duration_secs
+            if llm_total:
+                m["llm"] = llm_total
             self._turn = m
+            logger.info(f"turn latency {b.total_secs:.2f}s: {parts}")
+            if b.total_secs > 3.5:  # a slow turn explains itself in the trace instead of needing the server log
+                self.reporter.note("Slow turn: where the time went", v2v_ms=round(b.total_secs * 1000), parts={c.label: round(c.duration_secs * 1000) for c in b.contributions})
 
         @user_agg.event_handler("on_user_turn_stopped")
         async def _heard(_agg, _strategy, message):
@@ -232,6 +315,12 @@ class VoiceCall:
                 self.stats["turns"] += 1
                 self.reporter.heard(text)
                 logger.info(f"heard: {text}")
+                self._cancel_watchdog()
+                self._reply_watchdog = asyncio.create_task(self._watch_reply(), name="reply-watchdog")
+                self._bot_audible = False
+                self._turn_end_t, self._answer_logged = time.monotonic(), False
+                if self._ack_clips:
+                    asyncio.create_task(self._maybe_ack(), name="ack")
 
         @asst_agg.event_handler("on_assistant_turn_stopped")
         async def _said(_agg, message):
@@ -241,8 +330,18 @@ class VoiceCall:
             m, self._turn = self._turn, {}
             if message.interrupted:
                 self.stats["barge_ins"] += 1
-            self.reporter.said(text, model=s.llm_model, asr_ms=m.get("asr"), llm_ms=m.get("llm"), tts_ms=m.get("tts"), v2v_ms=m.get("v2v"), tokens_in=self._tap.tokens_in or None, tokens_out=self._tap.tokens_out or None, interrupted=message.interrupted, voice=self.tts_choice.label if self.tts_choice else s.tts_voice, tts_model=self.tts_choice.model if self.tts_choice else None, tts_provider=self.tts_choice.provider if self.tts_choice else None)
-            logger.info(f"said: {text} (v2v={m.get('v2v')}, llm={m.get('llm')}, tts={m.get('tts')})")
+            served = self.llm.drain_served()  # which Nemotron really answered (a hedge or a failover can change it)
+            last = served[-1] if served else {}
+            if served and m.get("llm") is None:  # an acknowledgement used up the latency breakdown: take the LLM wait from the service itself
+                m["llm"] = sum(x.get("ttfb_ms", 0) for x in served) / 1000
+            if m.get("tts") is None and self._ack.tts_ttfb is not None:
+                m["tts"] = self._ack.tts_ttfb
+            self.reporter.said(text, model=last.get("model") or s.llm_model, provider=last.get("label") or "nvidia", asr_ms=m.get("asr"), llm_ms=m.get("llm"), tts_ms=m.get("tts"), v2v_ms=m.get("v2v"), tokens_in=self._tap.tokens_in or None, tokens_out=self._tap.tokens_out or None, interrupted=message.interrupted, voice=self.tts_choice.label if self.tts_choice else s.tts_voice, tts_model=self.tts_choice.model if self.tts_choice else None, tts_provider=self.tts_choice.provider if self.tts_choice else None)
+            logger.info(f"said: {text} (v2v={m.get('v2v')}, llm={m.get('llm')}, tts={m.get('tts')}, model={last.get('model') or s.llm_model}{', hedged' if last.get('hedge_won') else ''}{', failover' if last.get('failover') else ''})")
+
+        @user_agg.event_handler("on_user_turn_started")
+        async def _user_started(_agg, _strategy):
+            self._cancel_watchdog()  # they are talking again: the answer to the earlier half is being replaced anyway
 
         @user_agg.event_handler("on_user_turn_idle")
         async def _idle(_agg):
@@ -259,13 +358,15 @@ class VoiceCall:
         async def _connected(_t, _client):
             logger.info(f"client connected ({init.transport_label}) call={init.call_id}")
             self.reporter.start()
-            asyncio.create_task(self._prewarm_llm(), name="llm-prewarm")
+            if s.llm_warm:
+                asyncio.create_task(self.llm.warm(), name="llm-prewarm")  # TLS to every provider while the disclosure plays; never blocks it
             if phone:
-                await self.worker.queue_frame(TTSSpeakFrame(prompts.DISCLOSURE_PHONE, append_to_context=False))
+                await self.worker.queue_frame(TTSSpeakFrame(prompts.disclosure_phone(s.pin_length, s.pin_variable), append_to_context=False))
             else:
                 await self.worker.queue_frame(TTSSpeakFrame(prompts.DISCLOSURE_WEB, append_to_context=False))
                 asyncio.create_task(self._activate_web(), name="activate-web")
             self._watchdog = asyncio.create_task(self._max_call_watchdog(), name="call-watchdog")
+            self._lag_task = asyncio.create_task(self._loop_lag_monitor(), name="loop-lag")
 
         @self.transport.event_handler("on_client_disconnected")
         async def _disconnected(_t, _client):
@@ -289,8 +390,9 @@ class VoiceCall:
         return self.end_reason
 
     async def _finish(self) -> None:
-        if self._watchdog:
-            self._watchdog.cancel()
+        for t in (self._watchdog, self._lag_task, self._reply_watchdog):
+            if t:
+                t.cancel()
         await self.reporter.stop()
         closer = getattr(getattr(self, "_tts", None), "kv_cleanup", None)
         if closer:
@@ -304,20 +406,110 @@ class VoiceCall:
             await self.client.aclose()
         logger.info(f"call {self.init.call_id} finished: {self.end_reason}")
 
-    async def _prewarm_llm(self) -> None:
-        """Open the TLS connection to the LLM endpoint and wake the route while the disclosure is still being spoken, so the first real
-        question does not pay for it (a cold first call cost about a second in the spike)."""
-        client = getattr(self.llm, "_client", None)
-        if client is None:
-            return
-        t0 = time.monotonic()
+    # ---- LLM hooks: trace notes for the glass box, and one "one moment" line when the first token is late -------------------
+    def _on_llm_event(self, kind: str, info: dict[str, Any]) -> None:
+        if kind == "hedge":
+            self.stats["llm_hedges"] = self.stats.get("llm_hedges", 0) + 1
+            self.reporter.note("LLM first token was late: sent a second identical request", provider=info.get("provider"), model=info.get("model"), request=info.get("attempt"), after_ms=info.get("after_ms"))
+        elif kind == "failover":
+            self.stats["llm_failovers"] = self.stats.get("llm_failovers", 0) + 1
+            self.reporter.note("LLM provider failover", to=info.get("provider"), model=info.get("model"), after_ms=info.get("after_ms"), errors=info.get("errors") or None)
+        elif kind == "exhausted":
+            self.reporter.error("Every LLM provider failed or timed out", detail=info.get("error"))
+
+    def _slow_line(self) -> str | None:
+        """Called by the LLM service when the first token is late. At most one filler per caller turn, and never on top of words already spoken."""
+        if self._tap.spoke or self._filled:
+            return None
+        self._filled = True
+        line = self.fillers.next()
+        self.reporter.note("Spoke a short filler line while the LLM was slow", line=line)
+        return line
+
+    def _on_real_speech(self) -> None:
+        """The answer itself (not an acknowledgement clip) is going out: the caller is no longer waiting, the watchdog can stand down."""
+        if not self._answer_logged:
+            self._answer_logged = True
+            ms = round((time.monotonic() - self._turn_end_t) * 1000)
+            self.stats.setdefault("answer_ms", []).append(ms)
+            logger.info(f"answer audio started {ms} ms after the caller's turn was released")
+        if not self._bot_audible or self._reply_watchdog:
+            self._bot_audible = True
+            self._cancel_watchdog()
+
+    def _on_bot_audible(self) -> None:
+        self._bot_audible = True
+        if time.monotonic() > self._ack_until:  # an acknowledgement is not the answer: the watchdog keeps watching until real speech
+            self._cancel_watchdog()
+
+    # ---- acknowledgements ---------------------------------------------------------------------------------------------------------
+    async def _load_acks(self) -> None:
         try:
-            await client.chat.completions.create(
-                model=self.s.llm_model, messages=[{"role": "user", "content": "hi"}], max_tokens=1, stream=False, extra_body={"chat_template_kwargs": {"enable_thinking": False}}
-            )
-            logger.info(f"LLM pre-warm took {round((time.monotonic() - t0) * 1000)} ms")
-        except Exception as e:
-            logger.warning(f"LLM pre-warm failed (the first answer may be slower): {e}")
+            self._ack_clips = await acks.ensure_clips(self.s, self.tts_choice)
+        except Exception:  # pragma: no cover
+            logger.exception("ack clips")
+
+    async def _maybe_ack(self) -> None:
+        """~250 ms after the caller's turn ends, if nothing is audible yet and the reply is not already flowing: a short human "Mm-hm." from the
+        pre-rendered bank. Once per turn; it also takes the place of the tool filler (never both)."""
+        await asyncio.sleep(ACK_DELAY_SECS)
+        if self._bot_audible or self._tap.spoke or self._filled or not self._ack_clips:
+            return
+        clip = self._ack_picker.pick(self._ack_clips)
+        if clip is None:
+            return
+        self._filled = True
+        self._ack_until = time.monotonic() + clip.secs + 0.3
+        self.stats["acks"] = self.stats.get("acks", 0) + 1
+        await self._ack.play(clip)
+
+    # ---- never a silent bot ---------------------------------------------------------------------------------------------------
+    def _cancel_watchdog(self) -> None:
+        if self._reply_watchdog and not self._reply_watchdog.done():
+            self._reply_watchdog.cancel()
+        self._reply_watchdog = None
+
+    async def _watch_reply(self, secs: float | None = None) -> None:
+        """A caller turn ended and nothing audible started within REPLY_WATCHDOG_SECS: say the recovery line instead of leaving silence."""
+        try:
+            await asyncio.sleep(REPLY_WATCHDOG_SECS if secs is None else secs)
+        except asyncio.CancelledError:
+            return
+        await self._recover("no audio within %.0f s of the caller's turn ending" % (REPLY_WATCHDOG_SECS if secs is None else secs))
+
+    async def _on_empty_reply(self) -> None:
+        last_user = next((m for m in reversed(self.context.messages) if isinstance(m, dict) and m.get("role") == "user"), None)
+        text = last_user.get("content") if last_user else ""
+        if isinstance(text, str) and len(text.split()) <= 2:
+            # "wait", "hold on", "um": saying nothing to that is a fair answer, not a failure (the rest of the sentence is usually on its way)
+            logger.info(f"no reply to a very short turn ({len(text.split())} words): staying quiet")
+            return
+        await self._recover("the LLM reply had nothing speakable (empty, malformed or truncated tool call)")
+
+    async def _recover(self, why: str) -> None:
+        logger.warning(f"recovering: {why}")
+        self.stats["recoveries"] = self.stats.get("recoveries", 0) + 1
+        try:  # drop the broken turn so it cannot poison every later request
+            self.context.set_messages(sanitize_messages(list(self.context.messages)))
+        except Exception:  # pragma: no cover
+            logger.exception("could not repair the context")
+        now = time.monotonic()
+        if now - self._last_recovery < 8.0:
+            return  # one apology per breath
+        self._last_recovery = now
+        self.reporter.note("Recovered from a reply with nothing to say", why=why)
+        await self._tap.say(prompts.ERROR_LINE)
+
+    async def _loop_lag_monitor(self) -> None:
+        """Says so in the log when the event loop was blocked or starved (a multi-second gap between audio frames or LLM chunks is either the
+        endpoint or this process: this line tells which)."""
+        last = time.monotonic()
+        while True:
+            await asyncio.sleep(0.25)
+            now = time.monotonic()
+            if now - last - 0.25 > 0.4:
+                logger.warning(f"event loop stalled for {now - last - 0.25:.1f} s (CPU starved, or something blocking the loop)")
+            last = now
 
     async def _goodbye(self, line: str) -> None:
         if self.worker:
@@ -340,21 +532,24 @@ class VoiceCall:
 
     async def _activate(self, *, household_id: str, display_name: str, first_name: str, member_id: str, speak: str | None) -> None:
         init = self.init
-        resp = await self.client.start(
-            call_id=init.call_id,
-            household_id=household_id,
-            member_id=member_id,
-            first_name=first_name,
-            display_name=display_name,
-            transport=init.transport_label,
-            caller=init.caller,
-            llm={"provider": "nvidia", "model": self.s.llm_model},
+        # the briefing call and the tool list are independent: fetch them together (the list is cached 5 min across calls)
+        resp, specs = await asyncio.gather(
+            self.client.start(
+                call_id=init.call_id,
+                household_id=household_id,
+                member_id=member_id,
+                first_name=first_name,
+                display_name=display_name,
+                transport=init.transport_label,
+                caller=init.caller,
+                llm={"provider": "nvidia", "model": self.s.llm_model},
+            ),
+            fetch_tools(self.client),
         )
         self.run_id = resp["run_id"]
         self.family = resp.get("family", "the family")
         self.speech.today = resp.get("as_of") or None
         self.reporter.set_run(self.run_id)
-        specs = await fetch_tools(self.client)
         self.context.messages[0]["content"] = prompts.system_prompt(
             family=self.family, first_name=resp.get("first_name", ""), brief=resp.get("brief", []), today=resp.get("as_of", ""), channel="phone" if init.kind == "phone" else "web"
         )
@@ -363,6 +558,8 @@ class VoiceCall:
             self.llm.register_function(sp["name"], self._on_tool)
         self._activated.set()
         logger.info(f"run {self.run_id} active for {self.family}")
+        if self.s.llm_warm:  # prime the provider's prompt cache with this call's real system prompt + tools while the greeting is still playing
+            asyncio.create_task(self.llm.warm(self.context), name="llm-prime")
         await self._send_run_message()
         if speak:
             await self.worker.queue_frame(TTSSpeakFrame(speak.format(family=self.family), append_to_context=True))

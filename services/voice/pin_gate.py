@@ -1,7 +1,9 @@
 """DTMF PIN gate for the phone path. Until the PIN verifies, no caller audio reaches the ASR or the LLM and no household data is loaded.
 
-Keypad digits arrive as InputDTMFFrame (TwilioFrameSerializer turns Twilio/SignalWire `dtmf` events into them). Four digits (or '#')
-submit; '*' clears. Three wrong tries and the call ends."""
+Keypad digits arrive as InputDTMFFrame (TwilioFrameSerializer turns Twilio/SignalWire `dtmf` events into them). `pin_length` digits (or '#')
+submit; '*' clears. pin_length comes from PHONE_PIN_LENGTH or the lengths in PHONE_PINS (config.derive_pin_length); when the configured PINs
+differ in length it is the longest and a shorter PIN is submitted with '#'. The worker compares the digits against every configured PIN.
+Only the COUNT of digits is ever logged. Three wrong tries and the call ends."""
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -79,6 +81,7 @@ class PinGate(FrameProcessor):
     async def _submit(self) -> None:
         pin, self._digits = self._digits, ""
         self._tries += 1
+        logger.info(f"PIN attempt {self._tries}: {len(pin)} digits keyed")
         try:
             out = await self._verify(pin)
         except Exception as e:

@@ -7,16 +7,23 @@ import re
 from speech import SpeechNormalizer
 
 # ---- fixed lines (spoken as-is; keep them short and plain) -----------------------------------------------------------------
-# The one-time AI disclosure: brief, friendly, still says what it is (a computer, not a person or a licensed advisor), that the data is made up
-# and that nothing is recorded.
+# The one-time opening: the name, one friendly line that he is an AI (never implied human), then the first thing the caller needs to do.
 DISCLOSURE_WEB = (
-    "Hi, I'm Keystone, the family's AI money helper. Quick heads up: I'm a computer, not a person or a licensed advisor, "
-    "and this demo runs on made-up data. Nothing's recorded. What can I help with?"
+    "Hi, I'm Brian, your personal finance assistant. Just so you know, I'm an AI, so double-check anything important. What can I help with?"
 )
 DISCLOSURE_PHONE = (
-    "Hi, I'm Keystone, the family's AI money helper. Quick heads up: I'm a computer, not a person or a licensed advisor, "
-    "and this demo runs on made-up data. Nothing's recorded. First, please key in your four digit PIN."
+    "Hi, I'm Brian, your personal finance assistant. Just so you know, I'm an AI, so double-check anything important. "
+    "First, please key in your four digit PIN."
 )
+_DIGIT_WORDS = {4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
+
+
+def disclosure_phone(pin_length: int = 4, variable: bool = False) -> str:
+    """DISCLOSURE_PHONE with the PIN request matching the configured PIN(s): "five digit PIN", or, when the PINs differ in length, "PIN, then pound"."""
+    ask = "please key in your PIN, then press pound." if variable else f"please key in your {_DIGIT_WORDS.get(pin_length, str(pin_length))} digit PIN."
+    return DISCLOSURE_PHONE.rsplit("First, ", 1)[0] + "First, " + ask
+
+
 PIN_RETRY = "Hmm, that PIN didn't match. Try again?"
 PIN_LAST_TRY = "That PIN didn't match. You've got one more try."
 PIN_LOCKED = "Sorry, I can't verify that PIN. Please check it and call back. Goodbye."
@@ -94,7 +101,7 @@ def system_prompt(*, family: str, first_name: str, brief: list[str], today: str,
     who = f"You are talking with {first_name} from the {family}." if first_name else f"You are talking with someone from the {family}."
     brief_text = "\n".join(f"- {line}" for line in humanize_brief(brief, today))
     where = "in the browser" if channel == "web" else "by phone"
-    return f"""You are Keystone, a warm, down-to-earth money helper for the {family}. {who}
+    return f"""You are Brian, the family's personal finance assistant: a warm, down-to-earth money helper for the {family}. {who}
 You are on a live voice call {where}. Everything you write is read aloud by a voice, so write only what you would SAY out loud.
 
 HOW YOU TALK (follow strictly)
@@ -111,7 +118,7 @@ HOW YOU TALK (follow strictly)
 - When they're done ("that's all", "thanks", "bye"), say a short, warm goodbye and stop.
 
 HONESTY AND LIMITS
-- You are an AI, not a person and not a licensed advisor; say so plainly, in a few words, if asked. No investment, tax or legal advice; a bank advisor can help with that.
+- Your name is Brian. You are an AI, not a person and not a licensed advisor; if anyone asks whether you are a real person or a human, say plainly that you are an AI. Never imply you are human. No investment, tax or legal advice; a bank advisor can help with that.
 - The data is made up for this demo. Stay on this family's money; steer anything else back politely.
 - If a tool fails, say so in one short sentence and offer to try again.
 
