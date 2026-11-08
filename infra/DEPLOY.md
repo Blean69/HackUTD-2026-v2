@@ -328,3 +328,16 @@ candidate pair with a `srflx` candidate for `52.72.164.85`. The call appears at 
 **Operate.** `infra/dc logs -f --tail=100 voice` (heard/said lines, tool timings, no secrets); kill switch: set `VOICE_ENABLED=0` and `infra/deploy.sh`;
 calls end after `VOICE_MAX_CALL_SECS`, after two silent prompts ("Are you still there?", then goodbye; `VOICE_IDLE_SECS` apart), or when the tab closes; the worker also finishes any call with no traffic for 10 minutes as `error: abandoned`.
 On a laptop one live call used about 190 MB and about 20% of one core (`docker stats`); the container limit is 1.2 GB. The image is about 1 GB (no torch).
+
+## 10. Brev GPU (Nemotron on vLLM) through an SSH tunnel
+
+Brev's public `https://8000-<id>.gobrev.dev` URLs sit behind Cloudflare, which challenges requests from AWS IPs
+(`cf-mitigated: challenge`), so the box reaches the GPU through Brev's SSH gateway instead (encrypted, no Cloudflare):
+
+- On the box: systemd unit `brev-tunnel.service` runs `ssh -N -L 0.0.0.0:8001:localhost:8000 -p <gateway-port> ubuntu@global.prd.ga.run.brev.nvidia.com`
+  with a dedicated key `~/.ssh/brev_tunnel`. Port 8001 is not open in the security group, so only the box and its containers can use it.
+- On the GPU: that key is in `authorized_keys` with `restrict,port-forwarding,permitopen="localhost:8000"`: forwarding to vLLM only, no shell.
+- Worker: `BREV_BASE_URL=http://host.docker.internal:8001/v1` (in `.env.prod`). Voice (host network): `http://127.0.0.1:8001/v1` (compose override).
+- vLLM requires `BREV_API_KEY` (Bearer). Check: `systemctl status brev-tunnel`; `curl -H "Authorization: Bearer $KEY" localhost:8001/v1/models`.
+- If the Brev instance is recreated, the gateway port changes: `brev ports ls <instance>` and update the unit, then `sudo systemctl restart brev-tunnel`.
+- Teardown after the event: `sudo systemctl disable --now brev-tunnel`; `brev delete keystone-nemotron` (stops billing).

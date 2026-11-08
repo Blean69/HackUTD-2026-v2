@@ -92,6 +92,9 @@ services:
       VOICE_HTTP: "0.0.0.0:7860"
       WORKER_URL: "http://127.0.0.1:8787"
       VOICE_TRANSPORTS: "webrtc,twilio"        # twilio = the Twilio-format media stream SignalWire speaks; drop it for button-only
+      # Brev L40S (Nemotron via vLLM) reached through the brev-tunnel systemd service on this host (infra/DEPLOY.md §10).
+      # Host network, so loopback; the worker uses host.docker.internal:8001 from .env.
+      BREV_BASE_URL: "http://127.0.0.1:8001/v1"
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}
     depends_on:
       - worker
