@@ -3,6 +3,8 @@ import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import { cx, hueFor, initials } from "@/lib/format";
 import { IconAlert, IconArrowDown, IconArrowUp, IconChevron, IconInfo } from "./icons";
 import { InfoTip } from "./InfoTip";
+import { AvatarPhoto } from "./AvatarPhoto";
+import { Peek, type MascotMood } from "./Mascot";
 
 /* ------------------------------------------------------------------------------------------------
    Brianotron UI kit ("Ledger", docs/design-system.md). Hairline cards on a cool canvas, one cobalt accent,
@@ -45,7 +47,7 @@ export { InfoTip };
 
 /** A titled dashboard card. `title` renders as an h2 so each card is a labelled region. */
 export function Panel({
-  title, info, sub, right, children, className, bodyClassName, id, footer, flush,
+  title, info, sub, right, children, className, bodyClassName, id, footer, flush, mascot,
 }: {
   title: ReactNode;
   info?: string;
@@ -59,11 +61,14 @@ export function Panel({
   footer?: ReactNode;
   /** No body padding: for a `List` or a table that runs edge to edge. */
   flush?: boolean;
+  /** Perch Penny on the card's corner. */
+  mascot?: MascotMood;
 }) {
   const hid = id ? `${id}-h` : undefined;
   return (
-    <section id={id} aria-labelledby={hid} className={cx("card flex min-w-0 flex-col", className)}>
-      <header className="flex items-start justify-between gap-3 px-4 pt-3.5">
+    <section id={id} aria-labelledby={hid} className={cx("card relative flex min-w-0 flex-col", className)}>
+      {mascot ? <Peek mood={mascot} /> : null}
+      <header className={cx("flex items-start justify-between gap-3 px-4 pt-3.5", mascot && "pr-14")}>
         <div className="min-w-0">
           <h2 id={hid} className="flex items-center gap-1.5 text-label font-semibold tracking-[-0.005em] text-ink">
             {title}
@@ -224,6 +229,7 @@ export function Avatar({ name, size = 28, ring, dot, className }: { name: string
       >
         {initials(name)}
       </span>
+      <AvatarPhoto name={name} />
       {dot ? (
         <span
           className={cx("absolute -bottom-0.5 -right-0.5 rounded-full border-2", ring === "bg" ? "border-bg" : "border-surface", dot === "online" ? "bg-online" : dot === "idle" ? "bg-watch" : "bg-ink-3")}
@@ -382,7 +388,7 @@ export function StatCard({
       {footer ? <div className="mt-3 border-t border-line pt-2.5 text-caption text-ink-2">{footer}</div> : null}
     </>
   );
-  const cls = cx("card block h-full min-w-0 p-4", size === "lg" && "lg:p-5", className);
+  const cls = cx("card motion-rise block h-full min-w-0 p-4 transition-transform duration-200 hover:-translate-y-0.5", size === "lg" && "lg:p-5", className);
   if (href) {
     return (
       <Link href={href} className={cx(cls, "card-interactive press")}>

@@ -11,6 +11,7 @@ export function TrendCard({ fin, householdId, className }: { fin: RoomFinance; h
   return (
     <Panel
       id="net-worth-trend"
+      mascot="happy"
       title="Net worth and 90-day forecast"
       sub={end !== undefined ? <span className="num">About {usd(end)} by the end of the forecast</span> : undefined}
       className={className}
@@ -36,7 +37,7 @@ const HEALTH_GAUGE: GaugeBand[] = [
 export function HealthCard({ fin, householdId, className }: { fin: RoomFinance; householdId: string; className?: string }) {
   const hm = fin.healthModel;
   return (
-    <Panel id="financial-health" title="Household health" info="Each indicator is computed inside the database from your accounts, transactions and credit profile, then scored 0 to 100. The score is their average." className={className}>
+    <Panel id="financial-health" mascot={(hm.score ?? 60) >= 70 ? "cheer" : (hm.score ?? 60) < 55 ? "worried" : "happy"} title="Household health" info="Each indicator is computed inside the database from your accounts, transactions and credit profile, then scored 0 to 100. The score is their average." className={className}>
       <div className="flex items-center gap-4">
         <ScoreGauge value={hm.score} min={0} max={100} bands={HEALTH_GAUGE} label="Household health score" size={120} showRange={false} />
         <p className="min-w-0 text-caption leading-relaxed text-ink-3">

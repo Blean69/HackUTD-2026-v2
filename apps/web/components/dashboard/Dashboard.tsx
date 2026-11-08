@@ -6,6 +6,7 @@ import { useRoomFinance } from "@/lib/data/finance-hooks";
 import { useGoals, useRoomTables } from "@/lib/data/hooks";
 import { HealthCard, TrendCard } from "./AnalysisCards";
 import { KpiTiles } from "./KpiRow";
+import { InsightCards } from "./InsightCards";
 import { AccountsCard, GoalsCard, UpcomingCard } from "./ListCards";
 
 const S = BENTO;
@@ -45,6 +46,8 @@ export function Dashboard({ householdId }: { householdId: string }) {
   return (
     <div className="grid grid-cols-12 gap-3">
       <KpiTiles fin={fin} householdId={householdId} />
+
+      <InsightCards fin={fin} />
 
       <TrendCard fin={fin} householdId={householdId} className={S.twoThirds} />
       <HealthCard fin={fin} householdId={householdId} className="col-span-12 xl:col-span-4" />

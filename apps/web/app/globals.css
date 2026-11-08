@@ -547,3 +547,22 @@ summary {
 .recharts-cartesian-axis-tick-value {
   font-size: 11px;
 }
+
+/* Penny the mascot + chart motion. Transform/opacity only; all instant under prefers-reduced-motion (rule above). */
+.penny { overflow: visible; }
+.penny-body { transform-origin: 32px 56px; animation: penny-bob 3.2s ease-in-out infinite; }
+.penny-cheer .penny-body { animation: penny-hop 1.1s var(--ease-out) infinite; }
+.penny-eyes { transform-origin: 32px 29px; animation: penny-blink 4.5s infinite; }
+.penny-ear { transform-box: fill-box; transform-origin: 50% 100%; animation: penny-ear 3.6s ease-in-out infinite; }
+.penny-coin { animation: penny-coin 3.2s var(--ease-in) infinite; }
+.penny-spark { transform-box: fill-box; transform-origin: center; animation: penny-spark 1.1s ease-in-out infinite; }
+@keyframes penny-bob { 50% { transform: translateY(-2px) scale(1.02, 0.98); } }
+@keyframes penny-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px) rotate(-3deg); } }
+@keyframes penny-blink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+@keyframes penny-ear { 50% { transform: rotate(-8deg); } }
+@keyframes penny-coin { 0% { transform: translateY(-14px); opacity: 0; } 25% { opacity: 1; } 55%, 100% { transform: translateY(8px); opacity: 0; } }
+@keyframes penny-spark { 50% { transform: scale(1.4) rotate(20deg); opacity: 0.6; } }
+/* Sparklines draw themselves in; the end dot pops after. */
+.draw-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.1s var(--ease-out) 0.15s forwards; }
+.draw-dot { animation: pop 340ms var(--ease-out) 1s both; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
