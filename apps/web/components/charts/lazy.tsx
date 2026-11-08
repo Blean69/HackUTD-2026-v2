@@ -11,3 +11,4 @@ const fill = <Skeleton className="h-64 w-full" />;
 export const TrendChart = dynamic(() => import("./TrendChart").then((m) => m.TrendChart), { ssr: false, loading: () => fill });
 export const CashFlowChart = dynamic(() => import("./CashFlowChart").then((m) => m.CashFlowChart), { ssr: false, loading: () => fill });
 export const ScenarioChart = dynamic(() => import("@/components/whatif/ScenarioChart").then((m) => m.ScenarioChart), { ssr: false, loading: () => fill });
+export const HealthRadar = dynamic(() => import("./HealthRadar").then((m) => m.HealthRadar), { ssr: false, loading: () => <Skeleton className="h-44 w-full" /> });

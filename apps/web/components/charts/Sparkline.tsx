@@ -14,8 +14,8 @@ export function Sparkline({ values, width = 140, height = 44, label, color = "va
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} className="max-w-full overflow-visible">
       <path d={area} fill={color} fillOpacity={0.09} />
-      <path d={line} fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lx} cy={ly} r={3.5} fill={color} stroke="var(--surface)" strokeWidth={2} />
+      <path d={line} pathLength={1} className="draw-line" fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" />
+      <circle className="draw-dot" cx={lx} cy={ly} r={3.5} fill={color} stroke="var(--surface)" strokeWidth={2} />
     </svg>
   );
 }

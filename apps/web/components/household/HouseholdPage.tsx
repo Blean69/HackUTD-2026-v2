@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { IconAlert, IconBell, IconCheck, IconChevronDown, IconShield, IconTrend } from "@/components/icons";
 import { Avatar, Button, Chip, Empty, ErrorNote, List, ListRow, PageHeader, Panel, PanelLink, Skeleton } from "@/components/ui";
+import { savePhoto } from "@/lib/avatars";
 import { ackAlert } from "@/lib/data/actions";
 import { useCredit } from "@/lib/data/credit-hooks";
 import { useAlerts, useMembers, usePresence } from "@/lib/data/hooks";
@@ -45,7 +46,12 @@ function PeoplePanel({ householdId, className }: { householdId: string; classNam
           {rows.map(({ member: m, online, credit: c }) => (
             <ListRow
               key={m.id}
-              leading={<Avatar name={m.name} size={34} dot={online ? "online" : "off"} />}
+              leading={
+                <label className="relative cursor-pointer rounded-full focus-within:ring-2 focus-within:ring-focus" title={`Change ${m.name}'s photo`}>
+                  <Avatar name={m.name} size={34} dot={online ? "online" : "off"} />
+                  <input type="file" accept="image/*" className="sr-only" aria-label={`Upload a photo for ${m.name}`} onChange={(e) => { const f = e.target.files?.[0]; if (f) void savePhoto(m.name, f); e.target.value = ""; }} />
+                </label>
+              }
               title={m.name}
               sub={<><span className="capitalize">{m.role}</span>, {m.age}{m.income_annual > 0 ? <span className="num"> · {usd(m.income_annual)} a year</span> : null}</>}
               trailing={c ? <span className="figure">{c.score}</span> : !credit.ready ? <Skeleton className="h-5 w-10" /> : undefined}

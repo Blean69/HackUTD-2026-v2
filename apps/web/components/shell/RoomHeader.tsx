@@ -5,6 +5,7 @@ import { IconPlus, IconSpark } from "@/components/icons";
 import { Avatar, Button, IconButton } from "@/components/ui";
 import { CallBrianButton } from "@/components/phone/CallBrianButton";
 import { TalkButton } from "@/components/voice/TalkButton";
+import { InviteDialog } from "./InviteDialog";
 import { PRODUCT_NAME } from "@/lib/constants";
 import { useHousehold, useMembers, usePresence } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
@@ -50,33 +51,17 @@ function People({ householdId }: { householdId: string }) {
 export function RoomHeader({ householdId }: { householdId: string }) {
   const household = useHousehold(householdId);
   const ident = useLocalIdentity();
-  const [copied, setCopied] = useState(false);
-
-  async function invite() {
-    const url = window.location.origin + `/room/${householdId}`;
-    try {
-      if (navigator.share && /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) await navigator.share({ title: household?.name ?? `${PRODUCT_NAME} room`, url });
-      else {
-        await navigator.clipboard.writeText(url);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }
-    } catch {
-      /* the share sheet was dismissed */
-    }
-  }
+  const [inviting, setInviting] = useState(false);
 
   return (
     <header className="flex items-center gap-3 px-4 pb-3 pt-4 sm:px-6 md:pt-5">
       <h1 className="display min-w-0 truncate text-[1.3rem] leading-tight text-ink sm:text-[1.5rem]">{household?.name ?? "Household"}</h1>
       <div className="flex shrink-0 items-center gap-1.5">
         <People householdId={householdId} />
-        <IconButton label={copied ? "Link copied" : "Invite someone to this room"} onClick={() => void invite()} className="h-7 w-7 rounded-full border border-dashed border-line-strong text-ink-3 hover:border-ink-3 hover:bg-surface">
+        <IconButton label="Add people to this room" onClick={() => setInviting(true)} className="h-7 w-7 rounded-full border border-dashed border-line-strong text-ink-3 hover:border-ink-3 hover:bg-surface">
           <IconPlus size={14} />
         </IconButton>
-        <span className="sr-only" role="status">
-          {copied ? "Link copied" : ""}
-        </span>
+        {inviting ? <InviteDialog householdId={householdId} name={household?.name ?? "this household"} onClose={() => setInviting(false)} /> : null}
       </div>
       <span className="flex-1" />
       {/* Phones reach these from the top bar and the tab bar instead. */}
