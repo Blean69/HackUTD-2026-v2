@@ -1,4 +1,5 @@
 "use client";
+import { useNow } from "@/lib/data/finance-hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconMic, IconPlay, IconSend, IconShield, IconStop } from "@/components/icons";
 import { ProviderBadge, runProviders } from "@/components/trace/badges";
@@ -28,12 +29,13 @@ const textareaCls =
   "w-full resize-y rounded-md border border-line-strong bg-surface p-3 text-body text-ink outline-none placeholder:text-ink-3 focus:border-brand disabled:bg-surface-2 disabled:opacity-70";
 
 function GoalCard({ g }: { g: Goal }) {
+  const now = useNow(); // a blank status reads "Checking" only while the card is fresh
   const f = g.feasibility ? FEAS[g.feasibility] : null;
   return (
     <li className="anim-fade rounded-md border border-line bg-surface p-3">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-lead font-semibold leading-snug">{g.title}</h3>
-        {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip>Checking…</Chip>}
+        {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip>{now.getTime() - Date.parse(g.updated_at) < 5 * 60_000 ? "Checking…" : "Not checked"}</Chip>}
       </div>
       {g.target_amount || g.target_date ? (
         <p className="num mt-0.5 text-label text-ink-2">

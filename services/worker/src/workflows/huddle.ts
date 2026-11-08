@@ -7,6 +7,7 @@ import type { ChatMessage } from '../llm/types.js';
 import type { ScamResult } from '../tools/scam.js';
 import { monthlyCapacity, type FeasibilityResult } from '../tools/feasibility.js';
 import { groundAnswer } from './grounding.js';
+import { DEBT_TYPES } from '../tools/finance.js';
 import { savingsBalance } from '../tools/finance.js';
 import { addMonthsIso, round2, shortHash, truncate, usd } from '../util.js';
 import { householdBrief, textCacheKey } from './common.js';
@@ -149,6 +150,17 @@ export const huddleWorkflow: WorkflowDef = {
         }
       }
 
+      // "pay off the Visa": no amount said, but the balance is in the accounts. Match a debt account by a word of its nickname.
+      if (amount <= 0) {
+        const said = `${g.title} ${g.evidence_quote ?? ''}`.toLowerCase();
+        const acct = run.data.accounts
+          .filter((a) => DEBT_TYPES.has(a.type) && Math.abs(a.balance) > 0)
+          .find((a) => a.nickname.toLowerCase().split(/[^a-z0-9]+/).some((w) => w.length >= 4 && !['home', 'loan', 'card', 'payment'].includes(w) && said.includes(w)));
+        if (acct && /pay|debt|clear|owe|balance/i.test(said)) {
+          amount = round2(Math.abs(acct.balance));
+          notes.push(`${acct.nickname} balance today: ${usd(amount)}`);
+        }
+      }
       const risky = riskyGoal(`${g.title} ${g.evidence_quote ?? ''}`);
       if (risky) notes.push(risky.why);
       let feas: FeasibilityResult | undefined;

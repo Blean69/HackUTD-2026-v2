@@ -1,4 +1,5 @@
 "use client";
+import { useNow } from "@/lib/data/finance-hooks";
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { IconCap, IconCar, IconCard, IconClose, IconHome, IconPlane, IconPlus, IconTarget } from "@/components/icons";
 import { Button, Card, Chip, Empty, ErrorNote, IconTile, PageHeader, Progress, Skeleton, Spinner, inputCls, labelCls, selectCls, type Tone } from "@/components/ui";
@@ -30,6 +31,7 @@ const FEAS: Record<Exclude<Feasibility, "">, { tone: Tone; label: string; hint: 
   not_advised: { tone: "risk", label: "Not advised", hint: "Gambling or speculation: not something we score as a plan." },
 };
 function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalProgress> }) {
+  const now = useNow(); // a blank status reads "Checking" only while the card is fresh
   const f = goal.feasibility ? FEAS[goal.feasibility] : null;
   const [busy, setBusy] = useState(false);
   const target = goal.target_amount ?? 0;
@@ -79,7 +81,7 @@ function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalPr
         ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
-          {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip title="The agents are checking this against your accounts">Checking</Chip>}
+          {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : now.getTime() - Date.parse(goal.updated_at) < 5 * 60_000 ? <Chip title="The agents are checking this against your accounts">Checking</Chip> : <Chip title="No check ran for this goal. Edit it to add an amount and a date.">Not checked</Chip>}
           {goal.priority === "high" ? <span className="text-caption font-medium text-ink-2">High priority</span> : null}
         </div>
 
