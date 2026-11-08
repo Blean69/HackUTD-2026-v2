@@ -16,7 +16,7 @@ Tracks: **PNC** (360° Financial Health Navigator) · **NVIDIA** (Nemotron beyon
 | **Scam Shield + data quality** | In-DB rules catch duplicates, garbled merchants, impossible values and card testing (no false positives on the seed). Agents link the Nguyens' "grandson in jail" call to $2,000 of gift cards |
 | **Agent glass box** (`/agents`) | Every plan, tool call, thought, model and latency, streaming live from all sessions |
 | **Credit & Analytics** | Simulated 300–850 score per member with factors, trend and alerts; spending by category, top merchants, income vs expenses |
-| **Phone line** | +1 (844) 468-1795, 5-digit code per family; Brian rings back ~15 s after a call with a critical alert |
+| **Phone line** | +1 (945) 403-0355, 5-digit code per family; Brian rings back ~15 s after a call with a critical alert |
 | **SpacetimeDB module** | The whole backend: state, job queue, presence, finance math as reducers, scheduled recompute |
 | **Agent worker** | Hand-rolled tool loop. Nemotron 3 Ultra plans, Nemotron 3.5 Lightning extracts, Qwen on tenvor.io is the fallback. FRED and College Scorecard tools. All five workflows pass on real Nemotron in under 45 s |
 | **Plaid Sandbox** | Connect a bank (Plaid Link or one-tap sandbox connect) → `plaid_sync` workflow → tables. Verified live: 7 accounts, 331 transactions from First Platypus Bank |

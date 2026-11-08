@@ -11,14 +11,14 @@ const RAW_NUMBER = process.env.NEXT_PUBLIC_PHONE_NUMBER;
 // Calls to Brian start in the app (the Talk button, or an incoming call from him). A phone number only shows if the deployment sets one.
 export const PHONE_NUMBER: string = normalizePhone(RAW_NUMBER === undefined ? "" : RAW_NUMBER);
 
-/** Keep a leading + and the digits: "+1 (844) 468-1795" -> "+18444681795". "" when there is nothing usable. */
+/** Keep a leading + and the digits: "+1 (945) 403-0355" -> "+19454030355". "" when there is nothing usable. */
 export function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
   if (digits.length < 7) return "";
   return `${raw.trim().startsWith("+") ? "+" : digits.length === 10 ? "+1" : "+"}${digits}`;
 }
 
-/** "+18444681795" -> "+1 (844) 468-1795". Numbers outside the US/Canada plan come back as typed, digits grouped loosely. */
+/** "+19454030355" -> "+1 (945) 403-0355". Numbers outside the US/Canada plan come back as typed, digits grouped loosely. */
 export function formatPhone(e164: string): string {
   const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
   return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : e164;

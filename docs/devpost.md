@@ -3,7 +3,7 @@
 Four Devpost fields, in the order the form asks for them. Final submit: Sunday 12:00 PM.
 
 - Repo (public): https://github.com/Blean69/HackUTD-2026-v2
-- Live: https://brianotron.us · Brian's line: +1 (844) 468-1795
+- Live: https://brianotron.us · Brian's line: +1 (945) 403-0355
 - Video: upload `brianotron-demo-v2.mp4` (1:54, under the 2-minute cap) to YouTube and paste the link.
 
 ---
@@ -37,7 +37,7 @@ The name is in memory of Brian. B.R.I.A.N. stands for "Be Rich In A Night", whic
 - **What-If Studio and family votes.** "Open a second bakery location" becomes a structured scenario, simulated month by month, with a verdict (fine, tight, risky or not advised) before anyone signs anything.
 - **Kids & Teens.** Chores, allowance jars and a teen budget and loan planner.
 - **Ask Brianotron.** Answers come from tool calls on the family's own data, and every dollar figure is checked against those results before you see it.
-- **Brian, the voice.** Tap Talk in the app, or call +1 (844) 468-1795 and enter the family's 5-digit code. Brian says up front that he's an AI. He answers in plain words, finds bills you could cut, and can do most of what you'd do by hand: add a chore, put money in a kid's jar, create a goal, save a what-if. He confirms every change out loud first, and the code enforces that confirmation. About 15 seconds after you hang up, if there's a critical alert, **Brian calls you back.** He never asks for codes, PINs or money.
+- **Brian, the voice.** Tap Talk in the app, or call +1 (945) 403-0355 and enter the family's 5-digit code. Brian says up front that he's an AI. He answers in plain words, finds bills you could cut, and can do most of what you'd do by hand: add a chore, put money in a kid's jar, create a goal, save a what-if. He confirms every change out loud first, and the code enforces that confirmation. About 15 seconds after you hang up, if there's a critical alert, **Brian calls you back.** He never asks for codes, PINs or money.
 - **The Agent Trail.** Every plan, tool call, result, model and latency for every run, live. Nothing the AI does is hidden.
 
 All data is synthetic or Plaid Sandbox. There is no real customer information anywhere.

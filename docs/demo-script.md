@@ -10,7 +10,7 @@ Words in quotes are what we say. Everything else is what we tap.
 | **Laptop, between judges** | Our video, full screen, looping, muted. It pulls people over. |
 | **Laptop, when a judge sits down** | Switch to the live app, because live beats video. Chrome, dark mode, tabs in this order (Ctrl+1…4): **1** Rivera dashboard `brianotron.us/me` · **2** Kids & Teens · **3** What-If Studio · **4** Agent Trail. It must be the shared Rivera room, not a private copy: Brian's phone changes land there. |
 | **Caller's phone** | Speaker on, volume up. Brian's callback number **+1 (945) 403-0355** saved as a contact named "Brian", so Call Screen doesn't eat the callback. The family code memorised (never on a slide). |
-| **Printed QR card** | Points to `brianotron.us/me`, so judges watch the same room on their own phone. Card text: "Call Brian: +1 (844) 468-1795". |
+| **Printed QR card** | Points to `brianotron.us/me`, so judges watch the same room on their own phone. Card text: "Call Brian: +1 (945) 403-0355". |
 
 ## The 3-minute script
 
@@ -32,7 +32,7 @@ Words in quotes are what we say. Everything else is what we tap.
 - Tab 4, Agent Trail, open the newest run: "Not a chatbot. You see the plan, every tool call, the model that answered, and this line: every figure was checked against their real data before anyone saw it."
 
 **1:25 "Or just call Brian" (Caller, phone on speaker)**
-1. Dial **+1 (844) 468-1795**. Brian says he's an AI, then asks for the family code. Type it.
+1. Dial **+1 (945) 403-0355**. Brian says he's an AI, then asks for the family code. Type it.
 2. Ask: **"How are we doing?"** (a short answer with real numbers).
 3. Ask: **"Add a chore for Mateo: feed the dog, five dollars."** Brian asks "want me to do that?". Say **"Yes."**
 4. Driver flips to **tab 2, Kids & Teens**: the chore appears live on the laptop *and* on the judge's phone.
