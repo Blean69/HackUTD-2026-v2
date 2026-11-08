@@ -76,6 +76,7 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
           label="Recurring charges"
           value={spend.recurringCount}
           sub={spend.recurringCount ? <>about <span className="num">{usd(spend.recurringMonthly)}</span> a month</> : "none in the last 90 days"}
+          info="Merchants that charged you on a repeating schedule in the last 90 days of transactions, averaged per month. The Bills total on My Picture is different: every bill on file, whether or not it has posted yet."
         />
 
         <Panel
@@ -114,7 +115,12 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
                   display: <>{usd(c.value)}<span className="ml-2 inline-block w-9 text-right text-caption font-normal text-ink-3">{share(c.share)}</span></>,
                 }))}
               />
-              <p className="mt-4 text-caption text-ink-3">Transfers, savings, card and loan payments and the mortgage are left out.</p>
+              {/* Says what the bars count: SpacetimeDB's cash_flow categories when present, the local breakdown otherwise. */}
+              <p className="mt-4 text-caption text-ink-3">
+                {fin.cashFlow?.categories.length
+                  ? "Spending from checking, savings and cards, mortgage and loan payments included. Moves between your own accounts are left out, a card bill payment is skipped when that card's purchases are already counted, and refunds are netted."
+                  : "Transfers, savings, card and loan payments and the mortgage are left out."}
+              </p>
             </>
           ) : (
             <Empty title="No spending in the last 90 days">Purchases show up here by category.</Empty>

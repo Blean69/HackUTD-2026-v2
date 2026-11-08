@@ -31,8 +31,15 @@ export function BillsTab({ householdId }: { householdId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Bills a month" value={usd(fixedMonthly(obligations))} sub={`${obligations.length} on file`} />
+      {/* Phones: the monthly total on its own row, the two due-soon totals side by side, so no figure is cut off. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard
+          className="col-span-2 sm:col-span-1"
+          label="Bills a month"
+          value={usd(fixedMonthly(obligations))}
+          sub={`${obligations.length} on file`}
+          info="Every bill on file (loans, insurance, subscriptions and the rest), added up for one month. Recurring charges on Analytics is different: the repeat charges actually seen in the last 90 days of transactions, so the two totals can differ."
+        />
         <StatCard label="Due this week" value={usd(due7)} tone={due7 > 0 ? "watch" : undefined} />
         <StatCard label="Next 30 days" value={usd(due30)} />
       </div>

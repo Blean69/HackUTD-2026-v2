@@ -6,7 +6,8 @@ import { ProviderBadge, runProviders } from "@/components/trace/badges";
 import { TraceTimeline } from "@/components/trace/TraceTimeline";
 import { Avatar, Button, Chip, Disclosure, Empty, ErrorNote, LivePill, Notice, PageHeader, Panel, Skeleton, type Tone } from "@/components/ui";
 import { appendTranscript, endHuddle, startHuddle } from "@/lib/data/actions";
-import { useConversations, useGoals, useHuddle, useLatestRun, usePresence, useRoomTables, useTraceEvents, useTranscript } from "@/lib/data/hooks";
+import { DEMO_HOUSEHOLD_ID } from "@/lib/constants";
+import { useConversations, useGoals, useHousehold, useHuddle, useLatestRun, usePresence, useRoomTables, useTraceEvents, useTranscript } from "@/lib/data/hooks";
 import { useLocalIdentity } from "@/lib/data/identity";
 import { cx, longDate, usd } from "@/lib/format";
 import { openTrace } from "@/lib/traceUi";
@@ -16,6 +17,23 @@ import { HOLD_TO_TALK_CLASS, holdToTalkProps } from "@/lib/voiceCall/hold";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const mmss = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+/**
+ * Opens the Agent activity sheet when analysis starts, but only from md up: on a phone the sheet is full screen and would
+ * cover the goal cards as they land, so phones get a "See agent steps" button instead.
+ */
+const openTraceOnWide = () => {
+  if (typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches) openTrace();
+};
+
+/** Widens a small button's hit area to 40 px without changing how it looks. */
+const HIT = "relative before:absolute before:-inset-1.5";
+
+/** Example lines. The bakery and the Visa are the Riveras' (the demo household and its private copies). */
+const EXAMPLES = {
+  demo: { hint: "we want to open a second location", text: "We want to pay off the Visa by March and open a second bakery location." },
+  generic: { hint: "we want to pay off the credit card this year", text: "We want to pay off the credit card by March and start saving for a family trip." },
+};
 
 const FEAS: Record<Exclude<Feasibility, "">, { tone: Tone; label: string; hint: string }> = {
   on_track: { tone: "good", label: "On track", hint: "Fits your current cash and surplus" },
@@ -35,7 +53,13 @@ function GoalCard({ g }: { g: Goal }) {
     <li className="anim-fade rounded-md border border-line bg-surface p-3">
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-lead font-semibold leading-snug">{g.title}</h3>
-        {f ? <Chip tone={f.tone} title={f.hint}>{f.label}</Chip> : <Chip>{now.getTime() - Date.parse(g.updated_at) < 5 * 60_000 ? "Checking…" : "Not checked"}</Chip>}
+        {f ? (
+          <Chip tone={f.tone} title={f.hint}>{f.label}</Chip>
+        ) : now.getTime() - Date.parse(g.updated_at) < 5 * 60_000 ? (
+          <Chip title="The agents are checking this against your accounts">Checking</Chip>
+        ) : (
+          <Chip title="No check ran for this goal. Edit it to add an amount and a date.">Not checked</Chip>
+        )}
       </div>
       {g.target_amount || g.target_date ? (
         <p className="num mt-0.5 text-label text-ink-2">
@@ -65,6 +89,8 @@ export function TableMode({ householdId }: { householdId: string }) {
   useRoomTables(householdId, run ? [`trace_event@${run.run_id}`] : []);
   const events = useTraceEvents(run?.run_id);
   const allGoals = useGoals(householdId);
+  const household = useHousehold(householdId);
+  const example = householdId === DEMO_HOUSEHOLD_ID || household?.template_id === DEMO_HOUSEHOLD_ID ? EXAMPLES.demo : EXAMPLES.generic;
 
   const voice = useTableVoice();
   const [capturing, setCapturing] = useState(false);
@@ -163,7 +189,7 @@ export function TableMode({ householdId }: { householdId: string }) {
     setBusy(true);
     try {
       await endHuddle(huddle.id);
-      openTrace();
+      openTraceOnWide();
     } finally {
       setBusy(false);
     }
@@ -184,7 +210,7 @@ export function TableMode({ householdId }: { householdId: string }) {
       if (!abortRef.current) {
         await sleep(700);
         await endHuddle(id);
-        openTrace();
+        openTraceOnWide();
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sample failed");
@@ -206,7 +232,7 @@ export function TableMode({ householdId }: { householdId: string }) {
       }
       setText("");
       await endHuddle(id);
-      openTrace();
+      openTraceOnWide();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't send that");
     } finally {
@@ -289,8 +315,14 @@ export function TableMode({ householdId }: { householdId: string }) {
                 <>
                   <p className="text-h3 font-semibold">{live ? "Add my mic to this session" : analyzing ? "Agents are working…" : "Tap to talk"}</p>
                   <p className="mt-0.5 text-label text-ink-2">
-                    {analyzing ? "Goal cards appear as each one is checked." : live ? "Each phone can add its own mic." : "Say what you're planning, like “we want to open a second location”."}
+                    {analyzing ? "Goal cards appear as each one is checked." : live ? "Each phone can add its own mic." : <>Say what you&apos;re planning, like “{example.hint}”.</>}
                   </p>
+                  {/* Phones: the agent sheet no longer opens by itself (it would cover the goal cards), so offer it here. */}
+                  {analyzing ? (
+                    <Button size="sm" variant="secondary" className={cx(HIT, "mt-2.5 md:hidden")} onClick={() => openTrace()}>
+                      See agent steps
+                    </Button>
+                  ) : null}
                 </>
               )}
               {live ? (
@@ -314,7 +346,7 @@ export function TableMode({ householdId }: { householdId: string }) {
                 role="switch"
                 aria-checked={voice.pushToTalk}
                 onClick={() => setTablePushToTalk(!voice.pushToTalk)}
-                className={cx("press relative h-6 w-10 shrink-0 rounded-full transition-colors", voice.pushToTalk ? "bg-brand" : "bg-line-strong")}
+                className={cx("press relative h-6 w-10 shrink-0 rounded-full transition-colors before:absolute before:-inset-2", voice.pushToTalk ? "bg-brand" : "bg-line-strong")}
               >
                 <span className={cx("absolute top-0.5 h-5 w-5 rounded-full bg-surface transition-transform", voice.pushToTalk ? "translate-x-[1.125rem]" : "translate-x-0.5")} aria-hidden="true" />
               </button>
@@ -385,7 +417,7 @@ export function TableMode({ householdId }: { householdId: string }) {
                   onChange={(e) => setText(e.target.value)}
                   rows={3}
                   disabled={idle}
-                  placeholder={"We want to pay off the Visa by March and open a second bakery location.\n(Start a line with “Name:” to say who spoke.)"}
+                  placeholder={`${example.text}\n(Start a line with “Name:” to say who spoke.)`}
                   className={textareaCls}
                 />
                 <Button type="submit" className="mt-2" disabled={!text.trim() || idle}>
@@ -426,7 +458,12 @@ export function TableMode({ householdId }: { householdId: string }) {
             <Panel
               id="table-agents"
               title="Agent steps"
-              right={<Button size="sm" variant="secondary" onClick={() => openTrace(run.run_id)}>Full trace</Button>}
+              right={
+                <Button size="sm" variant="secondary" className={HIT} onClick={() => openTrace(run.run_id)}>
+                  <span className="md:hidden">See agent steps</span>
+                  <span className="hidden md:inline">Full trace</span>
+                </Button>
+              }
             >
               {providers.length ? (
                 <div className="-mt-1 mb-3 flex flex-wrap gap-1">{providers.map((e) => <ProviderBadge key={`${e.model}${e.provider}`} model={e.model} provider={e.provider} />)}</div>

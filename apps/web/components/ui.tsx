@@ -329,7 +329,18 @@ export function Notice({ tone = "info", children, live = "polite", action, class
   );
 }
 
-const STAT_SIZE = { sm: "text-[1.125rem] leading-6", md: "text-[1.625rem] leading-8", lg: "text-[2.25rem] leading-10" } as const;
+/**
+ * Figure sizes. Inside a StatCard (an `@container`) the size follows the tile's width (`cqi`), capped at the design size,
+ * so a money figure shrinks to fit a narrow tile instead of being cut off. Elsewhere `cqi` falls back to the viewport and
+ * the cap applies.
+ */
+const STAT_SIZE = {
+  sm: "text-[clamp(1rem,15cqi,1.125rem)] leading-6",
+  md: "text-[clamp(1.125rem,19cqi,1.625rem)] leading-8",
+  lg: "text-[clamp(1.5rem,14cqi,2.25rem)] leading-10",
+} as const;
+
+const STAT_META = "flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-3";
 
 /** A labelled number: label, value, and an optional one-line context. Shared by every page that shows headline figures. */
 export function Stat({
@@ -350,9 +361,10 @@ export function Stat({
         {label}
         {info ? <InfoTip text={info} label={typeof label === "string" ? label : undefined} /> : null}
       </p>
-      <p className={cx("figure mt-1 truncate", STAT_SIZE[size], tone ? TONE_TEXT[tone] : "text-ink")}>{value}</p>
+      {/* Never truncated: a cut-off money figure reads as a different number. */}
+      <p className={cx("figure mt-1 whitespace-nowrap", STAT_SIZE[size], tone ? TONE_TEXT[tone] : "text-ink")}>{value}</p>
       {sub || delta ? (
-        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-ink-3">
+        <p className={cx("mt-1.5", STAT_META)}>
           {delta}
           {sub ? <span className="min-w-0">{sub}</span> : null}
         </p>
@@ -372,23 +384,39 @@ export function StatCard({
   delta?: ReactNode;
   tone?: "good" | "watch" | "risk";
   size?: "sm" | "md" | "lg";
-  /** Rendered to the right of the figure from `sm` up, under it on phones. */
+  /**
+   * A sparkline or mini gauge. It sits under the figure, beside the delta and context line when the tile is wide enough
+   * (under them otherwise), so the figure always keeps the tile's full width.
+   */
   chart?: ReactNode;
   footer?: ReactNode;
   href?: string;
   className?: string;
 }) {
+  const statInfo = href ? undefined : info;
   const body = (
     <>
-      <div className="flex min-w-0 items-start justify-between gap-4">
-        <Stat label={label} value={value} sub={sub} info={href ? undefined : info} delta={delta} tone={tone} size={size} className="flex-1" />
-        {chart ? <div className="hidden shrink-0 self-end sm:block">{chart}</div> : null}
-      </div>
-      {chart ? <div className="mt-3 sm:hidden">{chart}</div> : null}
+      {chart ? (
+        <>
+          <Stat label={label} value={value} info={statInfo} tone={tone} size={size} />
+          <div className="mt-1.5 flex flex-col gap-3 @min-[16rem]:flex-row @min-[16rem]:items-end @min-[16rem]:justify-between">
+            {sub || delta ? (
+              <p className={cx("min-w-0 flex-1", STAT_META)}>
+                {delta}
+                {sub ? <span className="min-w-0">{sub}</span> : null}
+              </p>
+            ) : null}
+            <div className="shrink-0">{chart}</div>
+          </div>
+        </>
+      ) : (
+        <Stat label={label} value={value} sub={sub} info={statInfo} delta={delta} tone={tone} size={size} />
+      )}
       {footer ? <div className="mt-3 border-t border-line pt-2.5 text-caption text-ink-2">{footer}</div> : null}
     </>
   );
-  const cls = cx("card motion-rise block h-full min-w-0 p-4 transition-transform duration-200 hover:-translate-y-0.5", size === "lg" && "lg:p-5", className);
+  // `@container`: the figure's size follows the tile's width (see STAT_SIZE).
+  const cls = cx("card motion-rise @container block h-full min-w-0 p-4 transition-transform duration-200 hover:-translate-y-0.5", size === "lg" && "lg:p-5", className);
   if (href) {
     return (
       <Link href={href} className={cx(cls, "card-interactive press")}>

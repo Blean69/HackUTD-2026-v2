@@ -13,8 +13,18 @@ import { TeenPlan } from "./TeenPlan";
 const PRESETS: [string, number][] = [["Make your bed", 2], ["Do the dishes", 3], ["Walk the dog", 4], ["Homework done", 2], ["Take out the trash", 1]];
 const run = (p: Promise<unknown>) => void p.catch(() => undefined);
 
-/** Under 13 is Kid mode (jar and chores); 13 and up also gets Teen mode (loans and a first budget). */
+/** Under 13 is Kid mode (jar and chores); 13 and up also gets Teen mode (loans and a first budget). An unknown age (0) is Kid mode. */
 const modeOf = (m: Member) => (m.age <= 12 ? "kid" : "teen");
+
+/**
+ * Who gets a jar: a member marked as a child (or kid/teen), or anyone with a known age under 18. Imported bank customers
+ * often have no age on file (0), so age alone never makes an adult a kid.
+ */
+const KID_ROLES = new Set(["child", "kid", "teen"]);
+const isKid = (m: Member) => KID_ROLES.has(String(m.role).toLowerCase()) || (m.age > 0 && m.age < 18);
+
+/** Widens a small button's hit area to 40 px without changing how it looks. */
+const HIT = "relative before:absolute before:inset-x-0 before:-inset-y-1.5";
 
 function Jar({ jar }: { jar?: KidJar }) {
   const bal = jar?.balance ?? 0;
@@ -49,11 +59,11 @@ function TaskRow({ t, who }: { t: KidTask; who: "kid" | "parent" }) {
         : <Chip tone="good">Paid</Chip>
       ) : t.status === "done" ? (
         <span className="flex gap-1.5">
-          <Button size="sm" disabled={busy} onClick={() => go(() => approveKidTask(t.id))}>Approve</Button>
-          <Button size="sm" variant="secondary" disabled={busy} onClick={() => go(() => reopenKidTask(t.id))}>Not yet</Button>
+          <Button size="sm" className={HIT} disabled={busy} onClick={() => go(() => approveKidTask(t.id))}>Approve</Button>
+          <Button size="sm" variant="secondary" className={HIT} disabled={busy} onClick={() => go(() => reopenKidTask(t.id))}>Not yet</Button>
         </span>
       ) : t.status === "open" ? (
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => go(() => deleteKidTask(t.id))}>Remove</Button>
+        <Button size="sm" variant="ghost" className={HIT} disabled={busy} onClick={() => go(() => deleteKidTask(t.id))}>Remove</Button>
       ) : <Chip tone="good">Paid</Chip>}
     </li>
   );
@@ -118,7 +128,7 @@ function ParentView({ householdId, member, tasks }: { householdId: string; membe
     <div className="grid grid-cols-12 gap-3">
       <Panel title={`Add a chore for ${member.name.split(" ")[0]}`} className="col-span-12 md:col-span-5">
         <div className="flex flex-wrap gap-1.5">
-          {PRESETS.map(([t, r]) => <Button key={t} size="sm" variant="secondary" onClick={() => add(t, r)}>{t} · ${r}</Button>)}
+          {PRESETS.map(([t, r]) => <Button key={t} size="sm" variant="secondary" className={HIT} onClick={() => add(t, r)}>{t} · ${r}</Button>)}
         </div>
         <form className="mt-3 grid grid-cols-[1fr_5rem_auto] items-end gap-2" onSubmit={(e) => { e.preventDefault(); add(title, Number(reward) || 0); setTitle(""); }}>
           <div><label className={labelCls} htmlFor="chore-title">Your own chore</label><input id="chore-title" className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Water the plants" /></div>
@@ -140,12 +150,22 @@ export function KidsPage({ householdId }: { householdId: string }) {
   const members = useMembers(householdId);
   const tasks = useKidTasks(householdId);
   const jars = useKidJars(householdId);
-  const people = members.filter((m) => m.role === "child" || m.age <= 26);
+  const people = members.filter(isKid);
   const [pick, setPick] = useState("");
   const [view, setView] = useState<"play" | "parent">("play");
   const header = <PageHeader title="Kids & Teens" sub="Chores earn allowance into a savings jar. Teens get a loan and first-budget planner." />;
   if (!ready) return <>{header}<Skeleton className="h-64 w-full !rounded-lg" /></>;
-  if (!people.length) return <>{header}<Empty title="No kids or teens in this household">Add a younger family member to start a jar.</Empty></>;
+  if (!people.length) {
+    return (
+      <>
+        {header}
+        <Empty title="No kids or teens in this household">
+          This page is for family members under 18: a savings jar they fill by doing chores, and a first-budget planner for
+          teens. Nobody in this household is under 18, so there is nothing to show here.
+        </Empty>
+      </>
+    );
+  }
   const me = people.find((m) => m.id === pick) ?? people[0];
   const mode = modeOf(me);
   const mine = tasks.filter((t) => t.member_id === me.id);
@@ -154,8 +174,8 @@ export function KidsPage({ householdId }: { householdId: string }) {
       {header}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {people.map((m) => (
-          <button key={m.id} type="button" aria-pressed={m.id === me.id} onClick={() => setPick(m.id)} className={cx("press flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-label font-medium", m.id === me.id ? "border-brand bg-brand-soft text-brand-strong" : "border-line-strong text-ink-2 hover:bg-surface-2")}>
-            <Avatar name={m.name} size={26} />{m.name.split(" ")[0]}<span className="text-caption text-ink-3">{m.age}</span>
+          <button key={m.id} type="button" aria-pressed={m.id === me.id} onClick={() => setPick(m.id)} className={cx(HIT, "press flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-label font-medium", m.id === me.id ? "border-brand bg-brand-soft text-brand-strong" : "border-line-strong text-ink-2 hover:bg-surface-2")}>
+            <Avatar name={m.name} size={26} />{m.name.split(" ")[0]}{m.age > 0 ? <span className="text-caption text-ink-3">{m.age}</span> : null}
           </button>
         ))}
         <span className="flex-1" />

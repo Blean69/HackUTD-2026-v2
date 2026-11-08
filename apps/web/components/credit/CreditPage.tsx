@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { IconAlert, IconBell } from "@/components/icons";
-import { Avatar, Chip, Disclosure, Empty, PageHeader, Panel, Progress, Skeleton, type Tone } from "@/components/ui";
+import { Avatar, Chip, Disclosure, Empty, Notice, PageHeader, Panel, Progress, Skeleton, type Tone } from "@/components/ui";
 import { useCredit } from "@/lib/data/credit-hooks";
 import { BANDS, type CreditView } from "@/lib/finance-credit";
 import { cx, longDate, relTime } from "@/lib/format";
@@ -84,7 +84,8 @@ function Factors({ v, householdId }: { v: CreditView; householdId: string }) {
             {f.explanation ? <p className="mt-1.5 text-label leading-snug text-ink-2">{f.explanation}</p> : null}
             {hero ? (
               <p className="mt-1 text-caption text-ink-3">
-                About 45% of this score comes from how the whole household is doing.{" "}
+                In this simulated score, 45% comes from how the whole household is doing. Real credit scores such as FICO
+                don&apos;t look at household savings or cash flow; this learning model does, to show how the two connect.{" "}
                 <Link href={`/room/${householdId}#financial-health`} className="font-medium text-brand-strong hover:underline">See the health indicators</Link>
               </p>
             ) : null}
@@ -181,6 +182,9 @@ export function CreditPage({ householdId }: { householdId: string }) {
     <>
       {header}
       <div className="space-y-3">
+        <Notice tone="info">
+          A learning model, not a FICO score: it shows how a family&apos;s habits could move a score. No credit bureau is contacted.
+        </Notice>
         {credit.views.length > 1 ? <MemberTabs views={credit.views} value={v.member_id} onChange={setPicked} /> : null}
 
         <div className="grid grid-cols-12 gap-3" role="tabpanel" aria-label={`${v.name}'s credit`}>
@@ -216,7 +220,7 @@ export function CreditPage({ householdId }: { householdId: string }) {
           <Panel
             id="credit-factors"
             title="What's shaping your score"
-            sub="Six factors, weighted. Household health counts the most."
+            sub="Six weighted factors in the app's simulated score. Household health counts the most here."
             className="col-span-12 lg:col-span-8"
           >
             <Factors v={v} householdId={householdId} />
