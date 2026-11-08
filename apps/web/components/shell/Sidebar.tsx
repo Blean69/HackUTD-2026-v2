@@ -33,7 +33,7 @@ export function Sidebar({ householdId, onNavigate, className }: { householdId: s
   const household = useHousehold(householdId);
   const live = huddle?.status === "live";
   return (
-    <aside className={cx("flex h-full w-full flex-col border-r border-line bg-side text-ink-2", className)} aria-label="Sidebar">
+    <aside className={cx("side-green flex h-full w-full flex-col border-r border-line bg-side text-ink-2", className)} aria-label="Sidebar">
       <Link href={householdId ? `/room/${householdId}` : "/"} onClick={onNavigate} className="flex items-center gap-2.5 px-4 pb-5 pt-5" aria-label="Dashboard">
         <BrandMark size={28} />
         <span className="min-w-0 leading-tight">

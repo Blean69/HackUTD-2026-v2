@@ -67,3 +67,36 @@ export function InsightCards({ fin }: { fin: RoomFinance }) {
     </>
   );
 }
+
+const ASSET_LABEL: Record<string, string> = { checking: "Checking", savings: "Savings", cd: "CDs", ira: "Retirement", home: "Home and vehicles" };
+
+/** What the household owns, by kind. Debts are not in here; they are on the Accounts card. */
+export function AssetCard({ fin, className }: { fin: RoomFinance; className?: string }) {
+  const by = new Map<string, number>();
+  for (const a of fin.accounts) if (["checking", "savings", "cd", "ira"].includes(a.type) && a.balance > 0) by.set(a.type, (by.get(a.type) ?? 0) + a.balance);
+  if (fin.property > 0) by.set("home", fin.property);
+  const rows = [...by.entries()].sort((a, b) => b[1] - a[1]);
+  const total = rows.reduce((s, [, v]) => s + v, 0);
+  const slices = rows.map(([k, v], i) => ({ key: k, value: v, color: SERIES[i % SERIES.length], label: ASSET_LABEL[k] ?? k }));
+  return (
+    <Panel id="asset-allocation" title="Asset allocation" className={className}>
+      {rows.length ? (
+        <div className="flex flex-col items-center gap-3">
+          <Donut slices={slices} size={124} thickness={16} label="Assets by kind">
+            <span className="figure text-lead"><CountUp value={total} format={(n) => usd(n, { compact: true })} /></span>
+            <span className="text-caption text-ink-3">total assets</span>
+          </Donut>
+          <ul className="w-full space-y-1.5">
+            {slices.map((s) => (
+              <li key={s.key} className="flex items-center gap-2 text-label">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-ink-2">{s.label}</span>
+                <span className="num font-medium text-ink">{((s.value / total) * 100).toFixed(1)}%</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : <p className="text-label text-ink-3">No assets on file yet.</p>}
+    </Panel>
+  );
+}

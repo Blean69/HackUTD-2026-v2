@@ -1,7 +1,6 @@
 "use client";
-import { TrendChart } from "@/components/charts/lazy";
+import { HealthRadar, TrendChart } from "@/components/charts/lazy";
 import Link from "next/link";
-import { ScoreGauge, type GaugeBand } from "@/components/charts/ScoreGauge";
 import { Panel, PanelLink, Progress, TONE_TEXT } from "@/components/ui";
 import type { RoomFinance } from "@/lib/data/finance-hooks";
 import { cx, usd } from "@/lib/format";
@@ -24,28 +23,17 @@ export function TrendCard({ fin, householdId, className }: { fin: RoomFinance; h
 
 const TONE = { good: "good", watch: "watch", risk: "risk" } as const;
 
-/** The same words `scoreLabel` (lib/finance.ts) uses, so the gauge and every other mention of the score agree. */
-const HEALTH_GAUGE: GaugeBand[] = [
-  { to: 39, tone: "risk", label: "At risk" },
-  { to: 54, tone: "watch", label: "Needs attention" },
-  { to: 69, tone: "watch", label: "Fair" },
-  { to: 84, tone: "good", label: "Good" },
-  { to: 100, tone: "good", label: "Excellent" },
-];
-
 /** The household health score (the one number that also drives 45% of every credit score) and its eight indicators. */
 export function HealthCard({ fin, householdId, className }: { fin: RoomFinance; householdId: string; className?: string }) {
   const hm = fin.healthModel;
   return (
     <Panel id="financial-health" mascot={(hm.score ?? 60) >= 70 ? "cheer" : (hm.score ?? 60) < 55 ? "worried" : "happy"} title="Household health" info="Each indicator is computed inside the database from your accounts, transactions and credit profile, then scored 0 to 100. The score is their average." className={className}>
-      <div className="flex items-center gap-4">
-        <ScoreGauge value={hm.score} min={0} max={100} bands={HEALTH_GAUGE} label="Household health score" size={120} showRange={false} />
-        <p className="min-w-0 text-caption leading-relaxed text-ink-3">
-          The average of {hm.rows.length || "eight"} indicators, computed in the database. It also drives 45% of each{" "}
-          <Link href={`/room/${householdId}/credit`} className="font-medium text-brand-strong hover:underline">credit score</Link>.
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="figure text-kpi-sm">{hm.score ?? "n/a"}<span className="text-label font-normal text-ink-3"> / 100</span></p>
+        <Link href={`/room/${householdId}/credit`} className="text-caption font-medium text-brand-strong hover:underline">Drives 45% of credit scores</Link>
       </div>
-      <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-1">
+      {hm.rows.length ? <HealthRadar rows={hm.rows} /> : null}
+      <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5">
         {hm.rows.map((r) => (
           <li key={r.key} className="min-w-0">
             <div className="flex items-baseline justify-between gap-2 text-label">

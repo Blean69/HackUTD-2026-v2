@@ -70,7 +70,7 @@ export function Panel({
       {mascot ? <Peek mood={mascot} /> : null}
       <header className={cx("flex items-start justify-between gap-3 px-4 pt-3.5", mascot && "pr-14")}>
         <div className="min-w-0">
-          <h2 id={hid} className="flex items-center gap-1.5 text-label font-semibold tracking-[-0.005em] text-ink">
+          <h2 id={hid} className="flex items-center gap-1.5 text-lead font-semibold tracking-[-0.01em] text-ink">
             {title}
             {info ? <InfoTip text={info} label={typeof title === "string" ? title : undefined} /> : null}
           </h2>
@@ -329,7 +329,7 @@ export function Notice({ tone = "info", children, live = "polite", action, class
   );
 }
 
-const STAT_SIZE = { sm: "text-[1.125rem] leading-6", md: "text-kpi-sm", lg: "text-kpi" } as const;
+const STAT_SIZE = { sm: "text-[1.125rem] leading-6", md: "text-[1.625rem] leading-8", lg: "text-[2.25rem] leading-10" } as const;
 
 /** A labelled number: label, value, and an optional one-line context. Shared by every page that shows headline figures. */
 export function Stat({
@@ -346,7 +346,7 @@ export function Stat({
 }) {
   return (
     <div className={cx("min-w-0", className)}>
-      <p className="flex items-center gap-1.5 text-caption font-medium text-ink-3">
+      <p className="flex items-center gap-1.5 text-label font-medium text-ink-2">
         {label}
         {info ? <InfoTip text={info} label={typeof label === "string" ? label : undefined} /> : null}
       </p>

@@ -11,27 +11,27 @@
    ------------------------------------------------------------------------------------------------ */
 :root {
   color-scheme: light;
-  --bg: #f4f5f7;
+  --bg: #f1f4f2;
   --surface: #ffffff;
-  --surface-2: #f5f6f8;
-  --surface-3: #eceef1;
-  --ink: #0e1013;
-  --ink-2: #464b53;
-  --ink-3: #6a707a;
-  --line: #e5e7eb;
-  --line-strong: #d3d6dc;
+  --surface-2: #f6f8f7;
+  --surface-3: #e9eeeb;
+  --ink: #10201a;
+  --ink-2: #44554d;
+  --ink-3: #66776e;
+  --line: #e2e8e4;
+  --line-strong: #cfd8d3;
 
-  --brand: #355edd;
-  --brand-hover: #284cc3;
-  --brand-strong: #284cc3;
-  --brand-soft: #ebf0fd;
+  --brand: #1f6b4a;
+  --brand-hover: #195a3e;
+  --brand-strong: #195a3e;
+  --brand-soft: #e4f2ea;
   --brand-ink: #ffffff;
-  --dark: #0e1013;
-  --dark-hover: #262a30;
+  --dark: #123d2e;
+  --dark-hover: #1a5240;
   --dark-ink: #ffffff;
 
-  --good: #007e46;
-  --good-soft: #e6f6ec;
+  --good: #1e8a4f;
+  --good-soft: #e3f4ea;
   --watch: #ad5c00;
   --watch-soft: #fef6ea;
   --risk: #c9302d;
@@ -39,27 +39,27 @@
   --info: #4b677e;
   --info-soft: #eef3f8;
 
-  --focus: #355edd;
+  --focus: #1f6b4a;
   --rec: #d92d20;
   --online: #1f9d5c;
 
   /* sidebar: flush with the canvas, separated by a hairline */
-  --side: var(--bg);
+  --side: #0f3d2e;
   --side-2: var(--surface);
   --side-ink: var(--ink-2);
   --side-ink-2: var(--ink-3);
   --side-line: var(--line);
 
   /* charts: fixed categorical order (validated for CVD in both modes), plus recessive structure */
-  --chart-1: #355edd;
+  --chart-1: #1f6b4a;
   --chart-2: #e07a2e;
-  --chart-3: #14a394;
-  --chart-4: #9b5bd6;
+  --chart-3: #3a9d8a;
+  --chart-4: #8fc47a;
   --chart-5: #d9a400;
-  --chart-6: #d9548f;
+  --chart-6: #5b8fd9;
   --chart-muted: #a3a9b2;
-  --chart-grid: #eceef1;
-  --chart-axis: #d3d6dc;
+  --chart-grid: #e7ece9;
+  --chart-axis: #cfd8d3;
   --chart-wash: color-mix(in srgb, var(--chart-1) 9%, transparent);
   --chart-band: color-mix(in srgb, var(--chart-1) 12%, transparent);
   /* legacy aliases */
@@ -71,7 +71,7 @@
 
   /* elevation: only floating layers get a shadow, and a quiet one */
   --shadow-pop: 0 1px 2px rgb(14 16 19 / 0.05), 0 12px 32px -12px rgb(14 16 19 / 0.2);
-  --card-highlight: none;
+  --card-highlight: 0 1px 2px rgb(16 32 26 / 0.04), 0 10px 28px -14px rgb(16 32 26 / 0.14);
   --scrim: rgb(14 16 19 / 0.32);
 
   /* motion: one easing family, three durations. Opacity and transform only. */
@@ -86,93 +86,95 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0b0c0f;
-    --surface: #131519;
-    --surface-2: #1a1c21;
-    --surface-3: #22252a;
-    --ink: #eceef1;
-    --ink-2: #a7acb4;
-    --ink-3: #7f858e;
-    --line: #24272c;
-    --line-strong: #33363c;
-    --brand: #426ce5;
-    --brand-hover: #5379ee;
-    --brand-strong: #9bb3ff;
-    --brand-soft: #19223d;
+    --bg: #09100d;
+    --surface: #111a16;
+    --surface-2: #16211c;
+    --surface-3: #1d2a24;
+    --ink: #e8f0ec;
+    --ink-2: #a3b3aa;
+    --ink-3: #7a8b82;
+    --line: #1f2d26;
+    --line-strong: #2c3d34;
+    --brand: #2f9e6b;
+    --brand-hover: #3bb37c;
+    --brand-strong: #6fd3a0;
+    --brand-soft: #12261d;
     --brand-ink: #ffffff;
-    --dark: #eceef1;
+    --dark: #e8f0ec;
     --dark-hover: #ffffff;
     --dark-ink: #0b0c0f;
     --good: #5ccb89;
-    --good-soft: #11271b;
+    --good-soft: #102a1b;
     --watch: #e9b452;
     --watch-soft: #2a210f;
     --risk: #f97770;
     --risk-soft: #321716;
     --info: #95b6ce;
     --info-soft: #172129;
-    --focus: #8aa5ff;
+    --focus: #6fd3a0;
     --rec: #ff5a4f;
     --online: #45c983;
-    --chart-1: #5b7ef2;
+    --chart-1: #3fae7a;
     --chart-2: #d66f28;
     --chart-3: #18998b;
-    --chart-4: #9468dc;
+    --chart-4: #8fc47a;
     --chart-5: #b8881a;
-    --chart-6: #d0558a;
+    --chart-6: #5b8fd9;
     --chart-muted: #4d525a;
-    --chart-grid: #1f2226;
-    --chart-axis: #33363c;
+    --chart-grid: #1b2721;
+    --chart-axis: #2c3d34;
     --chart-wash: color-mix(in srgb, var(--chart-1) 13%, transparent);
     --chart-band: color-mix(in srgb, var(--chart-1) 16%, transparent);
     --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.02), 0 18px 40px -16px rgb(0 0 0 / 0.7);
     --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.035);
+    --side: #07130e;
     --scrim: rgb(0 0 0 / 0.55);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0b0c0f;
-  --surface: #131519;
-  --surface-2: #1a1c21;
-  --surface-3: #22252a;
-  --ink: #eceef1;
-  --ink-2: #a7acb4;
-  --ink-3: #7f858e;
-  --line: #24272c;
-  --line-strong: #33363c;
-  --brand: #426ce5;
-  --brand-hover: #5379ee;
-  --brand-strong: #9bb3ff;
-  --brand-soft: #19223d;
+  --bg: #09100d;
+  --surface: #111a16;
+  --surface-2: #16211c;
+  --surface-3: #1d2a24;
+  --ink: #e8f0ec;
+  --ink-2: #a3b3aa;
+  --ink-3: #7a8b82;
+  --line: #1f2d26;
+  --line-strong: #2c3d34;
+  --brand: #2f9e6b;
+  --brand-hover: #3bb37c;
+  --brand-strong: #6fd3a0;
+  --brand-soft: #12261d;
   --brand-ink: #ffffff;
-  --dark: #eceef1;
+  --dark: #e8f0ec;
   --dark-hover: #ffffff;
   --dark-ink: #0b0c0f;
   --good: #5ccb89;
-  --good-soft: #11271b;
+  --good-soft: #102a1b;
   --watch: #e9b452;
   --watch-soft: #2a210f;
   --risk: #f97770;
   --risk-soft: #321716;
   --info: #95b6ce;
   --info-soft: #172129;
-  --focus: #8aa5ff;
+  --focus: #6fd3a0;
   --rec: #ff5a4f;
   --online: #45c983;
-  --chart-1: #5b7ef2;
+  --chart-1: #3fae7a;
   --chart-2: #d66f28;
   --chart-3: #18998b;
-  --chart-4: #9468dc;
+  --chart-4: #8fc47a;
   --chart-5: #b8881a;
-  --chart-6: #d0558a;
+  --chart-6: #5b8fd9;
   --chart-muted: #4d525a;
-  --chart-grid: #1f2226;
-  --chart-axis: #33363c;
+  --chart-grid: #1b2721;
+  --chart-axis: #2c3d34;
   --chart-wash: color-mix(in srgb, var(--chart-1) 13%, transparent);
   --chart-band: color-mix(in srgb, var(--chart-1) 16%, transparent);
   --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.02), 0 18px 40px -16px rgb(0 0 0 / 0.7);
   --card-highlight: inset 0 1px 0 rgb(255 255 255 / 0.035);
+  --side: #07130e;
   --scrim: rgb(0 0 0 / 0.55);
 }
 
@@ -566,3 +568,11 @@ summary {
 .draw-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.1s var(--ease-out) 0.15s forwards; }
 .draw-dot { animation: pop 340ms var(--ease-out) 1s both; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* Deep-green sidebar in both themes: re-point the neutral tokens inside it to light-on-green. */
+.side-green {
+  --ink: #fff; --ink-2: #cfe3d8; --ink-3: #8fb09f;
+  --line: rgb(255 255 255 / 0.12); --line-strong: rgb(255 255 255 / 0.2);
+  --surface: rgb(255 255 255 / 0.13); --surface-2: rgb(255 255 255 / 0.08); --surface-3: rgb(255 255 255 / 0.1);
+  --brand-strong: #8ee0b4; --focus: #8ee0b4;
+}

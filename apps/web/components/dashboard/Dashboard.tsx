@@ -1,12 +1,13 @@
 "use client";
 import dynamic from "next/dynamic";
-import { BENTO, Skeleton } from "@/components/ui";
+import { BENTO, Panel, Skeleton } from "@/components/ui";
 import { FamilyVotingCard } from "@/components/voting/FamilyVotingCard";
 import { useRoomFinance } from "@/lib/data/finance-hooks";
 import { useGoals, useRoomTables } from "@/lib/data/hooks";
+import { CashFlowChart } from "@/components/charts/lazy";
 import { HealthCard, TrendCard } from "./AnalysisCards";
 import { KpiTiles } from "./KpiRow";
-import { InsightCards } from "./InsightCards";
+import { AssetCard, InsightCards } from "./InsightCards";
 import { AccountsCard, GoalsCard, UpcomingCard } from "./ListCards";
 
 const S = BENTO;
@@ -47,17 +48,22 @@ export function Dashboard({ householdId }: { householdId: string }) {
     <div className="grid grid-cols-12 gap-3">
       <KpiTiles fin={fin} householdId={householdId} />
 
+      <TrendCard fin={fin} householdId={householdId} className="col-span-12 xl:col-span-6" />
+      <AssetCard fin={fin} className="col-span-12 md:col-span-6 xl:col-span-3" />
+      <HealthCard fin={fin} householdId={householdId} className="col-span-12 md:col-span-6 xl:col-span-3" />
+
       <InsightCards fin={fin} />
 
-      <TrendCard fin={fin} householdId={householdId} className={S.twoThirds} />
-      <HealthCard fin={fin} householdId={householdId} className="col-span-12 xl:col-span-4" />
+      <Panel id="cash-flow" title="Cash flow" sub="Income against expenses, with the projection" className="col-span-12 xl:col-span-8">
+        <CashFlowChart months={fin.cash} height={230} />
+      </Panel>
 
       {/* Phones: the family vote (the live, multiplayer card) comes right after health; from md it closes the grid beside Goals. */}
       <FamilyVotingCard householdId={householdId} className={`${S.half} md:order-2`} />
 
-      <AccountsCard fin={fin} householdId={householdId} className={S.third} />
-      {hasBills ? <UpcomingCard fin={fin} householdId={householdId} className={S.third} /> : null}
-      <CreditTile householdId={householdId} className={hasBills ? "col-span-12 xl:col-span-4" : S.third} />
+      <AccountsCard fin={fin} householdId={householdId} className="col-span-12 xl:col-span-4" />
+      {hasBills ? <UpcomingCard fin={fin} householdId={householdId} className={S.half} /> : null}
+      <CreditTile householdId={householdId} className={hasBills ? S.half : "col-span-12 xl:col-span-8"} />
 
       <GoalsCard goals={goals} fin={fin} householdId={householdId} className={`${S.half} md:order-1`} />
     </div>
