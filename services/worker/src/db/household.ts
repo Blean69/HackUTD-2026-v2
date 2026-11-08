@@ -2,13 +2,13 @@
 // (WHERE household_id = ...); after that the cache stays live, so health/forecast updates arrive on their own.
 import type { Line } from '../llm/rules.js';
 import type { DbConnection } from '../module_bindings/index.js';
-import type { HouseholdData } from '../types.js';
+import type { CreditFactorRow, HouseholdData } from '../types.js';
 import { formatDay, parseDay, todayIso } from '../util.js';
 import { subscribeAndWait } from './connection.js';
 
 const sqlStr = (s: string): string => `'${s.replace(/'/g, "''")}'`;
 
-const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal'];
+const HOUSEHOLD_TABLES = ['member', 'account', 'txn', 'credit_profile', 'obligation', 'health_indicator', 'forecast_point', 'goal', 'credit_score', 'credit_score_history'];
 
 export class HouseholdLoader {
   private subs = new Map<string, Promise<unknown>>();
@@ -74,6 +74,10 @@ export class HouseholdLoader {
       health: mine(db.healthIndicator.iter()).map((h) => ({ key: h.key, label: h.label, value: h.value, unit: h.unit, status: h.status, explanation: h.explanation })),
       forecast: forecast.map((f) => ({ date: f.date, balance: f.balance, obligations_due: f.obligationsDue })),
       goals: mine(db.goal.iter()).map((g) => ({ id: g.id, title: g.title, target_amount: g.targetAmount, target_date: g.targetDate, priority: g.priority, feasibility: g.feasibility })),
+      credit_scores: mine(db.creditScore.iter()).map((c) => ({ member_id: c.memberId, score: c.score, band: c.band, factors: safeFactors(c.factorsJson) })),
+      credit_history: mine(db.creditScoreHistory.iter())
+        .map((h) => ({ member_id: h.memberId, date: h.date, score: h.score }))
+        .sort((a, b) => (a.member_id < b.member_id ? -1 : a.member_id > b.member_id ? 1 : a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
       asOf,
     };
   }
@@ -96,6 +100,15 @@ export class HouseholdLoader {
       this.transcriptSubs.delete(huddleId);
     }, 60_000).unref();
     return lines.map((l) => ({ speaker: l.speaker, text: l.text }));
+  }
+}
+
+function safeFactors(json: string): CreditFactorRow[] {
+  try {
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? (v as CreditFactorRow[]) : [];
+  } catch {
+    return [];
   }
 }
 

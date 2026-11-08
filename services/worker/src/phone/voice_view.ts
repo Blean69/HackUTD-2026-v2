@@ -2,8 +2,8 @@
 // The full result still goes into the trace (run.tool emits it); only the copy handed back to the voice model is trimmed.
 import { fitJson, truncate } from '../util.js';
 
-/** Tools the phone/voice agent may use (7 is plenty for a 3B-active model). Order = order in the model's tool list. */
-export const PHONE_TOOLS = ['get_health_indicators', 'get_forecast', 'get_obligations', 'get_accounts', 'simulate_scenario', 'goal_feasibility', 'detect_scam_signals'] as const;
+/** Tools the phone/voice agent may use (7 to 8 is plenty for a 3B-active model). Order = order in the model's tool list. */
+export const PHONE_TOOLS = ['get_health_indicators', 'get_forecast', 'get_obligations', 'get_accounts', 'get_credit_score', 'simulate_scenario', 'goal_feasibility', 'detect_scam_signals'] as const;
 export type PhoneTool = (typeof PHONE_TOOLS)[number];
 export const isPhoneTool = (name: string): name is PhoneTool => (PHONE_TOOLS as readonly string[]).includes(name);
 
@@ -90,6 +90,24 @@ export function voiceView(tool: string, result: unknown): unknown {
           .map((a) => ({ name: a.nickname || a.type, type: a.type, balance: whole(a.balance), ...(a.rate_pct !== undefined ? { rate_pct: humanPercent(a.rate_pct) } : {}), ...(a.monthly_payment !== undefined ? { monthly_payment: whole(a.monthly_payment) } : {}) })),
         totals: { liquid_cash: whole(r.totals?.liquid_cash), debt: whole(r.totals?.debt), net_worth: whole(r.totals?.net_worth) },
       };
+      break;
+    case 'get_credit_score':
+      view = r.available
+        ? {
+            note: 'Simulated demo score, not a real credit report. Say "simulated".',
+            scores: arr(r.members)
+              .slice(0, 4)
+              .map((m) => ({
+                name: m.member,
+                score: m.score,
+                band: m.band,
+                change: m.change_6m ? { points: m.change_6m.points, months: m.change_6m.months } : null,
+                top_factors: arr(m.top_factors)
+                  .slice(0, 2)
+                  .map((f) => ({ factor: f.factor, effect: f.effect, note: truncate(String(f.detail ?? ''), 90) })),
+              })),
+          }
+        : { available: false, note: r.note ?? 'No simulated credit score yet.' };
       break;
     case 'simulate_scenario': {
       const e = rec(r.effect);

@@ -217,3 +217,18 @@ only for the "own SIP server" story.
   https://www.nvidia.com/en-us/launchables/pricing
 - AWS: https://docs.aws.amazon.com/vpc/latest/userguide/VPC_Internet_Gateway.html , https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html ,
   https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-credits-baseline-concepts.html ; [V-h] https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html
+
+## Update (2026-11-08): callback after a phone call, echo-aware barge-in, noise filter
+
+- **Callback.** The PSTN path is no longer inbound-only: after a PIN-unlocked phone call ends, the voice service places ONE outbound call through the SignalWire Compatibility
+  (LaML) REST API from the same number, and Brian says there is a critical alert (spec: `docs/contracts.md` section 10; env, behaviour and the first live test: `infra/DEPLOY.md`
+  "Phone callback"). Code: `services/voice/callback.py` (tokens, dialer, scheduler, log redaction), `alerts.py` (real signals first, 7 templates), worker `src/phone/callback.ts`.
+  The outbound webhook is signed by SignalWire with the same signing key, so verification stays on. The caller's number is held in memory for that one dial only and never logged.
+  **Answering-machine detection** is SignalWire's `MachineDetection` field on the same request (`Enable` returns `AnsweredBy` at once; `DetectMessageEnd` waits for the greeting and the beep);
+  `VOICE_CALLBACK_AMD` maps to it, default off because it adds a few seconds before Brian speaks. Cost is the normal outbound voice rate plus the stream minutes of the callback (see the pricing table above); the cap is `VOICE_CALLBACK_MAX_PER_HOUR`.
+  A trial account can only dial verified numbers (table above).
+- **Echo and noise in the browser call.** `services/voice/barge.py`: an interruption whose words line up in order with what Brian just said is dropped as his own echo, the browser needs three words
+  to interrupt (`VOICE_BARGE_IN_WORDS_WEBRTC`), and hold-to-talk (`ptt` pressed/released, `interrupt` client messages) works server side. `services/voice/noise.py`: RNNoise
+  (`pipecat-ai[rnnoise]`, `pyrnnoise`) on the caller's audio, `VOICE_NOISE_FILTER=auto` = browser only. Pipecat 1.15 has no `NoisereduceFilter` any more; RNNoise measured at ~5% of one core
+  per call on 8 kHz and 16 kHz audio.
+

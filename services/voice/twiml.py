@@ -24,6 +24,10 @@ def say_and_hangup(text: str) -> str:
     return f'<?xml version="1.0" encoding="UTF-8"?><Response><Say>{escape(text)}</Say><Hangup/></Response>'
 
 
+def hangup_only() -> str:
+    return '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
+
+
 def twilio_signature(token: str, url: str, params: dict[str, str]) -> str:
     """Twilio/SignalWire request signature: base64(HMAC-SHA1(token, url + sorted(key+value)...))."""
     data = url + "".join(f"{k}{params[k]}" for k in sorted(params))

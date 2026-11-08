@@ -214,6 +214,27 @@ synthetic data only; the first thing spoken is a disclosure that it is an AI ass
 - **Trace of a call:** `run_started` "Voice call connected (Rivera family)" -> `plan` -> briefing `tool_call`/`tool_result` ->
   per turn `message` "Heard: ..." (model `nemotron-asr-streaming`) and "Said: ..." (Lightning; data has LLM first-token, TTS first-audio and voice-to-voice ms)
   with `tool_call`/`tool_result` between them -> `final` (turns, tool calls, p50/p95 voice-to-voice).
+- **Hold-to-talk and the speakerphone guard (browser -> voice agent; added for echo/noise).** Pipecat's RTVI has no client event for
+  "the user stopped speaking" (`user-stopped-speaking` is server -> client only), so the web client sends two RTVI *client messages*
+  (`client-message`; on the wire `data: {t: <type>, d: <payload>}`; in Pipecat Python `on_client_message(rtvi, msg)` with
+  `msg.type`, `msg.data`). The audio itself never changes shape: the browser keeps sending its single Opus audio track, and while
+  the mic is gated (hold-to-talk idle, or the guard while the bot talks) the track is *disabled*, so RTP keeps arriving as digital
+  silence. The client does **not** use `trackStatus` for this (only the Mute button does), so the server must not read silence as
+  "the caller left" and Silero VAD still sees the pause that ends a turn.
+
+  | `msg.type` | `msg.data` | Sent when | The voice agent should |
+  |---|---|---|---|
+  | `ptt` | `{state: "enabled"}` | the person turned "Noisy room? Hold to talk" on (also once right after connect if it was already on) | Expect silence between presses. Skip "are you still there?" idle prompts, and it is safe to shorten the turn-end wait (Smart Turn / hesitation hold) because the end of a turn is now explicit. |
+  | `ptt` | `{state: "disabled"}` | turned off (also ends any held press) | Back to normal turn detection. |
+  | `ptt` | `{state: "pressed"}` | the Hold button went down | Treat as a deliberate barge-in: interrupt the bot now (cancel TTS, flush audio) without waiting for VAD + `barge_in_words`. |
+  | `ptt` | `{state: "released"}` | the button went up; the mic stayed open ~250 ms after the release so the last syllable is already on the wire | End the user's turn **now**: stop waiting for VAD `stop_secs`, Smart Turn and the hesitation hold, drain ASR for ~150-300 ms, then send the aggregated transcript to the LLM. Ignore it if nothing was transcribed. |
+  | `interrupt` | none | the phone "Interrupt" button (speakerphone guard: the mic was closed while the bot spoke, and the tap re-opened it) | Stop speaking now (same as a barge-in). Best effort: a bot that ignores it simply hears the person next. |
+
+  Unknown `state` values and unknown message types must be ignored (no `error-response`). Nothing here needs a reply. The client
+  also reports `micLive` / `botSpeaking` locally from the RTVI `bot-started-speaking` / `bot-stopped-speaking` events the bot already
+  sends, so those two events must keep being emitted around every spoken answer. Not implemented in `services/voice` yet: until it
+  is, hold-to-talk still works (the mic is silent between presses and the VAD ends the turn on its own timers), just without the
+  instant end-of-turn.
 
 ## 7b. Sandbox bank profiles (PNC dataset → Plaid Sandbox custom users)
 
@@ -257,6 +278,18 @@ Formula (pure function in `spacetime/src/credit.ts`, unit-tested, explained in t
 writes ~6 monthly points by recomputing household health from each past month's transactions. A change of ≥15 points creates an
 `alert` (kind `credit`, warn on drops, info on rises) with the main reason. Brian and the coach get a `get_credit_score` tool.
 
+As built (module agent): `credit_score` and `credit_score_history` as above (`credit_score.id` = `member_id`; `band` is the literal text `poor`,
+`fair`, `good`, `very good` or `exceptional`; `factors_json` is an array of `{key, label, value 0..1, weight, points, max_points, explanation}` in
+the order household_health, payment_history, utilization, history_length, new_credit, credit_mix; `points` add up to `score - 300`). Members
+without a `credit_profile` (Plaid / PNC households) are scored from a profile derived from their accounts; children and members of seeded
+households with no profile get no row. History: `recompute_household` writes today's point; worker-only reducer `backfill_credit_history(household_id)`
+(`""` = all households without monthly history) writes the monthly points, and `create_sandbox`, `finish_onboarding` and the seed script call it
+(five monthly points plus today for the seeded data, which starts 9 May). Alert: kind `credit`, id `credit:<household>:<yyyy-mm-dd>`, one per household
+per day, `related_ids_json` = the member ids that moved. One tuning departure: the household-finances factor value is `(health/100) * 0.80`
+(`HEALTH_CREDIT_SCALE`), plus demanding factor curves; see `spacetime/README.md`, "Credit score monitoring". Worker tool `get_credit_score`
+`{member?}` -> `{available, simulated, note, as_of, count, members:[{member_id, member, score, band, change_6m:{points, since, months, from_score}|null,
+top_factors:[{factor, effect: helping|holding back, points, max_points, detail}], history:[{date, score}]}]}`; it is a phone tool (voice view trimmed).
+
 ## 10. Phone callback with a critical alert (demo)
 
 About 15 s after a phone call with Brian ends (`VOICE_CALLBACK_SECS`, default 15; `VOICE_CALLBACK_ENABLED`, default 1), Brian
@@ -271,6 +304,15 @@ calls the same number back from the SignalWire number and says there is a critic
   overnight transfer to a new payee, overdraft risk on a date, a credit score drop, a scam-pattern payment), otherwise drawn
   from a set list of templates filled with plausible amounts and merchants. It's written as a critical `alert` row
   (via the worker), so it appears on the dashboard while the caller is listening. Every callback is a traced `phone` run.
+
+As built (voice + worker agent, 2026-11-08):
+- Voice (`services/voice/callback.py`, `alerts.py`): `VOICE_CALLBACK_ENABLED` (1), `VOICE_CALLBACK_SECS` (15), `VOICE_CALLBACK_RING_SECS` (20), `VOICE_CALLBACK_AMD` (off), cooldown 60 s per caller and 20 per hour. The `cb` token is
+  HMAC-signed with `VOICE_SHARED_SECRET`, single use, 120 s, and carries household + alert + a nonce (never the number). `/twiml?cb=` verifies the SignalWire signature as usual, then streams with a second single-use
+  `cb_session` token. Skipped for WebRTC, calls that never unlocked, errored calls, anonymous numbers and callbacks themselves. 7 templates: card charge in another city, new payee + large 3 a.m. transfer, checking below zero
+  when two bills collide, credit drop after a hard inquiry, gift-card pattern, double charge, card-testing burst.
+- Worker routes (both `x-voice-secret`): `GET /phone/alert_candidates?household_id=` -> `{household_id, family, as_of, candidates[{id, type, source, severity, kind, title, detail, alert_id?, related_ids, facts, priority}], context}`
+  and `POST /phone/callback_alert {run_id, alert{kind, title, detail, related_ids, existing_alert_id?, origin}}` -> `{ok, alert_id, written, reused}` (writes a critical `alert` with id `callback:<household>:<call>` through
+  `agent_create_alert`; refuses a run that was not started as a callback). `POST /phone/start` takes `callback: true` (the run is titled "Voice callback connected").
 
 ## 11. Product scope change
 The Advisor Console is removed: the product is entirely end-user facing. Advisor UI, routes and copy are gone; the

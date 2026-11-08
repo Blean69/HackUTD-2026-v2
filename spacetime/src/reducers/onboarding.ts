@@ -9,6 +9,7 @@
 import { t } from 'spacetimedb/server';
 import spacetimedb from '../schema';
 import { recomputeHousehold } from '../recompute';
+import { backfillCreditHistory } from '../credit_store';
 import { callerName, cleanText, enqueueJob, fail, markDirty, parseJsonArray, randomSuffix, requireHousehold, upsertPresence, type Ctx } from '../util';
 
 /** Priority keys the questions offer (contracts.md section 7, step 5), most important first as the family orders them. */
@@ -310,6 +311,11 @@ export const finish_onboarding = spacetimedb.reducer({ household_id: t.string() 
     if (c.status === 'linking' || c.status === 'syncing') fail('the bank sync is still running, try again in a few seconds');
   }
   recomputeHousehold(ctx, household_id);
+  try {
+    backfillCreditHistory(ctx, household_id); // ~6 monthly credit-score points from the imported transactions
+  } catch (e) {
+    console.error(`finish_onboarding: credit history for ${household_id} failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
   ctx.db.household_profile.household_id.update({ ...profile, onboarding_status: 'done', updated_at: ctx.timestamp });
   let answers: unknown = {};
   try {

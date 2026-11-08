@@ -1,6 +1,7 @@
 // Scheduled recompute (every 60 s) of households that changed, plus a daily refresh so forecasts roll forward.
 import spacetimedb, { recompute_tick } from '../schema';
 import { recomputeHousehold } from '../recompute';
+import { backfillCreditHistory, needsBackfill } from '../credit_store';
 import { closeExpiredProposals } from '../proposals';
 import { isoDay } from '../util';
 
@@ -36,6 +37,14 @@ export const tick_recompute = spacetimedb.reducer(
       }
       try {
         recomputeHousehold(ctx, id);
+        // households that predate the credit history (or were never backfilled) get their monthly points once
+        if (needsBackfill(ctx, id)) {
+          try {
+            backfillCreditHistory(ctx, id);
+          } catch (e) {
+            console.error(`tick_recompute: credit history for ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
       } catch (e) {
         console.error(`tick_recompute: ${id} failed: ${e instanceof Error ? e.message : String(e)}`);
         ctx.db.dirty_household.household_id.delete(id); // do not retry a poison household every minute

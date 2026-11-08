@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from datetime import date
 
 from num2words import num2words
@@ -279,6 +280,7 @@ class SpeechNormalizer:
 
     def __init__(self, today: date | str | None = None):
         self.today = today  # type: ignore[assignment]
+        self.on_spoken: "Callable[[str], None] | None" = None  # told what is about to be spoken (barge.SpokenLog: the echo guard compares against it)
 
     @property
     def today(self) -> date:
@@ -295,7 +297,13 @@ class SpeechNormalizer:
 
     # pipecat TextTransform signature
     async def transform(self, text: str, text_type: str = "sentence") -> str:
-        return self.normalize(text)
+        out = self.normalize(text)
+        if self.on_spoken and out:
+            try:
+                self.on_spoken(out)
+            except Exception:  # pragma: no cover - a log must never break speech
+                pass
+        return out
 
     def normalize(self, text: str) -> str:
         t = self._strip_markup(text or "")

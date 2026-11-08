@@ -6,7 +6,7 @@ import { sha256Hex } from '../sha256';
 import { cleanText, enqueueJob, fail, newId, requireHousehold, WORKFLOWS, type Ctx } from '../util';
 
 const ALERT_SEVERITIES = ['info', 'warn', 'critical'];
-const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor', 'insight'];
+const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor', 'insight', 'credit'];
 const FEASIBILITIES = ['', 'on_track', 'stretch', 'off_track'];
 const GOAL_SOURCES = ['huddle', 'manual', 'coach', 'onboarding'];
 const SCENARIO_STATUSES = ['queued', 'running', 'done', 'error'];

@@ -13,6 +13,7 @@ import type { HouseholdData } from '../types.js';
 import { median, truncate } from '../util.js';
 import type { PhoneCodeSource } from './access.js';
 import { buildBrief, familyLabel } from './brief.js';
+import { buildAlertCandidates, CALLBACK_ALERT_KINDS, CALLBACK_ALERT_PREFIX, type AlertSource, type AnomalyFinding, type CallbackAlertKind } from './callback.js';
 import type { PhoneConfig } from './config.js';
 import { PinChecker, type PinResult } from './identity.js';
 import { isPhoneTool, PHONE_TOOLS, voiceView } from './voice_view.js';
@@ -38,6 +39,8 @@ export interface PhoneDeps {
   cfg: PhoneConfig;
   /** Household codes set in the app (salted hashes from SpacetimeDB), checked before the env PINs. Optional: without it only PHONE_PINS work. */
   codes?: PhoneCodeSource;
+  /** The household's alert rows (for the callback's real signals). Optional: without it the callback uses rule hits and templates only. */
+  alerts?: AlertSource;
   now?: () => number;
   log?: (msg: string) => void;
 }
@@ -50,7 +53,24 @@ export interface StartRequest {
   display_name?: string;
   transport?: string;
   caller?: string;
+  /** True for the call Brian places back after a call ended (docs/contracts.md section 10): the run is titled and planned as a callback. */
+  callback?: boolean;
   llm?: { provider?: string; model?: string };
+}
+
+/** What the voice service sends to POST /phone/callback_alert: the alert it chose for the callback. */
+export interface CallbackAlertRequest {
+  run_id: string;
+  alert: {
+    kind?: string;
+    title?: string;
+    detail?: string;
+    related_ids?: unknown;
+    /** An open critical alert that already is on the dashboard: nothing is written, the trace just says it was reused. */
+    existing_alert_id?: string;
+    /** Where the alert came from, for the trace ("open alert", "rule: card_testing", "template: new_payee_3am"). */
+    origin?: string;
+  };
 }
 
 export interface StartResponse {
@@ -93,6 +113,7 @@ interface Session {
   family: string;
   transport: string;
   caller: string;
+  callback: boolean;
   run: RunContext;
   toolContext: ToolContext;
   startedAt: number;
@@ -195,11 +216,12 @@ export class PhoneService {
 
     const transport = clean(req.transport, 24) || 'webrtc';
     const caller = clean(req.caller, 16) || 'new';
+    const callback = req.callback === true;
     const memberId = clean(req.member_id, 80);
     const firstName = clean(req.first_name, 40) || clean(req.display_name, 40).split(' ')[0] || '';
     const family = familyLabel(data.household.name);
 
-    const jobId = await this.d.enqueueJob('phone', householdId, callId, { transport, caller, ...(memberId ? { member_id: memberId } : {}) });
+    const jobId = await this.d.enqueueJob('phone', householdId, callId, { transport, caller, ...(callback ? { callback: true } : {}), ...(memberId ? { member_id: memberId } : {}) });
     await this.d.sink.claimJob(jobId);
     const runId = `run_${jobId}_${rand()}`;
     await this.d.sink.startRun(runId, jobId);
@@ -214,9 +236,11 @@ export class PhoneService {
       { sink: this.d.sink, llm: this.d.llm, registry: this.d.registry, toolContext, primary: primary as { provider: string; model: string } },
     );
 
-    run.emit('voice_agent', 'run_started', `Voice call connected (${family})`, { call_id: callId, transport, caller, member: firstName || undefined, disclosure_spoken: true, household_id: householdId });
-    const steps = ['Read the health indicators (get_health_indicators)', 'Read the 90-day forecast (get_forecast)', 'Read the monthly obligations (get_obligations)', 'Brief the voice model, then answer questions by voice with the same tools'];
-    run.emit('voice_agent', 'plan', 'Briefing before the first question', { steps });
+    run.emit('voice_agent', 'run_started', callback ? `Voice callback connected (${family})` : `Voice call connected (${family})`, { call_id: callId, transport, caller, member: firstName || undefined, disclosure_spoken: !callback, ...(callback ? { callback: true } : {}), household_id: householdId });
+    const steps = callback
+      ? ['Brian rang the caller back after the first call ended, with a critical alert', 'Read the health indicators, forecast and obligations (get_health_indicators, get_forecast, get_obligations)', 'Put the alert on the dashboard, say it out loud, then stay on the line for questions with the same tools']
+      : ['Read the health indicators (get_health_indicators)', 'Read the 90-day forecast (get_forecast)', 'Read the monthly obligations (get_obligations)', 'Brief the voice model, then answer questions by voice with the same tools'];
+    run.emit('voice_agent', 'plan', callback ? 'Callback with a critical alert' : 'Briefing before the first question', { steps });
 
     const outs = {
       health: await run.tool('voice_agent', 'get_health_indicators', {}),
@@ -232,7 +256,7 @@ export class PhoneService {
     const response: StartResponse = { run_id: runId, household_id: householdId, household_name: data.household.name, family, first_name: firstName, brief, as_of: data.asOf };
     const now = this.now();
     const session: Session = {
-      runId, callId, householdId, memberId, firstName, family, transport, caller, run, toolContext,
+      runId, callId, householdId, memberId, firstName, family, transport, caller, callback, run, toolContext,
       startedAt: now, lastSeen: now, turns: 0, events: 0, toolCalls: 0, toolErrors: 0, tools: {},
       v2v: [], asr: [], llm: [], tts: [], response,
     };
@@ -240,6 +264,60 @@ export class PhoneService {
     this.byCall.set(callId, runId);
     this.log(`[phone] call ${callId} started: run ${runId} (${family}, ${transport}); ${this.byRun.size} live`);
     return response;
+  }
+
+  // ---- callback (docs/contracts.md section 10) ---------------------------------------------------------------------------
+  /** Real signals for the callback's alert, plus the household's account context for the voice service's templates. */
+  async alertCandidates(householdId: string): Promise<Record<string, unknown>> {
+    const id = clean(householdId, 80);
+    if (!/^[A-Za-z0-9_.-]{1,80}$/.test(id)) throw new PhoneError(400, 'bad_household_id');
+    let data: HouseholdData;
+    try {
+      data = await this.d.loadData(id);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new PhoneError(/unknown household/i.test(msg) ? 404 : 502, /unknown household/i.test(msg) ? 'unknown_household' : 'load_failed', msg);
+    }
+    const alerts = await (this.d.alerts?.list(id) ?? Promise.resolve([])).catch(() => []);
+    const scan = await this.d.registry.execute('detect_transaction_anomalies', { limit: 30 }, { data, external: this.d.external });
+    const findings = scan.ok && scan.result && typeof scan.result === 'object' && Array.isArray((scan.result as { findings?: unknown }).findings) ? ((scan.result as { findings: AnomalyFinding[] }).findings) : [];
+    const family = familyLabel(data.household.name);
+    const { candidates, context } = buildAlertCandidates(data, alerts, findings, family);
+    this.log(`[phone] alert candidates for ${family}: ${candidates.length} (${candidates.map((c) => c.type).join(', ') || 'none, the voice service will use a template'})`);
+    return { household_id: id, family, as_of: data.asOf, candidates, context };
+  }
+
+  /** Write the callback's alert as a critical `alert` row (agent_create_alert) and trace it on the callback's run. */
+  async callbackAlert(req: CallbackAlertRequest): Promise<Record<string, unknown>> {
+    const s = this.session(req.run_id);
+    if (!s.callback) throw new PhoneError(409, 'not_a_callback', 'this run is not a callback call');
+    const a = req.alert ?? {};
+    const title = clean(a.title, 200);
+    if (!title) throw new PhoneError(400, 'bad_request', 'alert.title is required');
+    const detail = clean(a.detail, 1000);
+    const kind: CallbackAlertKind = (CALLBACK_ALERT_KINDS as readonly string[]).includes(String(a.kind)) ? (a.kind as CallbackAlertKind) : 'fraud';
+    const related = (Array.isArray(a.related_ids) ? a.related_ids : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 6);
+    const origin = clean(a.origin, 120) || 'callback';
+    const existing = clean(a.existing_alert_id, 120);
+    const run = s.run;
+    run.emit('voice_agent', 'thought', `Why this alert: ${origin}`, { origin, kind, related_ids: related });
+    run.emit('voice_agent', 'tool_call', existing ? 'Reusing the open critical alert already on the dashboard' : 'Raising a critical alert on the dashboard', { tool: 'create_alert', args: { severity: 'critical', kind, title, existing_alert_id: existing || undefined } });
+    if (existing) {
+      run.emit('voice_agent', 'tool_result', `Critical alert on the dashboard: ${title}`, { tool: 'create_alert', ok: true, alert_id: existing, reused: true });
+      return { ok: true, alert_id: existing, written: false, reused: true };
+    }
+    const alertId = `${CALLBACK_ALERT_PREFIX}${s.householdId}:${s.callId}`.slice(0, 200);
+    try {
+      await this.d.sink.createAlert({ id: alertId, household_id: s.householdId, severity: 'critical', kind, title, detail, related_ids: related });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      run.emit('voice_agent', 'tool_result', `Could not write the alert: ${truncate(msg, 160)}`, { tool: 'create_alert', ok: false, error: msg });
+      this.log(`[phone] callback alert for ${s.callId} failed: ${truncate(msg, 160)}`);
+      return { ok: false, alert_id: alertId, written: false, error: truncate(msg, 160) };
+    }
+    run.emit('voice_agent', 'tool_result', `Critical alert on the dashboard: ${title}`, { tool: 'create_alert', ok: true, alert_id: alertId, severity: 'critical', kind, title, detail, related_ids: related });
+    this.log(`[phone] callback alert written for call ${s.callId} (${kind}, ${origin})`);
+    return { ok: true, alert_id: alertId, written: true, reused: false };
   }
 
   // ---- tools ---------------------------------------------------------------------------------------------------------
@@ -419,6 +497,7 @@ const KEEP: Record<string, string[]> = {
   get_forecast: [],
   get_obligations: [],
   get_accounts: [],
+  get_credit_score: [],
   simulate_scenario: ['kind', 'label', 'amount', 'down_payment', 'financed', 'apr_pct', 'term_months', 'income_change_pct', 'income_change_monthly', 'duration_months', 'account_hint', 'months'],
   goal_feasibility: ['title', 'target_amount', 'target_date', 'monthly_contribution'],
   detect_scam_signals: ['text'],

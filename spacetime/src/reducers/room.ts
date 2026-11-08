@@ -3,6 +3,7 @@ import { Timestamp } from 'spacetimedb';
 import { t } from 'spacetimedb/server';
 import spacetimedb from '../schema';
 import { recomputeHousehold } from '../recompute';
+import { backfillCreditHistory } from '../credit_store';
 import { enqueueProposalCheck } from '../proposals';
 import { ROLES, cleanText, enqueueJob, fail, randomSuffix, requireHousehold, upsertPresence } from '../util';
 
@@ -108,6 +109,11 @@ export const create_sandbox = spacetimedb.reducer(
     upsertPresence(ctx, hh, name, prev && prev.role !== 'guest' ? prev.role : 'guest');
 
     recomputeHousehold(ctx, hh);
+    try {
+      backfillCreditHistory(ctx, hh); // ~6 monthly credit-score points from each past month's transactions
+    } catch (e) {
+      console.error(`create_sandbox: credit history for ${hh} failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
     enqueueJob(ctx, 'data_quality', hh, hh, { template_household_id: tpl.id, created_by: name });
   },
 );
@@ -132,6 +138,8 @@ export const delete_sandbox = spacetimedb.reducer({ household_id: t.string() }, 
   for (const r of [...ctx.db.health_indicator.household_id.filter(household_id)]) ctx.db.health_indicator.id.delete(r.id);
   for (const r of [...ctx.db.forecast_point.household_id.filter(household_id)]) ctx.db.forecast_point.id.delete(r.id);
   for (const r of [...ctx.db.alert.household_id.filter(household_id)]) ctx.db.alert.id.delete(r.id);
+  for (const r of [...ctx.db.credit_score.household_id.filter(household_id)]) ctx.db.credit_score.id.delete(r.id);
+  for (const r of [...ctx.db.credit_score_history.household_id.filter(household_id)]) ctx.db.credit_score_history.id.delete(r.id);
   for (const r of [...ctx.db.goal.household_id.filter(household_id)]) ctx.db.goal.id.delete(r.id);
   for (const r of [...ctx.db.huddle.household_id.filter(household_id)]) ctx.db.huddle.id.delete(r.id);
   for (const r of [...ctx.db.transcript_line.household_id.filter(household_id)]) ctx.db.transcript_line.id.delete(r.id);

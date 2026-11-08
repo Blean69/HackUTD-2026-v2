@@ -32,6 +32,28 @@ UNLOCKED = "Thanks, you're in. I've got the {family} here. What can I help with?
 IDLE_PROMPT = "Are you still there?"
 IDLE_BYE = "I'll let you go for now. Call back any time. Goodbye."
 MAX_CALL_BYE = "That's the time limit for this demo call. Thanks for chatting. Goodbye."
+# On a phone call that can be followed by a callback (docs/contracts.md section 10) every goodbye says so.
+RING_BACK = "If something urgent comes up, I might ring you back."
+IDLE_BYE_RING_BACK = f"I'll let you go for now. Call back any time. {RING_BACK} Goodbye."
+MAX_CALL_BYE_RING_BACK = f"That's the time limit for this demo call. Thanks for chatting. {RING_BACK} Goodbye."
+
+
+def idle_bye(ring_back: bool = False) -> str:
+    return IDLE_BYE_RING_BACK if ring_back else IDLE_BYE
+
+
+def max_call_bye(ring_back: bool = False) -> str:
+    return MAX_CALL_BYE_RING_BACK if ring_back else MAX_CALL_BYE
+
+
+# The callback: Brian rings the same number back after the first call ended, with a critical alert.
+CALLBACK_OPENING = "Hi, it's Brian again, sorry to call right back. I've got a critical alert on your account."
+CALLBACK_DASHBOARD = "It's on your dashboard now."
+CALLBACK_ASK = "Want me to go through it?"
+CALLBACK_IDLE_BYE = "I'll leave that with you. It's on your dashboard, and you can call me back any time. Goodbye."
+# Voicemail (answering-machine detection says a machine picked up): no balances, no details, nothing private.
+CALLBACK_VOICEMAIL = "Hi, it's Brian, your finance assistant. I'm an AI. I'm calling about a critical alert on your account. It's on your dashboard in the app, and you can call me back any time. Goodbye."
+CALLBACK_EXPIRED = "Sorry, I lost the thread on that call. Please call me back any time. Goodbye."
 ERROR_LINE = "Sorry, I lost that for a second. Could you say it again?"
 TOO_BUSY = "All my lines are busy right now. Please try again in a minute. Goodbye."
 LINE_CLOSED = "This line is closed right now. Goodbye."
@@ -97,7 +119,10 @@ def humanize_brief(brief: list[str], today: str = "") -> list[str]:
 
 
 # ---- the system prompt ------------------------------------------------------------------------------------------------------
-def system_prompt(*, family: str, first_name: str, brief: list[str], today: str, channel: str = "web") -> str:
+def system_prompt(*, family: str, first_name: str, brief: list[str], today: str, channel: str = "web", callback_notes: str = "", may_ring_back: bool = False) -> str:
+    """callback_notes: the alert Brian just raised on a callback (alerts.system_notes). may_ring_back: a phone call that a callback can follow."""
+    ring_back = f'\n- When they are done, your goodbye ALSO says you might ring them right back if something urgent comes up, for example: "Take care! {RING_BACK}"' if may_ring_back else ""
+    callback = f"\nTHIS IS A CALLBACK\n{callback_notes.strip()}\n" if callback_notes.strip() else ""
     who = f"You are talking with {first_name} from the {family}." if first_name else f"You are talking with someone from the {family}."
     brief_text = "\n".join(f"- {line}" for line in humanize_brief(brief, today))
     where = "in the browser" if channel == "web" else "by phone"
@@ -115,7 +140,7 @@ HOW YOU TALK (follow strictly)
 - If you're not sure what they mean or an amount sounds odd, ask ONE short question first.
 - If you don't know, say "I'm not sure". Never invent a number, date or account. Use only the notes below and what your tools return.
 - Money can feel stressful. If they sound worried, be gentle: lead with what is okay, keep it simple, no scary words.
-- When they're done ("that's all", "thanks", "bye"), say a short, warm goodbye and stop.
+- When they're done ("that's all", "thanks", "bye"), say a short, warm goodbye and stop.{ring_back}
 - Dry, playful humor sometimes: about one turn in four, add a quick aside after the answer. Never when they're worried, or about debt trouble, scams or health.
 
 HONESTY AND LIMITS
@@ -148,6 +173,7 @@ Good: Sorry, afford which one?
 Caller: Thanks, that's all.
 Good: Anytime. Take care!
 
+{callback}
 WHAT YOU KNOW RIGHT NOW (as of {today})
 {brief_text}
 """

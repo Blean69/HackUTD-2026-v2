@@ -67,7 +67,7 @@ export function routeCoach(question: string, asOf: string): RoutedCall[] {
     return calls;
   }
   if (/debt|credit|score|utiliz|card balance/.test(q)) {
-    calls.push({ tool: 'get_credit_profiles', args: {}, why: 'I read the credit profiles first.' });
+    calls.push({ tool: 'get_credit_score', args: {}, why: 'I read the simulated credit scores and what drives them first.' });
     calls.push({ tool: 'get_accounts', args: {}, why: 'Then I check the balances and rates behind them.' });
     return calls;
   }
@@ -138,6 +138,21 @@ export function composeCoachAnswer(question: string, results: { name: string; re
         break;
       case 'get_obligations':
         parts.push(`Fixed monthly obligations total ${usd(r.monthly_total)} across ${r.count} items.`);
+        break;
+      case 'get_credit_score':
+        if (!r.available) {
+          parts.push(r.note ?? 'No simulated credit score is available yet.');
+          break;
+        }
+        parts.push(
+          `Simulated credit scores: ${(r.members ?? [])
+            .map((m: { member: string; score: number; band: string; change_6m: { points: number; months: number } | null; top_factors: { factor: string; effect: string }[] }) => {
+              const move = m.change_6m ? `, ${m.change_6m.points >= 0 ? 'up' : 'down'} ${Math.abs(m.change_6m.points)} over ${m.change_6m.months} months` : '';
+              const why = m.top_factors.map((f) => `${f.factor.toLowerCase()} ${f.effect}`).join(' and ');
+              return `${m.member} ${m.score} (${m.band}${move}; ${why})`;
+            })
+            .join('; ')}. These are demo numbers, not a real credit report.`,
+        );
         break;
       case 'get_credit_profiles':
         parts.push(`Credit scores: ${(r.profiles ?? []).map((p: { member: string; score: number; utilization_pct: number }) => `${p.member} ${p.score} (${p.utilization_pct}% utilization)`).join(', ')}.`);

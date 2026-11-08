@@ -31,13 +31,14 @@ from pipecat.processors.frameworks.rtvi import RTVIProcessor, RTVIServerMessageF
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.nvidia.stt import NvidiaSTTService
 from pipecat.transports.base_transport import BaseTransport
-from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy, TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
 import acks
+import alerts
 import prompts
+from barge import BargeControl, EchoAwareStart, PttAwareStop, PttAwareTimeout
 from config import Settings
 from llm import build_llm, sanitize_messages
 from pacing import SentenceCap
@@ -61,7 +62,11 @@ class CallInit:
     household_id: str = ""  # webrtc: from the offer's request data
     display_name: str = ""
     caller_hash: str = ""
-    caller: str = "new"  # known | new (never the number itself)
+    caller: str = "new"  # known | new | callback (never the number itself)
+    call_sid: str = ""  # SignalWire's CallSid; only used to look up the number held for a possible callback
+    callback: Any = None  # callback.CallbackPlan when Brian placed this call (already unlocked: no PIN gate)
+    may_ring_back: bool = False  # a phone call a callback can follow: every goodbye says Brian might ring back
+    noise_filter: str = "off"  # what the input noise filter is for this call ("rnnoise" | "off"), for the run's stats
 
 
 async def fetch_tools(client: WorkerClient, max_age: float = 300) -> list[dict]:
@@ -88,19 +93,25 @@ def to_tools_schema(specs: list[dict]) -> ToolsSchema:
     return ToolsSchema(standard_tools=out)
 
 
-def _stop_strategies(s: Settings, phone: bool = False) -> list:
+def _stop_strategies(s: Settings, phone: bool = False, barge: BargeControl | None = None) -> list:
     """Smart Turn v3 decides when the caller is finished (a timer alone cuts people off at a pause), with two guards against a hesitant caller
     being split into several turns: a transcript that trails off ("uh", "so", "and the") gets `hesitation_hold_secs` more (turns.py), and
     `turn_hold_secs` > 0 adds a timer that must ALSO have run out (pipecat's default stop_mode is ALL), so a one-word "wait" followed by a
-    breath is not taken as a whole turn. turn_hold_secs unset = 0.6 s on the phone (long pauses, 8 kHz audio), none in the browser."""
+    breath is not taken as a whole turn. turn_hold_secs unset = 0.6 s on the phone (long pauses, 8 kHz audio), none in the browser.
+    With `barge` the strategies also end the turn at once when the browser's hold-to-talk button is released (barge.py)."""
     if not s.smart_turn:
         return [SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.8)]
     analyzer = LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=s.smart_turn_stop_secs))
-    first = HesitationAwareStop(turn_analyzer=analyzer, hesitation_hold_secs=s.hesitation_hold_secs) if s.hesitation_hold_secs > 0 else TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)
+    if barge is not None:  # a live call: the same strategies, plus the talk button's "I'm done"
+        first = PttAwareStop(turn_analyzer=analyzer, hesitation_hold_secs=max(0.0, s.hesitation_hold_secs))
+    else:
+        first = HesitationAwareStop(turn_analyzer=analyzer, hesitation_hold_secs=s.hesitation_hold_secs) if s.hesitation_hold_secs > 0 else TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)
     stops: list = [first]
     hold = s.turn_hold_secs if s.turn_hold_secs is not None else (0.6 if phone else 0.0)
     if hold > 0:
-        stops.append(SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=hold))
+        stops.append((PttAwareTimeout if barge is not None else SpeechTimeoutUserTurnStopStrategy)(user_speech_timeout=hold))
+    if barge is not None:
+        barge.stops = [x for x in stops if hasattr(x, "force_end")]
     return stops
 
 
@@ -200,6 +211,9 @@ class VoiceCall:
         self.reporter = TraceReporter(self.client)
         self.run_id: str | None = None
         self.family = ""
+        self.unlocked = False  # a phone call that passed the PIN (callbacks only follow those)
+        self.household_id = init.household_id
+        self.first_name = ""
         self.end_reason = "hangup"
         self.stats: dict[str, Any] = {"transport": init.transport_label, "barge_ins": 0, "turns": 0, "tts_voice": settings.tts_voice}
         self._idle_prompted = False
@@ -209,6 +223,11 @@ class VoiceCall:
         self._turn: dict[str, Any] = {}
         self._tap = LLMTap(max_words=settings.turn_cap_words, on_empty=self._on_empty_reply)
         self.speech = SpeechNormalizer()  # dates follow the demo's as_of once the run starts
+        self.barge = BargeControl(echo_overlap=settings.echo_overlap, grace_secs=settings.echo_grace_secs)
+        self.barge.interrupt = self._interrupt_bot
+        self.barge.on_echo = self._note_echo
+        self.speech.on_spoken = self.barge.spoken.add  # the echo guard compares what is heard with what the voice was just given to say
+        self._echo_notes = 0
         self.fillers = prompts.FillerPicker()
         self._filled = False  # one filler per caller turn, even when the model chains two tools
         self.tts_choice: TTSChoice | None = None
@@ -249,16 +268,17 @@ class VoiceCall:
                 # finished, so a pause mid-thought ("if we bought a... thirty-five thousand dollar car") does not trigger an answer.
                 vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=s.vad_stop_secs if s.smart_turn else max(s.vad_stop_secs, 0.5))),
                 user_turn_strategies=UserTurnStrategies(
-                    # barge-in needs two words while the bot is talking, so a cough or hall noise does not cut it off
-                    start=[MinWordsUserTurnStartStrategy(min_words=s.barge_in_words)],
-                    stop=_stop_strategies(s, phone),
+                    # barge-in needs two words (phone) or three (browser) while the bot is talking, and not an echo of what it just said (barge.py)
+                    start=[EchoAwareStart(min_words=s.barge_in_words if phone else s.barge_in_words_webrtc, barge=self.barge)],
+                    stop=_stop_strategies(s, phone, self.barge),
                 ),
                 user_idle_timeout=float(s.idle_secs),
             ),
         )
 
+        callback = init.callback if phone else None
         gate = None
-        if phone:
+        if phone and not callback:  # a callback is already unlocked: the signed token that brought it here is the proof
             gate = PinGate(verify=self._verify_pin, on_unlocked=self._on_pin_ok, on_locked=self._on_pin_locked, pin_length=s.pin_length)
         procs = [self.transport.input(), *( [gate] if gate else [] ), stt, user_agg, self.llm, self._tap, tts, self._ack, self.transport.output(), asst_agg]
 
@@ -347,12 +367,16 @@ class VoiceCall:
         async def _idle(_agg):
             if not self.run_id:
                 return
-            if not self._idle_prompted:
+            if self.init.callback is not None and self.stats["turns"] == 0:
+                # nobody has said a word since Brian spoke (not picked up, or voicemail): what he said is the message; do not wait around
+                self.end_reason = "callback_no_reply"
+                await self._goodbye(prompts.CALLBACK_IDLE_BYE)
+            elif not self._idle_prompted:
                 self._idle_prompted = True
                 await self.worker.queue_frame(TTSSpeakFrame(prompts.IDLE_PROMPT, append_to_context=False))
             else:
                 self.end_reason = "idle"
-                await self._goodbye(prompts.IDLE_BYE)
+                await self._goodbye(prompts.idle_bye(self.init.may_ring_back))
 
         @self.transport.event_handler("on_client_connected")
         async def _connected(_t, _client):
@@ -360,7 +384,10 @@ class VoiceCall:
             self.reporter.start()
             if s.llm_warm:
                 asyncio.create_task(self.llm.warm(), name="llm-prewarm")  # TLS to every provider while the disclosure plays; never blocks it
-            if phone:
+            if callback:
+                await self.worker.queue_frame(TTSSpeakFrame(prompts.CALLBACK_OPENING, append_to_context=True))
+                asyncio.create_task(self._activate_callback(), name="activate-callback")
+            elif phone:
                 await self.worker.queue_frame(TTSSpeakFrame(prompts.disclosure_phone(s.pin_length, s.pin_variable), append_to_context=False))
             else:
                 await self.worker.queue_frame(TTSSpeakFrame(prompts.DISCLOSURE_WEB, append_to_context=False))
@@ -379,6 +406,13 @@ class VoiceCall:
             async def _rtvi_ready(_p):
                 self._rtvi_ready = True
                 await self._send_run_message()
+
+            @self._rtvi.event_handler("on_client_message")
+            async def _client_message(_p, msg):
+                # {type: "ptt", data: {state: enabled|disabled|pressed|released}} and {type: "interrupt"} (docs/contracts.md section 8)
+                done = await self.barge.client_message(getattr(msg, "type", ""), getattr(msg, "data", None))
+                if done:
+                    logger.info(f"client message: {done}")
 
         try:
             await self.runner.run()
@@ -400,6 +434,9 @@ class VoiceCall:
                 await closer()
             except Exception:
                 pass
+        self.stats["noise_filter"] = self.init.noise_filter
+        if any(self.barge.stats.values()):
+            self.stats["barge"] = {k: v for k, v in self.barge.stats.items() if v}
         if self.run_id:
             await self.client.end(self.run_id, self.end_reason, self.stats)
         if self._owns_client:
@@ -441,6 +478,19 @@ class VoiceCall:
         self._bot_audible = True
         if time.monotonic() > self._ack_until:  # an acknowledgement is not the answer: the watchdog keeps watching until real speech
             self._cancel_watchdog()
+
+    # ---- barge-in helpers --------------------------------------------------------------------------------------------------------
+    async def _interrupt_bot(self) -> None:
+        """Stop Brian talking right now (the browser's talk button was pressed over him, or its Interrupt button)."""
+        if self._rtvi:
+            await self._rtvi.interrupt_bot()
+        elif self.worker:
+            await self.worker.queue_frame(InterruptionFrame())
+
+    def _note_echo(self, text: str) -> None:
+        self._echo_notes += 1
+        if self._echo_notes <= 3:  # the glass box says so, a few times per call
+            self.reporter.note("Ignored an echo of Brian's own voice (not an interruption)", heard_words=len(text.split()))
 
     # ---- acknowledgements ---------------------------------------------------------------------------------------------------------
     async def _load_acks(self) -> None:
@@ -519,7 +569,7 @@ class VoiceCall:
         await asyncio.sleep(self.s.max_call_secs)
         self.end_reason = "max_duration"
         self.reporter.note("Call reached the maximum length; hanging up")
-        await self._goodbye(prompts.MAX_CALL_BYE)
+        await self._goodbye(prompts.max_call_bye(self.init.may_ring_back))
 
     # ---- activation: the call becomes a traced agent_run with the household's brief and tools ------------------------------
     async def _activate_web(self) -> None:
@@ -530,7 +580,7 @@ class VoiceCall:
             self.end_reason = f"error: start failed ({e})"[:120]
             await self._goodbye(prompts.PIN_UNAVAILABLE)
 
-    async def _activate(self, *, household_id: str, display_name: str, first_name: str, member_id: str, speak: str | None) -> None:
+    async def _activate(self, *, household_id: str, display_name: str, first_name: str, member_id: str, speak: str | None, callback: Any = None, callback_notes: str = "") -> None:
         init = self.init
         # the briefing call and the tool list are independent: fetch them together (the list is cached 5 min across calls)
         resp, specs = await asyncio.gather(
@@ -543,6 +593,7 @@ class VoiceCall:
                 transport=init.transport_label,
                 caller=init.caller,
                 llm={"provider": "nvidia", "model": self.s.llm_model},
+                **({"callback": True} if callback else {}),
             ),
             fetch_tools(self.client),
         )
@@ -551,7 +602,7 @@ class VoiceCall:
         self.speech.today = resp.get("as_of") or None
         self.reporter.set_run(self.run_id)
         self.context.messages[0]["content"] = prompts.system_prompt(
-            family=self.family, first_name=resp.get("first_name", ""), brief=resp.get("brief", []), today=resp.get("as_of", ""), channel="phone" if init.kind == "phone" else "web"
+            family=self.family, first_name=resp.get("first_name", ""), brief=resp.get("brief", []), today=resp.get("as_of", ""), channel="phone" if init.kind == "phone" else "web", callback_notes=callback_notes, may_ring_back=init.may_ring_back
         )
         self.context.set_tools(to_tools_schema(specs))
         for sp in specs:
@@ -563,6 +614,34 @@ class VoiceCall:
         await self._send_run_message()
         if speak:
             await self.worker.queue_frame(TTSSpeakFrame(speak.format(family=self.family), append_to_context=True))
+
+    # ---- callback: Brian rings back with a critical alert -------------------------------------------------------------------
+    async def _activate_callback(self) -> None:
+        """The opening line is already playing. Start the (traced) run, put the alert on the dashboard, then say it. The model only takes
+        over for the caller's questions, so the alert is spoken even if the LLM is down."""
+        plan = self.init.callback
+        alert: alerts.CallbackAlert = plan.alert
+        self.household_id, self.first_name, self.unlocked = plan.household_id, plan.first_name, True
+        try:
+            await self._activate(household_id=plan.household_id, display_name="", first_name=plan.first_name, member_id="", speak=None, callback=plan, callback_notes=alerts.system_notes(alert))
+        except Exception as e:
+            logger.error(f"could not start the callback run: {e}")
+            self.end_reason = f"error: start failed ({e})"[:120]
+            await self._goodbye(prompts.PIN_UNAVAILABLE)
+            return
+        posted = await self._post_callback_alert(alert)
+        self.reporter.note("Callback: critical alert ready", source=alert.source, origin=alert.origin, kind=alert.kind, on_dashboard=posted)
+        await self.worker.queue_frame(TTSSpeakFrame(alerts.spoken_script(alert, posted=posted), append_to_context=True))
+
+    async def _post_callback_alert(self, alert: "alerts.CallbackAlert") -> bool:
+        """True when the alert is on the dashboard (written now, or an open critical one that was already there)."""
+        try:
+            r = await self.client.callback_alert(self.run_id or "", alert.api_payload())
+            return bool(r.get("ok"))
+        except WorkerError as e:
+            logger.warning(f"callback alert not written: {e}")
+            self.reporter.error("Could not put the callback alert on the dashboard", detail=str(e)[:160])
+            return False
 
     async def _send_run_message(self) -> None:
         """{type: "run", run_id} so the browser can link to Agent Trail; sent once the run exists AND the RTVI client is ready."""
@@ -584,6 +663,7 @@ class VoiceCall:
 
     async def _on_pin_ok(self, info: dict[str, Any]) -> None:
         self.reporter.note("PIN verified on the keypad", caller=self.init.caller)
+        self.unlocked, self.household_id, self.first_name = True, info["household_id"], info.get("first_name", "")  # a callback may follow this call
         try:
             await self._activate(household_id=info["household_id"], display_name="", first_name=info.get("first_name", ""), member_id=info.get("member_id", ""), speak=prompts.UNLOCKED)
         except Exception as e:

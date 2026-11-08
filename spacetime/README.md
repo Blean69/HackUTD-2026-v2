@@ -22,13 +22,18 @@ spacetime/
     config.ts                        worker-secret hash resolution (private module_config row, else the dev hash), publisher
     proposals.ts                     family-voting helpers: details validation, deadline check, check enqueue, expiry sweep
     recompute.ts                     tables <-> finance.ts glue for recompute_household
+    household_input.ts               reads one household's rows into the plain shape finance.ts / credit.ts take
     finance.ts                       PURE math: indicators, 90-day forecast, rule alerts. No imports.
+    credit.ts                        PURE math: the synthetic credit score (docs/contracts.md section 9), history backfill, alert drafts
+    credit_store.ts                  tables <-> credit.ts glue: credit_score, credit_score_history, `credit` alerts, the backfill
     sha256.ts                        PURE SHA-256 (the V8 module runtime has no sync crypto)
     phone.ts                         PURE phone-code helpers: pepper, hashPin, weak-code rules (not exported from index.ts)
-    reducers/{lifecycle,room,huddle,family,proposal,plaid,onboarding,phone,recompute,worker,admin,seed}.ts
+    reducers/{lifecycle,room,huddle,family,proposal,plaid,onboarding,phone,recompute,credit,worker,admin,seed}.ts
     finance.test.ts                  `node --test`, no SpacetimeDB needed
     module.test.ts                   vitest + SpacetimeDB test harness: every reducer path
     phone.test.ts                    vitest: set/clear_phone_pin rules, the worker view, sandbox cleanup
+    credit.test.ts                   vitest, pure: the formula, bands, health blend, rewinding a household, backfill, alerts, seeded-family bands
+    credit_module.test.ts            vitest + harness: credit_score / history rows, backfill reducer, alerts, sandboxes, onboarded households
 ```
 
 Only the schema and reducers are exported from `index.ts` (SpacetimeDB treats every export as part of the module).
@@ -39,6 +44,7 @@ Only the schema and reducers are exported from `index.ts` (SpacetimeDB treats ev
 |---|---|---|
 | `household` (+ `home_value`, `vehicle_value`), `member`, `account`, `txn`, `credit_profile`, `obligation`, `conversation` | yes | `seed_*`, `create_sandbox`, Plaid reducers |
 | `health_indicator`, `forecast_point`, `alert` (rule rows have ids `rule:...`) | yes | `recompute_household`, `tick_recompute`; worker adds alerts |
+| `credit_score`, `credit_score_history` (docs/contracts.md section 9) | yes | `recompute_household` (and so `tick_recompute`, `create_sandbox`, `finish_onboarding`), `backfill_credit_history`; `credit` alerts too |
 | `goal`, `presence`, `huddle`, `transcript_line`, `scenario`, `coach_message`, `advisor_note` | yes | family reducers, worker |
 | `agent_job`, `agent_run`, `trace_event` | yes | enqueuing reducers, worker |
 | `bank_connection` | yes | worker (Plaid) |
@@ -81,7 +87,7 @@ Lifecycle: `init` (records the publisher, starts the 60 s tick), `onConnect` (lo
 Scheduled (private, fired by SpacetimeDB): `tick_recompute`, every 60 s (recomputes dirty households and closes proposals past their deadline).
 
 Worker-only (rejected with `worker only` unless the sender is in `worker`):
-`claim_job`, `start_run`, `finish_run`, `emit_trace`, `agent_upsert_goal`, `agent_create_alert`,
+`backfill_credit_history`, `claim_job`, `start_run`, `finish_run`, `emit_trace`, `agent_upsert_goal`, `agent_create_alert`,
 `agent_update_scenario`, `agent_update_proposal`, `agent_set_account_options`, `agent_coach_reply`, `set_huddle_status`, `purge_transcript`,
 `seed_households`, `seed_members`, `seed_accounts`, `seed_credit`, `seed_txns`, `seed_obligations`,
 `seed_conversations`, `seed_proposals`, `seed_votes`, and the Plaid set `agent_save_plaid_item`, `agent_set_bank_connection`,
@@ -161,6 +167,54 @@ the newest trustworthy transaction ("as of"), not the wall clock.
 Measured on the seeded households (evaluation only, outside the module): duplicates 10 of 11, garbled 10 of 10,
 impossible 3 of 3, card testing 7 of 7, no false positives.
 
+## Credit score monitoring (`src/credit.ts`, docs/contracts.md section 9)
+
+A synthetic 300 to 850 score per member, always "Simulated score for this demo". `recompute_household` computes it from the
+indicators it has just produced (so it reuses `analyzeHousehold`, nothing is forked) and writes `credit_score` (one row per member,
+`factors_json` = six factors with value, weight, points and a plain-English line) plus today's `credit_score_history` point.
+
+```
+raw   = 0.45*household_health + 0.20*payment + 0.15*utilization + 0.08*history + 0.06*new_credit + 0.06*mix      (each 0..1)
+score = round(300 + 550*raw), clamped 300..850        band: <580 poor | 580-669 fair | 670-739 good | 740-799 very good | 800+ exceptional
+```
+
+- **household_health** is the dashboard's Health score (`apps/web/lib/finance.ts` `healthModel`: the mean of the per-indicator scores,
+  ported as `householdHealth` in credit.ts), scaled by `HEALTH_CREDIT_SCALE` (below).
+- **Member factors** come from the member's `credit_profile`. A member with none (a Plaid or PNC household has no `credit_profile` rows
+  at all) gets a profile derived from the household: utilization from its cards (balance / limit), late payments from late-fee style
+  transactions (distinct months in the last 24), hard inquiries from credit accounts opened in the last year, history length from the
+  oldest account (5 years when no account has an opened date). Every non-child member is scored then; a household with no accounts yet has
+  no scores. In a seeded household only members with a profile are scored (the children are not).
+- **History.** `recompute_household` upserts today's point (idempotent per day). `backfill_credit_history(household_id)` (worker-only;
+  `""` = every household with no monthly history yet, 25 at most) rewinds the household to the same day of each of the last six months:
+  transactions up to that day, balances wound back by the transactions since (assets minus, debts plus; rows the data-quality rules exclude
+  are ignored), accounts not yet opened left out. It reruns `analyzeHousehold` on that, blends Household Health and scores each member. A date needs
+  28 days of transactions behind it, so the seeded data (starting 9 May) gives five monthly points plus today. The backfill runs from the seed
+  script, `create_sandbox`, `finish_onboarding`, and once from `tick_recompute` for a household that has none (a sandbox from before this
+  existed). It never writes an alert and a failure in it never breaks the reducer that called it.
+- **Alerts.** When a recompute moves a member's score by 15 points or more since the last look, one alert per household per day is
+  written: kind `credit`, id `credit:<household>:<yyyy-mm-dd>`, severity `warn` for a drop and `info` for a rise, title "Ana's credit score
+  dropped 30 points to 690", detail naming the factor that moved the most. It needs a history baseline (a point older than today) and is
+  skipped while an onboarding household is still importing, so seeding and bank sync never raise one.
+
+### Tuning (what changed from "obvious" curves, and why)
+
+With first-draft curves (a clean profile scores close to 1.0 in every factor) and `household_health/100` as the health factor, the seeded
+families came out a band too high: Riveras 759 to 793 (very good), Nguyens 824 (exceptional), Brooks 794 to 818 (very good/exceptional), Okafors 653 to 668,
+Patel 455. A clean file is worth 0.55 of the raw score by itself and the dashboard gives these households 79 to 98, so almost everyone
+with no late payments lands above 750. To get the spread the contract asks for there are two knobs, both in `credit.ts`:
+
+1. `HEALTH_CREDIT_SCALE = 0.80`: the household-finances factor is `(health/100) * 0.80`. A perfect dashboard score is not a perfect
+   borrower: the other 55% is credit behaviour the dashboard cannot see. This is the one deliberate departure from "`health/100`" in the
+   contract; the weights, the formula and the bands are exactly as specified. Consequence: the practical ceiling is 801 (health 100 and a
+   spotless profile with four kinds of debt), so "exceptional" means flawless.
+2. `CURVES`: a 1.0 is reserved for top-tier behaviour. Utilization peaks at 3 to 5% (a card nobody uses, 0%, is 0.85; 10% is 0.70, 30% is
+   0.32, 75% is 0.06); history length reaches 1.0 only at 40 years (20 years is 0.80); inquiries 0/1/2/3/4 = 1.0/0.72/0.50/0.35/0.20; late
+   payments 0/1/2/3 = 1.0/0.70/0.45/0.30; credit mix 0..4 kinds of debt = 0.20/0.40/0.55/0.70/1.0.
+
+Result on the seeded data (`credit.test.ts` pins the bands): Rivera 692 / 697 / 735 good; Okafor 622 / 599 fair; Nguyen 768 / 768 very good;
+Patel 438 poor; Brooks 723 / 732 good and 756 very good (Walter's spotless 45-year file puts him one band up; the family average, 737, is good).
+
 ## Run it locally
 
 ```bash
@@ -227,7 +281,7 @@ The secret could also move into a module environment variable (`schema(..., { en
 ```bash
 npm run typecheck        # tsc --noEmit
 npm run test:pure        # node --test src/finance.test.ts : math, rules, SHA-256 vs node:crypto (Node >= 22.18 runs .ts directly)
-npm test                 # vitest: every reducer against the real in-memory datastore (needs spacetimedb >= 2.12)
+npm test                 # vitest: every reducer against the real in-memory datastore (needs spacetimedb >= 2.12), plus the pure credit tests
 ```
 
 ## Procedures

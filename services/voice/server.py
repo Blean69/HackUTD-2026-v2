@@ -3,6 +3,7 @@
   POST  /api/offer   browser WebRTC signalling (Pipecat SmallWebRTC request/response JSON; request data = {household_id, display_name})
   PATCH /api/offer   trickle ICE candidates
   POST  /twiml       SignalWire/Twilio voice webhook -> cXML <Connect><Stream url="wss://<host>/voice/ws">
+                     (/twiml?cb=<token>: the webhook of the callback Brian placed, see callback.py and docs/contracts.md section 10)
   WS    /ws          Twilio-format media stream (SignalWire speaks the same protocol)
   GET   /health
 
@@ -35,9 +36,11 @@ from bot import CallInit, VoiceCall, fetch_tools
 from config import Settings, load_env, load_settings
 from ice import parse_ice_servers
 from llm import build_providers
+from noise import available as noise_available, build_noise_filter, noise_filter_mode
 from tts import choose_tts, resolve_elevenlabs_voice
 from worker_client import WorkerClient
-from twiml import build_twiml, caller_hash, make_stream_token, say_and_hangup, url_variants, valid_stream_token, verify_webhook
+from callback import CallbackManager, install_log_redaction
+from twiml import build_twiml, caller_hash, hangup_only, make_stream_token, say_and_hangup, url_variants, valid_stream_token, verify_webhook
 
 SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
 
@@ -95,10 +98,13 @@ async def _keep_warm(s: Settings) -> None:
         await client.aclose()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, callbacks: CallbackManager | None = None) -> FastAPI:
     s = settings or load_settings()
+    install_log_redaction()  # phone numbers never reach a log line
     active: dict[str, asyncio.Task] = {}  # call_id -> bot task
     handler_holder: dict[str, SmallWebRTCRequestHandler] = {}
+    cb_worker = WorkerClient(s.worker_url, s.shared_secret, timeout=6.0)
+    callbacks = callbacks or CallbackManager(s, worker=cb_worker)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -112,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             logger.warning("VOICE_SHARED_SECRET is not set: the worker will refuse every /phone/* call")
         if not s.signature_token:
             logger.warning("SIGNALWIRE_SIGNING_KEY is empty: /twiml does not verify the webhook signature (the media socket still needs the signed stream token)")
+        logger.info(callbacks.status_line())
         if not s.nvidia_api_key:
             logger.warning("no NVIDIA_VOICE_API_KEY / NVIDIA_API_KEY: speech and the LLM will fail")
         warm = asyncio.create_task(_keep_warm(s), name="keep-warm")
@@ -119,9 +126,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         warm.cancel()
         for t in list(active.values()):
             t.cancel()
+        await callbacks.aclose()
+        await cb_worker.aclose()
         await handler_holder["h"].close()
 
     app = FastAPI(title="keystone-voice", lifespan=lifespan)
+    app.state.callbacks = callbacks
     app.add_middleware(CORSMiddleware, allow_origins=s.cors_origins, allow_methods=["GET", "POST", "PATCH", "OPTIONS"], allow_headers=["*"], max_age=600)
 
     def spawn(call: VoiceCall) -> None:
@@ -134,6 +144,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 logger.exception(f"call {cid} crashed")
             finally:
                 active.pop(cid, None)
+                callbacks.call_ended(call)  # a phone call that passed the PIN is followed by a callback (never raises)
 
         active[cid] = asyncio.create_task(_run(), name=f"call-{cid}")
 
@@ -155,6 +166,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "nvidia_key": bool(s.nvidia_api_key),
             "worker_secret": bool(s.shared_secret),
             "phone_line": bool(s.signalwire_number),
+            "noise_filter": {"webrtc": noise_filter_mode(s.noise_filter, phone=False), "phone": noise_filter_mode(s.noise_filter, phone=True), "installed": noise_available()},
+            "barge_in_words": {"webrtc": s.barge_in_words_webrtc, "phone": s.barge_in_words},
+            "callback": callbacks.enabled,  # whether Brian rings back after a phone call (no numbers, no secrets)
         }
 
     # ---- browser: SmallWebRTC ----------------------------------------------------------------------------------------------
@@ -179,8 +193,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         async def on_connection(connection: SmallWebRTCConnection) -> None:
             call_id = _safe_id(f"web-{connection.pc_id}", "web")
-            transport = SmallWebRTCTransport(webrtc_connection=connection, params=TransportParams(audio_in_enabled=True, audio_out_enabled=True))
-            init = CallInit(call_id=call_id, kind="webrtc", transport_label="webrtc", household_id=household_id, display_name=display_name)
+            noise, noise_label = build_noise_filter(s.noise_filter, phone=False)  # a fresh RNNoise per call (it keeps state)
+            extra = {"audio_in_filter": noise} if noise else {}
+            transport = SmallWebRTCTransport(webrtc_connection=connection, params=TransportParams(audio_in_enabled=True, audio_out_enabled=True, **extra))
+            init = CallInit(call_id=call_id, kind="webrtc", transport_label="webrtc", household_id=household_id, display_name=display_name, noise_filter=noise_label)
             spawn(VoiceCall(s, init, transport))
 
         return await handler_holder["h"].handle_web_request(request=req, webrtc_connection_callback=on_connection)
@@ -214,6 +230,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not s.enabled or "twilio" not in s.transports:
             return Response(say_and_hangup(prompts.LINE_CLOSED), media_type="text/xml")
         ws_url = f"wss://{s.public_hostname}{s.public_path}/ws"
+        cb = request.query_params.get("cb")
+        if cb is not None:  # the webhook of a call Brian placed (signature already verified above)
+            answer = callbacks.store.answer(cb)
+            if answer is None:
+                logger.warning("/twiml?cb= with a bad, expired or already used callback token")
+                return Response(say_and_hangup(prompts.CALLBACK_EXPIRED), media_type="text/xml")
+            plan, session = answer
+            answered_by = (form.get("AnsweredBy") or "").lower()  # only present when VOICE_CALLBACK_AMD is on
+            if s.callback_amd != "off" and (answered_by.startswith("machine") or answered_by == "fax"):
+                callbacks.store.discard(plan.nonce)
+                if answered_by.startswith("machine_end"):  # the greeting is over and the beep has played: leave the short, private message
+                    logger.info("callback reached voicemail: leaving the short message")
+                    return Response(say_and_hangup(prompts.CALLBACK_VOICEMAIL), media_type="text/xml")
+                logger.info(f"callback reached a machine ({answered_by}): hanging up")
+                return Response(hangup_only(), media_type="text/xml")
+            logger.info("callback answered: streaming")
+            return Response(
+                build_twiml(ws_url, {"token": make_stream_token(s.shared_secret), "call_sid": form.get("CallSid", ""), "caller_hash": plan.caller_hash, "cb_session": session}),
+                media_type="text/xml",
+            )
+        callbacks.remember(form.get("CallSid", ""), form.get("From", ""))  # memory only, until this call ends; never logged
         params = {
             "token": make_stream_token(s.shared_secret),  # the media socket only accepts streams started from here
             "call_sid": form.get("CallSid", ""),
@@ -245,9 +282,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         stream_sid, call_sid = start.get("streamSid", ""), start.get("callSid") or params.get("call_sid", "")
         call_id = _safe_id(f"tel-{call_sid or stream_sid}", "tel")
         serializer = TwilioFrameSerializer(stream_sid=stream_sid, call_sid=call_sid or None, params=TwilioFrameSerializer.InputParams(auto_hang_up=False))
-        transport = FastAPIWebsocketTransport(websocket=ws, params=FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True, add_wav_header=False, serializer=serializer))
+        noise, noise_label = build_noise_filter(s.noise_filter, phone=True)  # off by default on the phone (VOICE_NOISE_FILTER=on|phone to enable)
+        extra = {"audio_in_filter": noise} if noise else {}
+        transport = FastAPIWebsocketTransport(websocket=ws, params=FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True, add_wav_header=False, serializer=serializer, **extra))
         ch = params.get("caller_hash", "")
-        init = CallInit(call_id=call_id, kind="phone", transport_label="signalwire", caller_hash=ch, caller="known" if ch and ch in s.known_caller_hashes else "new")
+        plan = callbacks.store.connect(params.get("cb_session")) if params.get("cb_session") else None
+        if params.get("cb_session") and plan is None:  # a callback stream whose session token is bad, expired or already used
+            logger.warning("rejected a callback media stream without a valid session token")
+            await ws.close(code=1008)
+            return
+        init = CallInit(
+            call_id=call_id, kind="phone", transport_label="signalwire", caller_hash=ch,
+            caller="callback" if plan else ("known" if ch and ch in s.known_caller_hashes else "new"),
+            call_sid=call_sid, callback=plan, household_id=plan.household_id if plan else "",
+            may_ring_back=bool(callbacks.enabled and not plan), noise_filter=noise_label,
+        )
         call = VoiceCall(s, init, transport)
         spawn(call)
         task = active.get(call_id)

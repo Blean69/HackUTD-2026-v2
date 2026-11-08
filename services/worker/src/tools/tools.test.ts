@@ -141,7 +141,7 @@ describe('detect_scam_signals', () => {
 describe('registry', () => {
   const reg = buildRegistry();
   it('exposes every required tool with a JSON schema', () => {
-    for (const n of ['get_accounts', 'get_transactions', 'get_obligations', 'get_credit_profiles', 'get_health_indicators', 'get_forecast', 'simulate_scenario', 'goal_feasibility', 'detect_transaction_anomalies', 'detect_scam_signals', 'fred_series', 'college_scorecard']) {
+    for (const n of ['get_accounts', 'get_transactions', 'get_obligations', 'get_credit_profiles', 'get_credit_score', 'get_health_indicators', 'get_forecast', 'simulate_scenario', 'goal_feasibility', 'detect_transaction_anomalies', 'detect_scam_signals', 'fred_series', 'college_scorecard']) {
       expect(reg.has(n)).toBe(true);
     }
     const spec = reg.specs(['simulate_scenario'])[0]!;

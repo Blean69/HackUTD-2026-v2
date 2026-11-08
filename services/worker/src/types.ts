@@ -82,6 +82,35 @@ export interface GoalRow {
   feasibility: string;
 }
 
+/** One line of a member's simulated credit score breakdown (the module's `credit_score.factors_json`). */
+export interface CreditFactorRow {
+  key: string;
+  label: string;
+  /** 0..1, higher is better. */
+  value: number;
+  weight: number;
+  /** Points this factor adds on the 300..850 scale. */
+  points: number;
+  max_points: number;
+  /** One plain-English line. */
+  explanation: string;
+}
+
+/** A member's simulated credit score (docs/contracts.md section 9). Only members with a score appear. */
+export interface CreditScoreRow {
+  member_id: string;
+  score: number;
+  band: string;
+  factors: CreditFactorRow[];
+}
+
+/** One dated point of a member's score history (daily recompute plus the monthly backfill). */
+export interface CreditHistoryRow {
+  member_id: string;
+  date: string;
+  score: number;
+}
+
 export interface HouseholdInfo {
   id: string;
   name: string;
@@ -104,6 +133,9 @@ export interface HouseholdData {
   health: HealthIndicator[];
   forecast: ForecastPoint[];
   goals: GoalRow[];
+  /** Simulated credit scores per member and their history. Optional: absent in fixtures and before the module computed any. */
+  credit_scores?: CreditScoreRow[];
+  credit_history?: CreditHistoryRow[];
   /** "Today" for this household's data (YYYY-MM-DD). */
   asOf: string;
 }

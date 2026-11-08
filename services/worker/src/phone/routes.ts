@@ -6,11 +6,13 @@
 //   POST /phone/tool     {run_id, name, args}                     -> {ok, result (voiceView), summary, ms}
 //   POST /phone/trace    {run_id, events[]}                       -> {ok, accepted, dropped}
 //   POST /phone/end      {run_id, reason, stats}                  -> {ok, turns, tool_calls, p50_ms, p95_ms}
+//   GET  /phone/alert_candidates?household_id=                    -> {household_id, family, as_of, candidates[], context}   (callback, callback.ts)
+//   POST /phone/callback_alert {run_id, alert}                    -> {ok, alert_id, written, reused}                          (callback, callback.ts)
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Handler, HttpRequest, HttpResponse, Router } from '../http.js';
 import { router as sharedRouter } from '../router.js';
 import { loadPhoneConfig, type PhoneConfig } from './config.js';
-import { PhoneError, type PhoneService, type StartRequest, type TraceItem } from './session.js';
+import { PhoneError, type CallbackAlertRequest, type PhoneService, type StartRequest, type TraceItem } from './session.js';
 
 const json = (status: number, body: unknown): HttpResponse => ({ status, body });
 const sha = (s: string): Buffer => createHash('sha256').update(s).digest();
@@ -70,7 +72,7 @@ export function registerPhoneRoutes(router: Router, getRuntime: () => PhoneRunti
     guarded(async (svc, req) => {
       const b = await readJson(req);
       const llm = b.llm && typeof b.llm === 'object' ? (b.llm as { provider?: string; model?: string }) : undefined;
-      const r: StartRequest = { call_id: str(b.call_id), household_id: str(b.household_id), member_id: str(b.member_id), first_name: str(b.first_name), display_name: str(b.display_name), transport: str(b.transport), caller: str(b.caller), ...(llm ? { llm } : {}) };
+      const r: StartRequest = { call_id: str(b.call_id), household_id: str(b.household_id), member_id: str(b.member_id), first_name: str(b.first_name), display_name: str(b.display_name), transport: str(b.transport), caller: str(b.caller), ...(b.callback === true ? { callback: true } : {}), ...(llm ? { llm } : {}) };
       return json(200, await svc.start(r));
     }),
   );
@@ -93,6 +95,20 @@ export function registerPhoneRoutes(router: Router, getRuntime: () => PhoneRunti
     guarded(async (svc, req) => {
       const b = await readJson(req, 256 * 1024);
       return json(200, svc.trace({ run_id: str(b.run_id), events: Array.isArray(b.events) ? (b.events as TraceItem[]) : [] }));
+    }),
+  );
+  router.add(
+    'GET',
+    '/phone/alert_candidates',
+    guarded(async (svc, req) => json(200, await svc.alertCandidates(req.query.get('household_id') ?? ''))),
+  );
+  router.add(
+    'POST',
+    '/phone/callback_alert',
+    guarded(async (svc, req) => {
+      const b = await readJson(req);
+      const alert = b.alert && typeof b.alert === 'object' && !Array.isArray(b.alert) ? (b.alert as CallbackAlertRequest['alert']) : {};
+      return json(200, await svc.callbackAlert({ run_id: str(b.run_id), alert }));
     }),
   );
   router.add(

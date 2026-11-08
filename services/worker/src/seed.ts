@@ -1,4 +1,5 @@
-// npm run seed: load data/seed/*.json into SpacetimeDB through the seed_* reducers, then recompute each household.
+// npm run seed: load data/seed/*.json into SpacetimeDB through the seed_* reducers, then recompute each household and
+// backfill its credit score history.
 // Idempotent: the reducers skip ids that already exist; recompute is deterministic.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -66,6 +67,12 @@ async function main(): Promise<void> {
   for (const id of households) {
     await r.recomputeHousehold({ householdId: id });
     console.log(`[seed] recomputed ${id}`);
+  }
+  // credit score monitoring (docs/contracts.md section 9): about six monthly history points per household, from each past
+  // month's transactions. Idempotent; run after the recompute so today's score is the first point.
+  for (const id of households) {
+    await r.backfillCreditHistory({ householdId: id });
+    console.log(`[seed] credit history ${id}`);
   }
   conn.disconnect();
   console.log('[seed] done');

@@ -1,4 +1,5 @@
 import { detectTransactionAnomalies } from './anomalies.js';
+import { creditTools } from './credit.js';
 import { externalTools } from './external.js';
 import { goalFeasibilityTool } from './feasibility.js';
 import { ledgerTools } from './ledger.js';
@@ -10,6 +11,7 @@ import { simulateScenario } from './simulate.js';
 export function buildRegistry(): ToolRegistry {
   return new ToolRegistry().register(
     ...ledgerTools,
+    ...creditTools,
     simulateScenario,
     goalFeasibilityTool,
     detectTransactionAnomalies,

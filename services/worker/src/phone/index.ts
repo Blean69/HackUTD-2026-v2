@@ -9,6 +9,7 @@ import type { ToolRegistry } from '../tools/registry.js';
 import type { HouseholdData } from '../types.js';
 import { sleep } from '../util.js';
 import { SpacetimePhoneCodes } from './access.js';
+import { SpacetimeAlertSource } from './callback.js';
 import { getPhoneRuntime, setPhoneRuntime } from './routes.js';
 import { PhoneService } from './session.js';
 
@@ -16,6 +17,7 @@ export { getPhoneRuntime, resetPhoneRuntime, setPhoneRuntime } from './routes.js
 export { loadPhoneConfig, parsePins } from './config.js';
 export { PhoneService, PhoneError } from './session.js';
 export { PHONE_TOOLS, voiceView } from './voice_view.js';
+export { buildAlertCandidates, SpacetimeAlertSource, StaticAlertSource, type AlertCandidate, type AlertRow, type AlertSource } from './callback.js';
 export { hashPin, matchStoredPin, PHONE_PIN_PEPPER, SpacetimePhoneCodes, StaticPhoneCodes, type PhoneCodeRow, type PhoneCodeSource } from './access.js';
 
 export interface AttachPhoneDeps {
@@ -45,6 +47,7 @@ export function attachPhone(conn: DbConnection, deps: AttachPhoneDeps): PhoneSer
   void codes.attach();
   const service = new PhoneService({
     codes,
+    alerts: new SpacetimeAlertSource(conn),
     sink: deps.sink,
     registry: deps.registry,
     external: deps.external,

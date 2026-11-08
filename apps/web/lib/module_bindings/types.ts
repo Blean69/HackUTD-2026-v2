@@ -134,6 +134,26 @@ export const CreditProfile = __t.object("CreditProfile", {
 });
 export type CreditProfile = __Infer<typeof CreditProfile>;
 
+export const CreditScore = __t.object("CreditScore", {
+  id: __t.string(),
+  householdId: __t.string(),
+  memberId: __t.string(),
+  score: __t.u32(),
+  band: __t.string(),
+  factorsJson: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type CreditScore = __Infer<typeof CreditScore>;
+
+export const CreditScoreHistory = __t.object("CreditScoreHistory", {
+  id: __t.string(),
+  householdId: __t.string(),
+  memberId: __t.string(),
+  date: __t.string(),
+  score: __t.u32(),
+});
+export type CreditScoreHistory = __Infer<typeof CreditScoreHistory>;
+
 export const DirtyHousehold = __t.object("DirtyHousehold", {
   householdId: __t.string(),
   markedAt: __t.timestamp(),

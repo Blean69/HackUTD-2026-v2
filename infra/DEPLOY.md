@@ -302,8 +302,11 @@ The SignalWire phone line needs **no** rule (its media socket arrives as `wss://
 | `PHONE_PINS` | phone | `1234:hh_rivera,5678:hh_nguyen` (optionally `pin:household:member_id`). Synthetic PINs, printed on the demo card |
 | `PHONE_CALLER_SALT` | phone | random salt; caller numbers are only kept as a salted hash, never stored or logged |
 | `SIGNALWIRE_SIGNING_KEY` | phone | verifies the `X-SignalWire-Signature` on `/voice/twiml`. **Empty = skipped with a logged warning**; the media socket stays protected by a short-lived signed token either way |
-| `SIGNALWIRE_SPACE_URL`, `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_PHONE_NUMBER` | phone | informational for the team (the number is shown in `/voice/health`); the service never calls the SignalWire API |
+| `SIGNALWIRE_SPACE_URL`, `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_PHONE_NUMBER` | phone | inbound: informational (the number is shown in `/voice/health`). **The callback uses all four** to place the outbound call through the SignalWire Compatibility API (see "Phone callback" below) |
 | `VOICE_ENABLED`, `VOICE_MAX_CALL_SECS` (300), `VOICE_MAX_SESSIONS` (3), `PHONE_MAX_SESSIONS` (4), `VOICE_IDLE_SECS` (20), `VOICE_TRANSPORTS` (`webrtc,twilio`) | optional | `VOICE_ENABLED=0` is the kill switch (button gets 503, the number says "closed" and hangs up) |
+| `VOICE_NOISE_FILTER` (`auto`) | button (phone optional) | RNNoise on the caller's audio before the VAD and the ASR: `auto` = browser only, `on` = browser and phone, `phone`, `off`. Needs the `rnnoise` extra in `services/voice/requirements.txt` (so rebuild the voice image); missing = the call runs without it |
+| `VOICE_BARGE_IN_WORDS_WEBRTC` (3), `VOICE_BARGE_IN_WORDS` (2) | button / phone | words of speech that interrupt Brian in the browser / on the phone |
+| `VOICE_ECHO_OVERLAP` (0.6), `VOICE_ECHO_GRACE_SECS` (1.0) | button / phone | echo guard: while Brian talks (and this long after) an interruption whose words line up in order with what he just said is ignored as his own echo; `VOICE_ECHO_OVERLAP=0` turns it off |
 | `VOICE_LLM_MODEL`, `VOICE_LLM_BASE_URL`, `VOICE_LLM_API_KEY`, `VOICE_LLM_TEMPERATURE` (0.7), `VOICE_LLM_MAX_TOKENS` (110) | optional | point at the Brev box by setting base URL + model + key |
 
 The SignalWire values may all stay empty: the Talk button needs none of them.
@@ -328,6 +331,43 @@ candidate pair with a `srflx` candidate for `52.72.164.85`. The call appears at 
 **Operate.** `infra/dc logs -f --tail=100 voice` (heard/said lines, tool timings, no secrets); kill switch: set `VOICE_ENABLED=0` and `infra/deploy.sh`;
 calls end after `VOICE_MAX_CALL_SECS`, after two silent prompts ("Are you still there?", then goodbye; `VOICE_IDLE_SECS` apart), or when the tab closes; the worker also finishes any call with no traffic for 10 minutes as `error: abandoned`.
 On a laptop one live call used about 190 MB and about 20% of one core (`docker stats`); the container limit is 1.2 GB. The image is about 1 GB (no torch).
+
+### Phone callback: Brian rings back with a critical alert (docs/contracts.md section 10)
+
+About `VOICE_CALLBACK_SECS` (15) after a **phone** call that passed the PIN ends, Brian calls the same number back **from the SignalWire number**:
+"Hi, it's Brian again, sorry to call right back. I've got a critical alert on your account." He states the alert, says what he did or recommends, and
+stays on the line for questions. The alert is written as a critical `alert` row (so the dashboard shows it during the call) and the call is a traced `phone` run.
+Browser (WebRTC) calls and calls that never unlocked get no callback; one callback per call; a callback is never followed by another.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `SIGNALWIRE_SPACE_URL`, `SIGNALWIRE_PROJECT_ID`, `SIGNALWIRE_API_TOKEN`, `SIGNALWIRE_PHONE_NUMBER` | none | **All four are needed**, plus `VOICE_SHARED_SECRET` (it signs the callback tokens) and `PHONE_CALLER_SALT`. Anything missing = callbacks stay off (one line in the voice log names what) |
+| `VOICE_CALLBACK_ENABLED` | `1` | `0` = kill switch for the callback only (calls still work) |
+| `VOICE_CALLBACK_SECS` | `15` | wait after the first call ends; `0` = immediately |
+| `VOICE_CALLBACK_RING_SECS` | `20` | SignalWire `Timeout`: stop ringing after this long (also keeps most calls out of the carrier's voicemail) |
+| `VOICE_CALLBACK_AMD` | `off` | SignalWire answering-machine detection: `off`, `enable` (a machine = hang up), `detect_message_end` (waits for the beep, then leaves a short private message: no amounts, no card digits). Both add a few seconds before Brian speaks to a person. Field names follow SignalWire's LaML call API (`MachineDetection`, `AnsweredBy`); not yet tried on a live call |
+| `VOICE_CALLBACK_COOLDOWN_SECS` / `VOICE_CALLBACK_MAX_PER_HOUR` | `60` / `20` | at most one callback per caller number per minute, and this many in total per hour (cost and abuse guard) |
+
+How it works, and what it never does:
+* **Outbound call:** `POST https://<space>/api/laml/2010-04-01/Accounts/<project>/Calls.json` (basic auth project:token; `From`, `To`, `Url`, `Method=POST`, `Timeout`).
+  `Url` = `https://<host>/voice/twiml?cb=<token>`. SignalWire signs that webhook with the same signing key, so `SIGNALWIRE_SIGNING_KEY` verification stays on for it.
+* **Token:** HMAC-signed with `VOICE_SHARED_SECRET`, **single use, valid 2 minutes**, names the household and the alert, never the phone number. The media stream then needs a second
+  single-use session token that only `/twiml?cb=` hands out.
+* **The caller's number** comes from the inbound webhook's `From`, lives **in the voice process's memory only** until that call ends, is used for the one dial and is dropped.
+  It is never stored, sent to the worker, put in a token or logged: logs carry the salted hash (first 8 characters), and a log filter masks anything number-shaped as a backstop.
+  `anonymous`/withheld numbers get no callback.
+* **The alert:** the worker route `GET /phone/alert_candidates?household_id=` offers the household's real signals (open critical/warn alerts, card-testing / scam-payment / new-payee /
+  duplicate rule hits from the anomaly scan, a forecast overdraft on a date, a credit-score alert). With none, one of 7 templates is filled from the household's accounts, bills and dates.
+  `POST /phone/callback_alert` writes it (`agent_create_alert`, severity critical, id `callback:<household>:<call>`) and traces it on the callback's run. Both routes need `x-voice-secret`.
+* Brian's goodbye on a callback-eligible call says he might ring back (the model is told to; the idle and time-limit goodbyes are fixed text).
+
+**First live test (the team, ~10 minutes).** 1. `.env.prod` has the four `SIGNALWIRE_*` values, `SIGNALWIRE_SIGNING_KEY`, `VOICE_SHARED_SECRET`, `PHONE_CALLER_SALT`, `PHONE_PINS`;
+run `infra/deploy.sh` (rebuilds voice and worker). 2. `curl -s https://<host>/voice/health` shows `"callback": true` and `infra/dc logs voice | grep callback:` shows `callback: on (15s ...)`.
+3. Open the household's dashboard (Alerts) in a browser. A SignalWire **trial** account only calls numbers that are purchased or verified (docs/voice-selfhost.md), so use a verified cell or fund the account.
+4. Call the number from that cell, key the PIN, ask one question, say goodbye (Brian says he might ring back), hang up. 5. About 15 seconds later the phone rings from the SignalWire number: answer.
+Brian says the opening line and the alert; a new critical alert appears on the dashboard; `/agents` shows a `phone` run "Voice callback connected". Ask a question, hang up: no second call.
+6. If nothing rings: `infra/dc logs voice | grep -i callback` shows `callback scheduled ...`, `callback call placed ...` or `callback not placed: SignalWire <http status> <code>` (the status and SignalWire's error code only; 401 = wrong project or token), then SignalWire Dashboard -> Logs.
+No `callback scheduled` line at all means the call was not eligible: no PIN unlock, a withheld caller ID, `VOICE_CALLBACK_ENABLED=0`, a missing `SIGNALWIRE_*` value, or the one-per-minute cooldown.
 
 ## 10. Brev GPU (Nemotron on vLLM) through an SSH tunnel
 

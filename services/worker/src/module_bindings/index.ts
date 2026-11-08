@@ -50,6 +50,7 @@ import AgentUpsertGoalReducer from "./agent_upsert_goal_reducer";
 import AgentUpsertTxnsReducer from "./agent_upsert_txns_reducer";
 import AppendTranscriptReducer from "./append_transcript_reducer";
 import AskCoachReducer from "./ask_coach_reducer";
+import BackfillCreditHistoryReducer from "./backfill_credit_history_reducer";
 import CastVoteReducer from "./cast_vote_reducer";
 import ClaimJobReducer from "./claim_job_reducer";
 import ClearPhonePinReducer from "./clear_phone_pin_reducer";
@@ -100,6 +101,8 @@ import BankConnectionRow from "./bank_connection_table";
 import CoachMessageRow from "./coach_message_table";
 import ConversationRow from "./conversation_table";
 import CreditProfileRow from "./credit_profile_table";
+import CreditScoreRow from "./credit_score_table";
+import CreditScoreHistoryRow from "./credit_score_history_table";
 import ForecastPointRow from "./forecast_point_table";
 import GoalRow from "./goal_table";
 import HealthIndicatorRow from "./health_indicator_table";
@@ -272,6 +275,40 @@ const tablesSchema = __schema({
       { name: 'credit_profile_member_id_key', constraint: 'unique', columns: ['memberId'] },
     ],
   }, CreditProfileRow),
+  creditScore: __table({
+    name: 'credit_score',
+    indexes: [
+      { accessor: 'household_id', name: 'credit_score_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'credit_score_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'member_id', name: 'credit_score_member_id_idx_btree', algorithm: 'btree', columns: [
+        'memberId',
+      ] },
+    ],
+    constraints: [
+      { name: 'credit_score_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CreditScoreRow),
+  creditScoreHistory: __table({
+    name: 'credit_score_history',
+    indexes: [
+      { accessor: 'household_id', name: 'credit_score_history_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'credit_score_history_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'member_id', name: 'credit_score_history_member_id_idx_btree', algorithm: 'btree', columns: [
+        'memberId',
+      ] },
+    ],
+    constraints: [
+      { name: 'credit_score_history_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CreditScoreHistoryRow),
   forecastPoint: __table({
     name: 'forecast_point',
     indexes: [
@@ -533,6 +570,7 @@ const reducersSchema = __reducers(
   __reducerSchema("agent_upsert_txns", AgentUpsertTxnsReducer),
   __reducerSchema("append_transcript", AppendTranscriptReducer),
   __reducerSchema("ask_coach", AskCoachReducer),
+  __reducerSchema("backfill_credit_history", BackfillCreditHistoryReducer),
   __reducerSchema("cast_vote", CastVoteReducer),
   __reducerSchema("claim_job", ClaimJobReducer),
   __reducerSchema("clear_phone_pin", ClearPhonePinReducer),
@@ -591,6 +629,10 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "coach_message": Omit<typeof tablesSchema.schemaType.tables["coachMessage"], "accessorName"> & { readonly accessorName: "coach_message" };
     /** @deprecated Use `creditProfile` instead. This alias will be removed in the next major version. */
     readonly "credit_profile": Omit<typeof tablesSchema.schemaType.tables["creditProfile"], "accessorName"> & { readonly accessorName: "credit_profile" };
+    /** @deprecated Use `creditScore` instead. This alias will be removed in the next major version. */
+    readonly "credit_score": Omit<typeof tablesSchema.schemaType.tables["creditScore"], "accessorName"> & { readonly accessorName: "credit_score" };
+    /** @deprecated Use `creditScoreHistory` instead. This alias will be removed in the next major version. */
+    readonly "credit_score_history": Omit<typeof tablesSchema.schemaType.tables["creditScoreHistory"], "accessorName"> & { readonly accessorName: "credit_score_history" };
     /** @deprecated Use `forecastPoint` instead. This alias will be removed in the next major version. */
     readonly "forecast_point": Omit<typeof tablesSchema.schemaType.tables["forecastPoint"], "accessorName"> & { readonly accessorName: "forecast_point" };
     /** @deprecated Use `healthIndicator` instead. This alias will be removed in the next major version. */
@@ -632,6 +674,8 @@ const tableAccessorAliases = {
   "bank_connection": "bankConnection",
   "coach_message": "coachMessage",
   "credit_profile": "creditProfile",
+  "credit_score": "creditScore",
+  "credit_score_history": "creditScoreHistory",
   "forecast_point": "forecastPoint",
   "health_indicator": "healthIndicator",
   "household_profile": "householdProfile",
@@ -674,6 +718,10 @@ export type DbView = __DbViewBase & {
   readonly "coach_message": __DbViewBase["coachMessage"];
   /** @deprecated Use `creditProfile` instead. This alias will be removed in the next major version. */
   readonly "credit_profile": __DbViewBase["creditProfile"];
+  /** @deprecated Use `creditScore` instead. This alias will be removed in the next major version. */
+  readonly "credit_score": __DbViewBase["creditScore"];
+  /** @deprecated Use `creditScoreHistory` instead. This alias will be removed in the next major version. */
+  readonly "credit_score_history": __DbViewBase["creditScoreHistory"];
   /** @deprecated Use `forecastPoint` instead. This alias will be removed in the next major version. */
   readonly "forecast_point": __DbViewBase["forecastPoint"];
   /** @deprecated Use `healthIndicator` instead. This alias will be removed in the next major version. */
@@ -708,6 +756,10 @@ export type Tables = __TablesBase & {
   readonly "coach_message": __TablesBase["coachMessage"];
   /** @deprecated Use `creditProfile` instead. This alias will be removed in the next major version. */
   readonly "credit_profile": __TablesBase["creditProfile"];
+  /** @deprecated Use `creditScore` instead. This alias will be removed in the next major version. */
+  readonly "credit_score": __TablesBase["creditScore"];
+  /** @deprecated Use `creditScoreHistory` instead. This alias will be removed in the next major version. */
+  readonly "credit_score_history": __TablesBase["creditScoreHistory"];
   /** @deprecated Use `forecastPoint` instead. This alias will be removed in the next major version. */
   readonly "forecast_point": __TablesBase["forecastPoint"];
   /** @deprecated Use `healthIndicator` instead. This alias will be removed in the next major version. */

@@ -132,7 +132,11 @@ class Settings:
     vad_stop_secs: float = 0.2
     smart_turn: bool = True
     smart_turn_stop_secs: float = 2.0  # longest silence tolerated when Smart Turn thinks the caller is mid-thought
-    barge_in_words: int = 2
+    barge_in_words: int = 2  # words that interrupt Brian on the phone
+    barge_in_words_webrtc: int = 3  # VOICE_BARGE_IN_WORDS_WEBRTC: in the browser (speakers echo, rooms are noisy) it takes three
+    noise_filter: str = "auto"  # VOICE_NOISE_FILTER: auto (RNNoise on WebRTC only) | on | webrtc | phone | off (noise.py)
+    echo_overlap: float = 0.6  # VOICE_ECHO_OVERLAP: a would-be interruption this similar to what Brian just said is his own echo and is ignored (0 = off)
+    echo_grace_secs: float = 1.0  # VOICE_ECHO_GRACE_SECS: the guard also covers this long after he stops (the tail of his sentence is still arriving)
     turn_hold_secs: float | None = None  # also require this much quiet after the caller's last word (Smart Turn AND timer). None = auto: 0.6 on the phone, 0 in the browser
     hesitation_hold_secs: float = 1.5  # extra wait when the last words are a filler or dangling word ("uh", "so", "and the"); 0 = off
     acks: bool = True  # pre-rendered "Mm-hm." / "Got it." the moment the caller's turn ends (acks.py)
@@ -148,6 +152,17 @@ class Settings:
     # the media socket is still protected by the short-lived stream token
     signature_token: str = ""
     signalwire_number: str = ""
+    # callback after a phone call (docs/contracts.md section 10): Brian rings the same number back with a critical alert. Needs the four
+    # SIGNALWIRE_* values below plus VOICE_SHARED_SECRET (it signs the callback tokens); anything missing = the feature stays off.
+    signalwire_space_url: str = ""  # SIGNALWIRE_SPACE_URL, e.g. yourspace.signalwire.com
+    signalwire_project_id: str = ""
+    signalwire_api_token: str = ""
+    callback_enabled: bool = True  # VOICE_CALLBACK_ENABLED (default 1)
+    callback_secs: float = 15.0  # VOICE_CALLBACK_SECS: wait after the first call ends before dialling
+    callback_ring_secs: int = 20  # VOICE_CALLBACK_RING_SECS: give up ringing after this long (also keeps most calls out of voicemail)
+    callback_amd: str = "off"  # VOICE_CALLBACK_AMD: off | enable | detect_message_end (SignalWire answering-machine detection)
+    callback_cooldown_secs: float = 60.0  # VOICE_CALLBACK_COOLDOWN_SECS: at most one callback per caller number in this window
+    callback_max_per_hour: int = 20  # VOICE_CALLBACK_MAX_PER_HOUR: cost and abuse cap across all callers
 
     @property
     def tts_grpc_server(self) -> str:
@@ -207,6 +222,10 @@ def load_settings() -> Settings:
         smart_turn=_s("VOICE_SMART_TURN", "1") != "0",
         smart_turn_stop_secs=_f("VOICE_SMART_TURN_STOP_SECS", 2.0),
         barge_in_words=_i("VOICE_BARGE_IN_WORDS", 2),
+        barge_in_words_webrtc=max(1, _i("VOICE_BARGE_IN_WORDS_WEBRTC", 3)),
+        noise_filter=_s("VOICE_NOISE_FILTER", "auto").lower(),
+        echo_overlap=min(1.0, max(0.0, _f("VOICE_ECHO_OVERLAP", 0.6))),
+        echo_grace_secs=max(0.0, _f("VOICE_ECHO_GRACE_SECS", 1.0)),
         turn_hold_secs=_f("VOICE_TURN_HOLD_SECS", -1.0) if _s("VOICE_TURN_HOLD_SECS") else None,
         hesitation_hold_secs=max(0.0, _f("VOICE_HESITATION_HOLD_SECS", 1.5)),
         llm_providers=[x.lower() for x in _list("VOICE_LLM_PROVIDERS", "brev,nvidia_lightning,nvidia_nano")] or ["nvidia_lightning"],
@@ -232,4 +251,13 @@ def load_settings() -> Settings:
         known_caller_hashes=_list("KNOWN_CALLER_HASHES"),
         signature_token=_s("SIGNALWIRE_SIGNING_KEY") or _s("TWILIO_AUTH_TOKEN"),
         signalwire_number=_s("SIGNALWIRE_PHONE_NUMBER"),
+        signalwire_space_url=_s("SIGNALWIRE_SPACE_URL"),
+        signalwire_project_id=_s("SIGNALWIRE_PROJECT_ID"),
+        signalwire_api_token=_s("SIGNALWIRE_API_TOKEN"),
+        callback_enabled=_s("VOICE_CALLBACK_ENABLED", "1") != "0",
+        callback_secs=max(0.0, _f("VOICE_CALLBACK_SECS", 15.0)),
+        callback_ring_secs=max(0, _i("VOICE_CALLBACK_RING_SECS", 20)),
+        callback_amd=_s("VOICE_CALLBACK_AMD", "off").lower() if _s("VOICE_CALLBACK_AMD", "off").lower() in ("off", "enable", "detect_message_end") else "off",
+        callback_cooldown_secs=max(0.0, _f("VOICE_CALLBACK_COOLDOWN_SECS", 60.0)),
+        callback_max_per_hour=max(0, _i("VOICE_CALLBACK_MAX_PER_HOUR", 20)),
     )

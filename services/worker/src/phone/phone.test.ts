@@ -212,7 +212,7 @@ describe('PhoneService: one call = one traced agent_run', () => {
     expect(bad.error).toMatch(/invalid arguments/);
   });
 
-  it('tools(): the seven phone tools, in order, with a slim simulate_scenario', () => {
+  it('tools(): the phone tools, in order (including get_credit_score), with a slim simulate_scenario', () => {
     const { svc } = setup();
     const tools = svc.tools();
     expect(tools.map((t) => t.name)).toEqual([...PHONE_TOOLS]);
@@ -222,7 +222,7 @@ describe('PhoneService: one call = one traced agent_run', () => {
     expect(props).not.toContain('proceeds_to_cash');
     expect(props).not.toContain('start_month');
     // read-only lookups take no arguments (an optional filter sent Lightning in a loop over every obligation kind)
-    for (const n of ['get_obligations', 'get_accounts', 'get_forecast', 'get_health_indicators']) {
+    for (const n of ['get_obligations', 'get_accounts', 'get_forecast', 'get_health_indicators', 'get_credit_score']) {
       expect(Object.keys((tools.find((t) => t.name === n)!.parameters as { properties: Record<string, unknown> }).properties), n).toEqual([]);
     }
     expect((tools.find((t) => t.name === 'goal_feasibility')!.parameters as { required: string[] }).required).toEqual(['target_amount', 'target_date']);

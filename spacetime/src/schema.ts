@@ -154,12 +154,42 @@ const alert = table(
     id: t.string().primaryKey(),
     household_id: t.string().index('btree'),
     severity: t.string(), // info | warn | critical
-    kind: t.string(), // data_quality | fraud | scam | obligation | advisor | insight
+    kind: t.string(), // data_quality | fraud | scam | obligation | advisor | insight | credit
     title: t.string(),
     detail: t.string(),
     related_ids_json: t.string(),
     created_at: t.timestamp(),
     acknowledged_by: t.string(), // "" if open
+  },
+);
+
+/**
+ * Synthetic credit score per member (docs/contracts.md section 9, math in credit.ts). Written by `recompute_household`.
+ * `factors_json` is an array of {key, label, value 0..1, weight, points, max_points, explanation}; `band` is one of
+ * poor | fair | good | very good | exceptional. Always shown as "Simulated score for this demo".
+ */
+const credit_score = table(
+  { name: 'credit_score', public: true },
+  {
+    id: t.string().primaryKey(), // = member_id
+    household_id: t.string().index('btree'),
+    member_id: t.string().index('btree'),
+    score: t.u32(),
+    band: t.string(),
+    factors_json: t.string(),
+    updated_at: t.timestamp(),
+  },
+);
+
+/** One point per member per day (`recompute_household`) plus the monthly backfill (`backfill_credit_history`). */
+const credit_score_history = table(
+  { name: 'credit_score_history', public: true },
+  {
+    id: t.string().primaryKey(), // `${member_id}:${yyyy-mm-dd}`
+    household_id: t.string().index('btree'),
+    member_id: t.string().index('btree'),
+    date: t.string(), // YYYY-MM-DD (UTC)
+    score: t.u32(),
   },
 );
 
@@ -493,6 +523,8 @@ const spacetimedb = schema({
   health_indicator,
   forecast_point,
   alert,
+  credit_score,
+  credit_score_history,
   goal,
   presence,
   huddle,

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from loguru import logger
@@ -58,6 +59,14 @@ class WorkerClient:
 
     async def trace(self, run_id: str, events: list[dict]) -> dict:
         return await self._call("POST", "/phone/trace", {"run_id": run_id, "events": events})
+
+    async def alert_candidates(self, household_id: str) -> dict:
+        """Real signals for the callback's alert + the household's account context (GET /phone/alert_candidates)."""
+        return await self._call("GET", f"/phone/alert_candidates?household_id={quote(household_id, safe='')}")
+
+    async def callback_alert(self, run_id: str, alert: dict) -> dict:
+        """Write the callback's alert as a critical `alert` row and trace it on the run (POST /phone/callback_alert)."""
+        return await self._call("POST", "/phone/callback_alert", {"run_id": run_id, "alert": alert}, retries=0)
 
     async def end(self, run_id: str, reason: str, stats: dict | None = None) -> dict:
         try:
