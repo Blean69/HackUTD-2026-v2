@@ -45,6 +45,7 @@ export const IconAnalytics = (p: P) => <Svg {...p}><path d="M4 20V10M10 20V4M16 
 export const IconActivity = (p: P) => <Svg {...p}><path d="M3 12h4l2.5-6 4 12 2.5-6H21" /></Svg>;
 export const IconBriefcase = (p: P) => <Svg {...p}><rect x="3" y="7" width="18" height="12" rx="2" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 12.5h18" /></Svg>;
 export const IconMore = (p: P) => <Svg {...p}><circle cx="5.5" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="18.5" cy="12" r="1.4" fill="currentColor" /></Svg>;
+export const IconGrip = (p: P) => <Svg {...p}><circle cx="9" cy="6" r="1.4" fill="currentColor" stroke="none" /><circle cx="15" cy="6" r="1.4" fill="currentColor" stroke="none" /><circle cx="9" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="15" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="9" cy="18" r="1.4" fill="currentColor" stroke="none" /><circle cx="15" cy="18" r="1.4" fill="currentColor" stroke="none" /></Svg>;
 
 // ---- domain
 export const IconHome = (p: P) => <Svg {...p}><path d="M4 11 12 4l8 7v8.5a.5.5 0 0 1-.5.5H15v-5.5H9V20H4.5a.5.5 0 0 1-.5-.5z" /></Svg>;
