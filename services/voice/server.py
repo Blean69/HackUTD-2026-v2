@@ -33,6 +33,7 @@ import prompts
 from bot import CallInit, VoiceCall
 from config import Settings, load_env, load_settings
 from ice import parse_ice_servers
+from tts import choose_tts
 from twiml import build_twiml, caller_hash, make_stream_token, say_and_hangup, valid_signature, valid_stream_token
 
 SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.:-")
@@ -52,7 +53,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_app: FastAPI):
         ice = [IceServer(**d) for d in parse_ice_servers(s.ice_servers)]
         handler_holder["h"] = SmallWebRTCRequestHandler(ice_servers=ice or None)
-        logger.info(f"voice service up: transports={s.transports} ice={[i.urls for i in ice]} worker={s.worker_url} voice={s.tts_voice} llm={s.llm_model}")
+        engine = choose_tts(s, phone=False)
+        for w in engine.warnings:
+            logger.warning(w)
+        logger.info(f"voice service up: transports={s.transports} ice={[i.urls for i in ice]} worker={s.worker_url} tts={engine.provider}:{engine.model}:{engine.voice or 'auto'} llm={s.llm_model} smart_turn={s.smart_turn}")
         if not s.shared_secret:
             logger.warning("VOICE_SHARED_SECRET is not set: the worker will refuse every /phone/* call")
         if not s.signature_token:
@@ -90,7 +94,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "transports": s.transports,
             "active_calls": len(active),
             "max_sessions": s.max_sessions,
-            "tts_voice": s.tts_voice,
+            "tts_provider": choose_tts(s, phone=False).provider,  # the engine a call will start with (a key the engine rejects falls back to magpie at call time)
+            "tts_voice": s.tts_voice if choose_tts(s, phone=False).provider == "magpie" else choose_tts(s, phone=False).voice or "auto",
             "llm_model": s.llm_model,
             "worker": s.worker_url,
             "nvidia_key": bool(s.nvidia_api_key),

@@ -16,9 +16,11 @@ from loguru import logger
 
 from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.adapters.llm.schemas.tools_schema import ToolsSchema
+from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import EndFrame, Frame, LLMFullResponseStartFrame, LLMTextFrame, MetricsFrame, TTSSpeakFrame
+from pipecat.frames.frames import EndFrame, Frame, LLMFullResponseEndFrame, LLMFullResponseStartFrame, LLMTextFrame, MetricsFrame, TTSSpeakFrame
 from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -28,21 +30,22 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi import RTVIProcessor, RTVIServerMessageFrame
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.nvidia.stt import NvidiaSTTService
-from pipecat.services.nvidia.tts import NvidiaTTSService
 from pipecat.transports.base_transport import BaseTransport
 from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
+from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy, TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
 import prompts
 from config import Settings
 from llm import build_llm
+from pacing import SentenceCap
 from pin_gate import PinGate, PinOutcome
 from reporter import TraceReporter
-from speech import speech_transform
+from speech import SpeechNormalizer
+from tts import TTSChoice, build_tts
 from worker_client import WorkerClient, WorkerError
 
-TTS_SAMPLE_RATE = 22050  # Magpie's native rate; the transport resamples to 8 kHz (phone) or 24 kHz (browser)
 _tools_cache: tuple[float, list[dict]] | None = None
 
 
@@ -81,12 +84,26 @@ def to_tools_schema(specs: list[dict]) -> ToolsSchema:
     return ToolsSchema(standard_tools=out)
 
 
-class LLMTap(FrameProcessor):
-    """Sits after the LLM: remembers whether the model already said something this turn (so a filler is not stacked on top of it)
-    and the token usage of the last completion."""
+def _stop_strategies(s: Settings) -> list:
+    """Smart Turn v3 decides when the caller is finished (a timer alone cuts people off at a pause). `turn_hold_secs` > 0 adds a timer
+    that must ALSO have run out (pipecat's default stop_mode is ALL), so a one-word "wait" followed by a breath is not taken as a whole turn."""
+    if not s.smart_turn:
+        return [SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.8)]
+    stops: list = [TurnAnalyzerUserTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3(params=SmartTurnParams(stop_secs=s.smart_turn_stop_secs)))]
+    if s.turn_hold_secs > 0:
+        stops.append(SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=s.turn_hold_secs))
+    return stops
 
-    def __init__(self, **kw: Any):
+
+class LLMTap(FrameProcessor):
+    """Sits after the LLM: remembers whether the model already said something this turn (so a filler is not stacked on top of it),
+    the token usage of the last completion, and enforces the spoken-turn cap (SentenceCap: once a turn has said enough, the current
+    sentence is allowed to finish and the rest of the reply is dropped before it reaches the voice)."""
+
+    def __init__(self, max_words: int = 32, **kw: Any):
         super().__init__(**kw)
+        self.cap = SentenceCap(max_words=max_words)
+        self.capped_turns = 0
         self.spoke = False
         self.tokens_in = 0
         self.tokens_out = 0
@@ -95,8 +112,18 @@ class LLMTap(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, LLMFullResponseStartFrame):
             self.spoke = False
-        elif isinstance(frame, LLMTextFrame) and frame.text.strip():
-            self.spoke = True
+            self.cap.reset()
+        elif isinstance(frame, LLMTextFrame):
+            if not self.cap.allow(frame.text):
+                if self.cap.closed and self.cap.words and not getattr(self, "_logged_cap", False):
+                    self._logged_cap = True
+                    self.capped_turns += 1
+                    logger.info(f"turn cap: dropped the rest of a long reply after {self.cap.words} words")
+                return
+            if frame.text.strip():
+                self.spoke = True
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            self._logged_cap = False
         elif isinstance(frame, MetricsFrame):
             for d in frame.data:
                 usage = getattr(d, "value", None)
@@ -122,7 +149,12 @@ class VoiceCall:
         self._rtvi_ready = False
         self._activated = asyncio.Event()
         self._turn: dict[str, Any] = {}
-        self._tap = LLMTap()
+        self._tap = LLMTap(max_words=settings.turn_cap_words)
+        self.speech = SpeechNormalizer()  # dates follow the demo's as_of once the run starts
+        self.fillers = prompts.FillerPicker()
+        self._filled = False  # one filler per caller turn, even when the model chains two tools
+        self.tts_choice: TTSChoice | None = None
+        self._tts: Any = None
         self._rtvi: RTVIProcessor | None = None
         self._watchdog: asyncio.Task | None = None
         self.worker: PipelineWorker | None = None
@@ -135,20 +167,20 @@ class VoiceCall:
         s, init = self.s, self.init
         phone = init.kind == "phone"
         stt = NvidiaSTTService(api_key=s.nvidia_api_key, server=s.asr_server, model_function_map={"function_id": s.asr_function_id, "model_name": "nemotron-asr-streaming"})
-        tts = NvidiaTTSService(
-            api_key=s.nvidia_api_key,
-            server=s.tts_grpc_server,
-            model_function_map={"function_id": s.tts_function_id, "model_name": "magpie-tts-multilingual"},
-            sample_rate=TTS_SAMPLE_RATE,
-            settings=NvidiaTTSService.Settings(voice=s.tts_voice),
-            text_transforms=[("*", speech_transform)],
-        )
+        tts, self.tts_choice = await build_tts(s, phone=phone, normalizer=self.speech)
+        self._tts = tts
+        self.stats["tts_voice"] = self.tts_choice.label
         user_agg, asst_agg = LLMContextAggregatorPair(
             self.context,
             user_params=LLMUserAggregatorParams(
-                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
-                # barge-in needs two words while the bot is talking, so a cough or hall noise does not cut it off
-                user_turn_strategies=UserTurnStrategies(start=[MinWordsUserTurnStartStrategy(min_words=2)]),
+                # Silero only says "quiet for 0.2 s"; the Smart Turn v3 model (local ONNX, CPU, about 9 MB) decides whether the caller is really
+                # finished, so a pause mid-thought ("if we bought a... thirty-five thousand dollar car") does not trigger an answer.
+                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=s.vad_stop_secs if s.smart_turn else max(s.vad_stop_secs, 0.5))),
+                user_turn_strategies=UserTurnStrategies(
+                    # barge-in needs two words while the bot is talking, so a cough or hall noise does not cut it off
+                    start=[MinWordsUserTurnStartStrategy(min_words=s.barge_in_words)],
+                    stop=_stop_strategies(s),
+                ),
                 user_idle_timeout=float(s.idle_secs),
             ),
         )
@@ -194,6 +226,7 @@ class VoiceCall:
         @user_agg.event_handler("on_user_turn_stopped")
         async def _heard(_agg, _strategy, message):
             text = (message.content or "").strip()
+            self._filled = False
             if text:
                 self._idle_prompted = False
                 self.stats["turns"] += 1
@@ -208,7 +241,7 @@ class VoiceCall:
             m, self._turn = self._turn, {}
             if message.interrupted:
                 self.stats["barge_ins"] += 1
-            self.reporter.said(text, model=s.llm_model, asr_ms=m.get("asr"), llm_ms=m.get("llm"), tts_ms=m.get("tts"), v2v_ms=m.get("v2v"), tokens_in=self._tap.tokens_in or None, tokens_out=self._tap.tokens_out or None, interrupted=message.interrupted, voice=s.tts_voice)
+            self.reporter.said(text, model=s.llm_model, asr_ms=m.get("asr"), llm_ms=m.get("llm"), tts_ms=m.get("tts"), v2v_ms=m.get("v2v"), tokens_in=self._tap.tokens_in or None, tokens_out=self._tap.tokens_out or None, interrupted=message.interrupted, voice=self.tts_choice.label if self.tts_choice else s.tts_voice, tts_model=self.tts_choice.model if self.tts_choice else None, tts_provider=self.tts_choice.provider if self.tts_choice else None)
             logger.info(f"said: {text} (v2v={m.get('v2v')}, llm={m.get('llm')}, tts={m.get('tts')})")
 
         @user_agg.event_handler("on_user_turn_idle")
@@ -259,6 +292,12 @@ class VoiceCall:
         if self._watchdog:
             self._watchdog.cancel()
         await self.reporter.stop()
+        closer = getattr(getattr(self, "_tts", None), "kv_cleanup", None)
+        if closer:
+            try:
+                await closer()
+            except Exception:
+                pass
         if self.run_id:
             await self.client.end(self.run_id, self.end_reason, self.stats)
         if self._owns_client:
@@ -313,6 +352,7 @@ class VoiceCall:
         )
         self.run_id = resp["run_id"]
         self.family = resp.get("family", "the family")
+        self.speech.today = resp.get("as_of") or None
         self.reporter.set_run(self.run_id)
         specs = await fetch_tools(self.client)
         self.context.messages[0]["content"] = prompts.system_prompt(
@@ -361,9 +401,11 @@ class VoiceCall:
     async def _on_tool(self, params: FunctionCallParams) -> None:
         name, args = params.function_name, dict(params.arguments or {})
         t0 = time.monotonic()
-        if not self._tap.spoke:
-            await params.llm.push_frame(TTSSpeakFrame(prompts.filler(), append_to_context=False))
-            self.reporter.note("Spoke a short filler line while the tool ran", tool=name)
+        if not self._tap.spoke and not self._filled:
+            self._filled = True
+            line = self.fillers.next()
+            await params.llm.push_frame(TTSSpeakFrame(line, append_to_context=False))
+            self.reporter.note("Spoke a short filler line while the tool ran", tool=name, line=line)
         try:
             res = await self.client.tool(self.run_id or "", name, args)
         except WorkerError as e:

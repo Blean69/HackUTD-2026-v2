@@ -10,14 +10,39 @@ export const isPhoneTool = (name: string): name is PhoneTool => (PHONE_TOOLS as 
 /** Voice replies stay small: the model gets at most this many characters of JSON per tool call. */
 export const VOICE_VIEW_MAX_CHARS = 1100;
 
-const whole = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? Math.round(x) : 0);
+/**
+ * Numbers the way a person says them, because the voice model copies what it reads: 39,655 is spoken "about forty thousand", not "thirty-nine
+ * thousand six hundred fifty-five". Dollars: nearest $1,000 from $10,000 up; nearest $100 from $1,000 unless the amount is already a
+ * round $50 (rent of $1,850 stays); exact below $1,000. Percentages: whole numbers from 10 up, halves below. The full-precision result
+ * still goes to the trace; only this copy for the voice model is rounded.
+ */
+export function humanMoney(x: unknown): number {
+  if (typeof x !== 'number' || !Number.isFinite(x)) return 0;
+  const a = Math.abs(x);
+  const step = a >= 10_000 ? 1000 : a >= 1000 ? (Number.isInteger(a) && a % 50 === 0 ? 1 : 100) : 1;
+  return Math.sign(x) * Math.round(a / step) * step;
+}
+export function humanPercent(x: unknown): number {
+  if (typeof x !== 'number' || !Number.isFinite(x)) return 0;
+  return Math.abs(x) >= 10 ? Math.round(x) : Math.round(x * 2) / 2;
+}
+/** Months of cover / months left: under a month in halves ("about half a month", not "zero point four"), up to ten months one decimal, then whole. */
+export function humanMonths(x: unknown): number {
+  if (typeof x !== 'number' || !Number.isFinite(x)) return 0;
+  const a = Math.abs(x);
+  const r = a < 1 ? Math.round(a * 2) / 2 : a < 10 ? Math.round(a * 10) / 10 : Math.round(a);
+  return Math.sign(x) * r;
+}
+const whole = (x: unknown): number => humanMoney(x);
 const one = (x: unknown): number => (typeof x === 'number' && Number.isFinite(x) ? Math.round(x * 10) / 10 : 0);
 const rec = (x: unknown): Record<string, any> => (x && typeof x === 'object' ? (x as Record<string, any>) : {});
 const arr = (x: unknown): any[] => (Array.isArray(x) ? x : []);
 
 function indicatorValue(i: Record<string, any>): number {
-  // money-like indicators are dollars, the rest keep one decimal (months, percent, score)
-  return i.unit === 'USD' ? whole(i.value) : one(i.value);
+  // money-like indicators are dollars (human-rounded), percentages are whole numbers, the rest keep one decimal (months, score)
+  if (String(i.unit).toLowerCase() === 'usd') return whole(i.value);
+  if (['%', 'percent', 'pct'].includes(String(i.unit).toLowerCase())) return humanPercent(i.value);
+  return one(i.value);
 }
 
 export function voiceView(tool: string, result: unknown): unknown {
@@ -62,7 +87,7 @@ export function voiceView(tool: string, result: unknown): unknown {
           .slice()
           .sort((a, b) => Math.abs(b.balance ?? 0) - Math.abs(a.balance ?? 0))
           .slice(0, 8)
-          .map((a) => ({ name: a.nickname || a.type, type: a.type, balance: whole(a.balance), ...(a.rate_pct !== undefined ? { rate_pct: one(a.rate_pct) } : {}), ...(a.monthly_payment !== undefined ? { monthly_payment: whole(a.monthly_payment) } : {}) })),
+          .map((a) => ({ name: a.nickname || a.type, type: a.type, balance: whole(a.balance), ...(a.rate_pct !== undefined ? { rate_pct: humanPercent(a.rate_pct) } : {}), ...(a.monthly_payment !== undefined ? { monthly_payment: whole(a.monthly_payment) } : {}) })),
         totals: { liquid_cash: whole(r.totals?.liquid_cash), debt: whole(r.totals?.debt), net_worth: whole(r.totals?.net_worth) },
       };
       break;
@@ -80,7 +105,7 @@ export function voiceView(tool: string, result: unknown): unknown {
           ...(e.total_interest !== undefined ? { total_interest: whole(e.total_interest) } : {}),
           ...(e.interest_saved !== undefined ? { interest_saved: whole(e.interest_saved) } : {}),
         },
-        months_of_spending_covered_at_low: one(r.months_of_spending_covered_at_low),
+        months_of_spending_covered_at_low: humanMonths(r.months_of_spending_covered_at_low),
         assumptions: arr(r.assumptions).slice(0, 2).map((a) => truncate(String(a), 200)),
       };
       break;
@@ -90,7 +115,7 @@ export function voiceView(tool: string, result: unknown): unknown {
         feasibility: r.feasibility,
         target_amount: whole(r.target_amount),
         target_date: r.target_date,
-        months_left: one(r.months_left),
+        months_left: humanMonths(r.months_left),
         still_needed: whole(r.still_needed),
         required_monthly: whole(r.required_monthly),
         available_monthly: whole(r.available_monthly),

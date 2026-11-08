@@ -22,17 +22,17 @@ def test_settings_from_env(monkeypatch):
     assert s.nvidia_api_key == "voice-key" and s.llm_api_key == "voice-key"  # the voice-specific key wins
     assert s.asr_function_id == "bb0837de-8c7b-481f-9ec8-ef5663e9c1fa"  # trailing comment tolerated
     assert (s.host, s.port) == ("0.0.0.0", 7861) and s.transports == ["webrtc", "twilio"]
-    assert s.tts_voice == "Magpie-Multilingual.EN-US.Mia.Calm" and s.llm_model == "nvidia/nemotron-3.5-lightning-30b-a3b"
+    assert s.tts_voice == "Magpie-Multilingual.EN-US.Ray.Neutral" and s.llm_model == "nvidia/nemotron-3.5-lightning-30b-a3b"
     assert s.signature_token == "sk" and s.caller_hash_salt == "pepper" and s.public_path == "/voice"
     assert s.tts_grpc_server == s.asr_server and s.ice_servers.startswith("stun:")
 
 
 def test_prompts_disclose_and_carry_the_brief():
     for line in (prompts.DISCLOSURE_WEB, prompts.DISCLOSURE_PHONE):
-        assert line.startswith("Hi, I'm the family's AI money assistant") and "not a person" in line and "licensed advisor" in line and "made-up data" in line
+        assert line.startswith("Hi, I'm Keystone, the family's AI money helper") and "not a person" in line and "licensed advisor" in line and "made-up data" in line
     assert "PIN" in prompts.DISCLOSURE_PHONE and "PIN" not in prompts.DISCLOSURE_WEB
-    p = prompts.system_prompt(family="Rivera family", first_name="Marisol", brief=["Cushion: about 3.3 months"], today="2026-11-07", channel="phone")
-    assert "Marisol from the Rivera family" in p and "- Cushion: about 3.3 months" in p and "by phone" in p and "2026-11-07" in p
+    p = prompts.system_prompt(family="Rivera family", first_name="Marisol", brief=["Cushion: about 3.3 months of spending covered by cash (watch)."], today="2026-11-07", channel="phone")
+    assert "Marisol from the Rivera family" in p and "- Cushion: a little over three months of spending covered by cash, watch." in p and "by phone" in p and "2026-11-07" in p
     assert "AI, not a person" in p
     assert len({prompts.filler() for _ in range(60)}) > 1
 
@@ -84,3 +84,14 @@ def test_offer_validation():
         assert c.post("/api/offer", content=b"not json").status_code == 400
     with client(transports=["twilio"]) as c:
         assert c.post("/api/offer", json={"sdp": "x", "type": "offer", "request_data": {"household_id": "hh_rivera"}}).status_code == 503
+
+
+def test_health_reports_the_engine_without_secrets():
+    with client() as c:
+        body = c.get("/health").json()
+    assert body["tts_provider"] == "magpie" and body["tts_voice"] == "Magpie-Multilingual.EN-US.Ray.Neutral"
+    with client(tts_provider="elevenlabs", elevenlabs_api_key="sekret", elevenlabs_voice_id="v1") as c:
+        body = c.get("/health").json()
+    assert body["tts_provider"] == "elevenlabs" and body["tts_voice"] == "v1" and "sekret" not in str(body)
+    with client(tts_provider="elevenlabs") as c:  # no key: honest about the fallback
+        assert c.get("/health").json()["tts_provider"] == "magpie"

@@ -27,6 +27,28 @@ RATE = 48000
 FRAME = RATE // 50  # 20 ms
 
 
+def frame_to_mono(frame) -> np.ndarray:
+    """One received av.AudioFrame -> mono int16 samples at the frame's own rate.
+
+    aiortc hands back packed s16 whose channel count follows the negotiated layout (the bot's track arrives as interleaved stereo,
+    L R L R ..., shape (1, 2N)). Treating those samples as mono doubles the clip and drops the pitch an octave, so go by the real
+    layout: de-interleave packed audio, take the rows of planar audio, and average the channels."""
+    return downmix(frame.to_ndarray(), len(frame.layout.channels), bool(frame.format.is_planar))
+
+
+def downmix(arr: np.ndarray, channels: int, planar: bool) -> np.ndarray:
+    a = np.asarray(arr)
+    if planar:  # (channels, samples)
+        chans = a.reshape(channels, -1) if a.ndim != 2 else a
+    else:  # packed: (1, samples * channels), interleaved
+        flat = a.reshape(-1)
+        flat = flat[: len(flat) // channels * channels]
+        chans = flat.reshape(-1, channels).T
+    if chans.shape[0] == 1:
+        return chans[0].astype(np.int16)
+    return np.round(chans.astype(np.int32).mean(axis=0)).astype(np.int16)
+
+
 def read_wav(path: str) -> np.ndarray:
     with wave.open(path, "rb") as w:
         assert w.getsampwidth() == 2 and w.getnchannels() == 1, "mono 16-bit WAV please"
@@ -86,7 +108,8 @@ async def main() -> None:
     dc = pc.createDataChannel("chat", ordered=True)
 
     bot_pcm: list[np.ndarray] = []
-    state = {"last_loud": 0.0, "first_loud_after": None, "speaking": False, "run_id": None, "bot_ready": False}
+    state = {"last_loud": 0.0, "first_loud_after": None, "speaking": False, "run_id": None, "bot_ready": False, "bot_rate": RATE, "bot_first": None, "bot_last": None, "turn": -1}
+    texts: dict[int, list[str]] = {}
 
     @pc.on("track")
     def on_track(track: MediaStreamTrack) -> None:
@@ -94,7 +117,10 @@ async def main() -> None:
             try:
                 while True:
                     f = await track.recv()
-                    a = f.to_ndarray().reshape(-1).astype(np.int16)
+                    a = frame_to_mono(f)
+                    state["bot_rate"] = int(f.sample_rate or RATE)
+                    state["bot_first"] = state["bot_first"] or time.monotonic()
+                    state["bot_last"] = time.monotonic()
                     bot_pcm.append(a)
                     rms = float(np.sqrt(np.mean(a.astype(np.float64) ** 2))) if len(a) else 0.0
                     if rms > 300:
@@ -133,6 +159,10 @@ async def main() -> None:
             log("user-transcription", text=d.get("text"))
         elif t in ("bot-output",) and d and d.get("aggregated_by") != "word":
             log("bot-output", text=d.get("text"), spoken=d.get("spoken"))
+            seen = texts.setdefault(state["turn"], [])
+            txt = str(d.get("text") or "").strip()
+            if txt and txt not in seen:  # each sentence arrives twice (announced, then spoken); keep it once
+                seen.append(txt)
         elif t == "error":
             log("rtvi-error", data=d)
 
@@ -164,6 +194,7 @@ async def main() -> None:
     for i, path in enumerate(args.wav):
         # a fresh turn: forget previous bot audio markers
         state["first_loud_after"] = None
+        state["turn"] = i
         pcm = read_wav(path)
         pcm = np.concatenate([np.zeros(RATE // 2, dtype=np.int16), pcm, np.zeros(RATE // 2, dtype=np.int16)])
         t_play = time.monotonic()
@@ -176,16 +207,25 @@ async def main() -> None:
         v2v = (first - speech_end) if first and first > t_play else None
         log("bot-started-answer", voice_to_voice_s=None if v2v is None else round(v2v, 2))
         done = await bot_idle(2.0, max(1.0, deadline - time.monotonic()))
-        log("bot-finished-answer" if done else "answer-timeout", answer_secs=round(time.monotonic() - (first or t_play), 1))
-        results.append({"question": path.split("/")[-1], "voice_to_voice_s": v2v})
+        spoken = (state["last_loud"] - first) if first and first > t_play else None  # first to last audible sample: sentences plus the pauses between
+        log("bot-finished-answer" if done else "answer-timeout", answer_secs=round(time.monotonic() - (first or t_play), 1), spoken_secs=None if spoken is None else round(spoken, 1))
+        results.append({"question": path.split("/")[-1], "voice_to_voice_s": v2v, "spoken_secs": None if spoken is None else round(spoken, 1), "turn": i})
 
     await asyncio.sleep(args.linger)  # let the last captions and trace events land
     if bot_pcm:
         pcm = np.concatenate(bot_pcm)
+        rate = state["bot_rate"]
         with wave.open(args.out, "wb") as w:
-            w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(pcm.tobytes())
-        log("saved-bot-audio", path=args.out, secs=round(len(pcm) / RATE, 1))
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate); w.writeframes(pcm.tobytes())
+        wav_secs = len(pcm) / rate
+        wall = (state["bot_last"] - state["bot_first"]) if state["bot_first"] else 0.0
+        log("saved-bot-audio", path=args.out, secs=round(wav_secs, 1), rate=rate, wall_secs=round(wall, 1))
+        if wall > 3 and abs(wav_secs - wall) > 0.15 * wall:  # the track is realtime, so the clip must last about as long as the call did
+            print(f"WARNING: saved audio is {wav_secs:.1f}s but the bot track ran for {wall:.1f}s of wall clock; the WAV will not play at real speed")
     await pc.close()
+    for r in results:
+        r["text"] = " ".join(texts.get(r["turn"], []))
+        r["words"] = len(r["text"].split())
     print("SUMMARY " + json.dumps({"run_id": state["run_id"], "bot_ready": state["bot_ready"], "turns": results}))
 
 
