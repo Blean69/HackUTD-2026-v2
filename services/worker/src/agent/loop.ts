@@ -20,6 +20,8 @@ export interface LoopResult {
   answer: string;
   steps: number;
   toolsUsed: string[];
+  /** The results of the tool calls that succeeded, for grounding checks (workflows/grounding.ts). */
+  results: unknown[];
 }
 
 export function parsePlan(text: string): string[] {
@@ -81,6 +83,7 @@ export async function runAgentLoop(run: RunContext, o: LoopOptions): Promise<Loo
     { role: 'user', content: 'Go ahead: call the tools you need, then give the final answer.' },
   ];
   const toolsUsed: string[] = [];
+  const results: unknown[] = [];
   let answer = '';
   let steps = 0;
 
@@ -106,7 +109,7 @@ export async function runAgentLoop(run: RunContext, o: LoopOptions): Promise<Loo
       if (!answer) answer = 'I could not produce an answer from the available data.';
       const firstLine = answer.split(/(?<=[.!?])\s/)[0] ?? answer;
       run.emit(o.agent, 'final', truncate(firstLine, 200), { answer: truncate(answer, 3000), steps, tools_used: toolsUsed }, meta(res));
-      return { answer, steps, toolsUsed };
+      return { answer, steps, toolsUsed, results };
     }
     const calls: ToolCall[] = res.toolCalls.slice(0, 4);
     msgs.push({ role: 'assistant', content: res.content, tool_calls: calls });
@@ -114,9 +117,10 @@ export async function runAgentLoop(run: RunContext, o: LoopOptions): Promise<Loo
       const args = safeParseArgs(tc.arguments);
       const out = await run.tool(o.agent, tc.name, args, res);
       toolsUsed.push(tc.name);
+      if (out.ok) results.push(out.result);
       msgs.push({ role: 'tool', tool_call_id: tc.id, name: tc.name, content: fitJson(out.ok ? out.result : { error: out.error }, 3500) });
     }
   }
   // unreachable (the last iteration always returns) but keeps the compiler honest
-  return { answer, steps, toolsUsed };
+  return { answer, steps, toolsUsed, results };
 }
