@@ -292,7 +292,7 @@ export function DashboardLayout({ householdId, cards, defaultOrder }: { househol
               data-dnd-id={c.id}
               style={{ order: layout.order.indexOf(c.id) }}
               className={cx(
-                "group/dnd contents",
+                "dnd-slot group/dnd contents",
                 off ? "lg:hidden" : c.group ? "lg:relative lg:grid lg:grid-cols-12 lg:gap-3" : "lg:relative lg:block",
                 c.span,
                 "lg:rounded-lg lg:transition-[opacity,transform,box-shadow] lg:duration-200",
@@ -301,7 +301,7 @@ export function DashboardLayout({ householdId, cards, defaultOrder }: { househol
             >
               {c.node}
               {off ? null : (
-                <div className="absolute -top-3.5 right-3 z-20 hidden items-center rounded-full border border-line-strong bg-surface p-0.5 text-ink-3 opacity-0 shadow-[var(--shadow-pop)] transition-opacity duration-150 focus-within:opacity-100 group-hover/dnd:opacity-100 lg:flex">
+                <div data-dnd-ui="" className="absolute -top-3.5 right-3 z-20 hidden items-center rounded-full border border-line-strong bg-surface p-0.5 text-ink-3 opacity-0 shadow-[var(--shadow-pop)] transition-opacity duration-150 focus-within:opacity-100 group-hover/dnd:opacity-100 lg:flex">
                   <button
                     type="button"
                     aria-label={`Move ${c.title}`}
@@ -325,6 +325,7 @@ export function DashboardLayout({ householdId, cards, defaultOrder }: { househol
               )}
               {line ? (
                 <span
+                  data-dnd-ui=""
                   aria-hidden="true"
                   className={cx(
                     "pointer-events-none absolute z-20 hidden rounded-full bg-brand shadow-[0_0_0_3px_var(--brand-soft)] lg:block",
