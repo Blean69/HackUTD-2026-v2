@@ -1,4 +1,5 @@
-// POST /plaid/link_token, /plaid/exchange, /plaid/sandbox_connect (docs/contracts.md sections 5 and 7) on the shared router.
+// POST /plaid/link_token, /plaid/exchange, /plaid/sandbox_connect (docs/contracts.md sections 5 and 7) and GET /plaid/sandbox_profiles
+// (section 7b) on the shared router.
 // exchange and sandbox_connect accept `select: true` (onboarding): they list the bank's accounts as bank_account_option rows and
 // stop at bank_connection "selecting"; select_bank_accounts then queues the sync of just the chosen accounts.
 // Registered when this module is imported (src/plaid/index.ts). Without PLAID_CLIENT_ID / PLAID_SECRET every route
@@ -6,7 +7,7 @@
 import type { Handler, HttpRequest, HttpResponse, Router } from '../http.js';
 import { router as sharedRouter } from '../router.js';
 import { linkItem, sandboxConnect } from './connect.js';
-import { loadSandboxUserJson } from './custom_user.js';
+import { createSandboxProfiles, DEFAULT_PROFILE_ID, type SandboxProfiles } from './profiles.js';
 import { getPlaidRuntime, type ConfiguredRuntime, type PlaidRuntime } from './runtime.js';
 import { PlaidApiError } from './types.js';
 
@@ -58,7 +59,9 @@ function guarded(needStore: boolean, handler: (req: HttpRequest, rt: ConfiguredR
   };
 }
 
-export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => PlaidRuntime = getPlaidRuntime, getCustomUser: () => string | null = () => loadSandboxUserJson()): void {
+const processProfiles = createSandboxProfiles();
+
+export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => PlaidRuntime = getPlaidRuntime, getProfiles: () => SandboxProfiles = () => processProfiles): void {
   router.add(
     'POST',
     '/plaid/link_token',
@@ -98,13 +101,30 @@ export function registerPlaidRoutes(router: Router = sharedRouter, getRt: () => 
         const username = str(body.username);
         const institutionId = str(body.institution_id);
         const select = body.select === true;
-        const customUser = username ? null : getCustomUser();
-        const r = await sandboxConnect({ client: rt.client, store: rt.store!, config: rt.config }, { householdId, ...(username ? { username } : {}), ...(institutionId ? { institutionId } : {}), forceNew: body.new_item === true, select, customUser });
+        const profiles = getProfiles();
+        // profile_id picks one of the sandbox bank profiles (GET /plaid/sandbox_profiles); no profile_id = the default family demo
+        let profileId = '';
+        if (body.profile_id !== undefined && body.profile_id !== null && body.profile_id !== '') {
+          profileId = typeof body.profile_id === 'string' ? body.profile_id.trim() : '';
+          if (!profileId) return json(400, { error: 'bad_profile_id', detail: 'profile_id must be a string: one of the ids from GET /plaid/sandbox_profiles' });
+          if (username) return json(400, { error: 'profile_id_and_username', detail: 'send either profile_id or username, not both' });
+          if (!profiles.has(profileId)) return json(404, { error: 'unknown_profile', detail: `no sandbox profile "${profileId}"`, profiles: profiles.list().map((p) => p.profile_id) });
+        }
+        const chosen = profileId || DEFAULT_PROFILE_ID;
+        const customUser = username ? null : profiles.customUserJson(chosen);
+        if (profileId && profileId !== DEFAULT_PROFILE_ID && !customUser) return json(500, { error: 'profile_unreadable', detail: `the file for profile "${profileId}" is missing or invalid on the worker` });
+        const r = await sandboxConnect(
+          { client: rt.client, store: rt.store!, config: rt.config },
+          { householdId, ...(username ? { username } : {}), ...(institutionId ? { institutionId } : {}), forceNew: body.new_item === true, select, customUser, ...(profileId ? { profileId } : {}), strictProfile: Boolean(profileId) && profileId !== DEFAULT_PROFILE_ID },
+        );
         return json(200, { ok: true, status: select ? 'selecting' : r.reused ? 'syncing' : 'linking', ...r });
       },
       getRt,
     ),
   );
+
+  // The selectable demo banks: index.json as written by data/pnc_profiles.py (no secrets; cached by the browser for five minutes).
+  router.add('GET', '/plaid/sandbox_profiles', () => ({ status: 200, body: getProfiles().list(), headers: { 'Cache-Control': 'public, max-age=300' } }));
 
   router.add('GET', '/plaid/status', () => {
     const rt = getRt();

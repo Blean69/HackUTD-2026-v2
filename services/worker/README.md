@@ -158,7 +158,10 @@ a second call re-syncs the existing item unless `new_item: true`), `GET /plaid/s
 The `plaid_sync` workflow pages `/transactions/sync` with a cursor (saved only after rows are stored), polls fresh items until
 history is ready, tolerates a failed `/liabilities/get`, maps Plaid types to our 8 account types (fast Nemotron only for
 ambiguous ones), flips Plaid's sign convention, upserts in batches, then `recompute_household`. Env: `PLAID_CLIENT_ID`,
-`PLAID_SECRET`, `PLAID_ENV` (sandbox), `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES`, `PLAID_POLL_ATTEMPTS`, `PLAID_POLL_MS`, `PLAID_SANDBOX_USER_FILE`.
+`PLAID_SECRET`, `PLAID_ENV` (sandbox), `PLAID_PRODUCTS`, `PLAID_COUNTRY_CODES`, `PLAID_POLL_ATTEMPTS` (15), `PLAID_POLL_MS` (3000), `PLAID_QUIET_POLLS` (3), `PLAID_SANDBOX_USER_FILE`, `PLAID_PROFILES_DIR`.
+Sandbox bank profiles (`GET /plaid/sandbox_profiles`, `POST /plaid/sandbox_connect {household_id, profile_id?, select?}`, contracts section 7b): the index and the
+custom users are read from `<DATA_DIR>/../plaid/profiles/` (the prod mount `../data/plaid:/data/plaid:ro`), written by `data/pnc_profiles.py`; no `profile_id` = `family_demo`;
+404 `unknown_profile` otherwise; a chosen PNC profile is never replaced by another sandbox user when Plaid rejects it; loan payments are read from payment history when Plaid has no loan terms.
 Code: `src/plaid/`, `src/workflows/plaid_sync.ts`. Live-tested: 7 accounts / 331 transactions synced.
 
 ## Phone / voice routes (`src/phone/`)

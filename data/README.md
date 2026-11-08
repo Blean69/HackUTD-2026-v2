@@ -9,6 +9,7 @@ python3 generate.py                 # --seed 2026 by default, writes data/seed/*
 python3 generate.py --seed 7 --out /tmp/other   # any seed works; ids below are for seed 2026 only
 python3 generate.py --report        # also prints every planted anomaly (txn ids) and every balance
 python3 plaid_user.py               # only the Plaid Sandbox custom user -> data/plaid/sandbox_user.json (generate.py runs it too)
+python3 pnc_profiles.py             # only the PNC bank profiles -> data/plaid/profiles/ (generate.py runs it too; --check validates, --list prints them)
 ```
 
 Python 3.12 to 3.14, no third-party packages (`requirements.txt` is intentionally empty). The same seed gives
@@ -29,6 +30,13 @@ bottom of this file, so a bad edit fails loudly.
 
 Every record is flat (scalars, plus `owner_member_ids: string[]` on accounts, `turns`, `expected_goals`,
 `scam_signals` on conversations, and the free-form `details` object on proposals). Ids are strings, dates are ISO `YYYY-MM-DD`, money is a JSON number in USD.
+
+## Plaid Sandbox bank profiles (PNC dataset)
+
+`python3 pnc_profiles.py` (also run at the end of `generate.py`) turns PNC's 30 HackUTD 2026 customers (Apache-2.0, vendored in `data/pnc/raw/`, see
+`data/pnc/README.md` for license, attribution and every mapping choice) into Plaid Sandbox custom users: `data/plaid/profiles/pnc_c001.json` ..
+`pnc_c030.json` plus `index.json` (31 entries with `family_demo` first). The worker serves them (`GET /plaid/sandbox_profiles`, `POST /plaid/sandbox_connect
+{profile_id}`, contracts section 7b). The output does not depend on `--seed`; `--check` validates without writing.
 
 ## Conventions you need to know (read before writing the loader or the math)
 

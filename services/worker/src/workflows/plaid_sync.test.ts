@@ -347,4 +347,43 @@ describe('plaid_sync workflow', () => {
     expect(t.store.txns.size).toBe(10);
     expect(t.sink.traces.some((e) => /had not finished/.test(e.title))).toBe(true);
   });
+  it('reads a loan\'s monthly payment from its payment history when Plaid gives no loan terms (PNC profiles; mortgages are unsupported by the custom sandbox)', async () => {
+    const t = setup();
+    addItem(t.store);
+    t.client.liab = { credit: [{ account_id: 'cc000000', aprs: [{ apr_percentage: 22.5, apr_type: 'purchase_apr' }], minimum_payment_amount: 25 }] }; // no mortgage / student block
+    const pay = (id: string, acct: string, amount: number, date: string) => ptxn(id, acct, amount, date, 'PAYMENT RECEIVED', ['LOAN_PAYMENTS', 'LOAN_PAYMENTS_MORTGAGE_PAYMENT']);
+    t.client.syncScript = [
+      page({
+        added: [
+          pay('m1', 'mtg00000', -1810, '2026-08-05'), pay('m2', 'mtg00000', -1820, '2026-09-05'), pay('m3', 'mtg00000', -1830, '2026-10-05'), pay('m0', 'mtg00000', -9999, '2026-01-05'),
+          ptxn('i1', 'mtg00000', 220, '2026-10-05', 'MORTGAGE INTEREST CHARGE', ['BANK_FEES', 'BANK_FEES_INTEREST_CHARGE']), // interest is not a payment
+          pay('s1', 'stu00000', -300, '2026-10-02'), // a single payment is not a schedule
+        ],
+        next_cursor: 'c1',
+      }),
+    ];
+    await t.exec();
+    expect(t.store.accounts.get('acct_plaid_mtg00000')!.monthly_payment).toBe(1820); // median of the latest three: 1810, 1820, 1830
+    expect(t.store.accounts.get('acct_plaid_stu00000')!.monthly_payment).toBeUndefined();
+    expect(t.store.accounts.get('acct_plaid_cc000000')!.monthly_payment).toBe(25); // terms from Plaid are never overridden
+    expect(t.sink.traces.find((e) => /read the monthly payment from the payment history/.test(e.title))!.title).toContain('$1,820.00');
+  });
+
+  it('an incremental sync keeps the payment it read earlier (stored payments + the new rows)', async () => {
+    const t = setup();
+    addItem(t.store, 'saved-cursor');
+    t.client.liab = {};
+    for (const [id, date, amount] of [['a', '2026-08-05', 1800], ['b', '2026-09-05', 1800]] as const) t.store.txns.set(`txn_plaid_${id}`, { id: `txn_plaid_${id}`, household_id: HH, account_id: 'acct_plaid_mtg00000', date, amount, merchant: 'x', category: 'mortgage', description: '', is_recurring: false });
+    t.client.syncScript = [page({ added: [ptxn('c', 'mtg00000', -1800, '2026-10-05', 'PAYMENT RECEIVED')], next_cursor: 'next' })];
+    await t.exec();
+    expect(t.store.accounts.get('acct_plaid_mtg00000')!.monthly_payment).toBe(1800);
+    // no new rows this time: still read from what is stored
+    const t2 = setup();
+    addItem(t2.store, 'saved-cursor');
+    t2.client.liab = {};
+    for (const [id, date] of [['a', '2026-08-05'], ['b', '2026-09-05']] as const) t2.store.txns.set(`txn_plaid_${id}`, { id: `txn_plaid_${id}`, household_id: HH, account_id: 'acct_plaid_mtg00000', date, amount: 1750, merchant: 'x', category: 'mortgage', description: '', is_recurring: false });
+    t2.client.syncScript = [page({ next_cursor: 'next' })];
+    await t2.exec();
+    expect(t2.store.accounts.get('acct_plaid_mtg00000')!.monthly_payment).toBe(1750);
+  });
 });

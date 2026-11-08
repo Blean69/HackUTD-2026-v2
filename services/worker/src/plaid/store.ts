@@ -53,6 +53,8 @@ export interface PlaidStore {
   requestSync(householdId: string): Promise<void>;
   /** Plaid-sourced transactions currently stored on these accounts, or null when unknown. */
   countTxns(householdId: string, accountIds: string[]): Promise<number | null>;
+  /** Plaid-sourced transactions already stored on these accounts (id, account, date, Keystone-signed amount), or null when unknown. */
+  storedTxns(householdId: string, accountIds: string[]): Promise<{ id: string; accountId: string; date: string; amount: number }[] | null>;
   /** The worker-only reducer agent_set_account_options: the accounts the family can choose from (onboarding). */
   setAccountOptions(householdId: string, itemId: string, options: AccountOption[]): Promise<void>;
   /** Plaid account ids the family selected for this item, or null when no selection exists (import everything). */
@@ -154,7 +156,8 @@ export class SpacetimePlaidStore implements PlaidStore {
     }
   }
 
-  async countTxns(householdId: string, accountIds: string[]): Promise<number | null> {
+  /** The household's txn rows, subscribed once per household (null when the subscription fails). */
+  private async txnRows(householdId: string): Promise<boolean> {
     try {
       let p = this.subs.get(householdId);
       if (!p) {
@@ -165,13 +168,26 @@ export class SpacetimePlaidStore implements PlaidStore {
         this.subs.set(householdId, p);
       }
       await p;
-      const ids = new Set(accountIds);
-      let n = 0;
-      for (const t of this.conn.db.txn.iter()) if (t.householdId === householdId && t.source === 'plaid' && ids.has(t.accountId)) n++;
-      return n;
+      return true;
     } catch {
-      return null;
+      return false;
     }
+  }
+
+  async countTxns(householdId: string, accountIds: string[]): Promise<number | null> {
+    if (!(await this.txnRows(householdId))) return null;
+    const ids = new Set(accountIds);
+    let n = 0;
+    for (const t of this.conn.db.txn.iter()) if (t.householdId === householdId && t.source === 'plaid' && ids.has(t.accountId)) n++;
+    return n;
+  }
+
+  async storedTxns(householdId: string, accountIds: string[]): Promise<{ id: string; accountId: string; date: string; amount: number }[] | null> {
+    if (!(await this.txnRows(householdId))) return null;
+    const ids = new Set(accountIds);
+    const out: { id: string; accountId: string; date: string; amount: number }[] = [];
+    for (const t of this.conn.db.txn.iter()) if (t.householdId === householdId && t.source === 'plaid' && ids.has(t.accountId)) out.push({ id: t.id, accountId: t.accountId, date: t.date, amount: t.amount });
+    return out;
   }
 }
 
@@ -246,5 +262,9 @@ export class MemoryPlaidStore implements PlaidStore {
   async countTxns(householdId: string, accountIds: string[]): Promise<number | null> {
     const ids = new Set(accountIds);
     return [...this.txns.values()].filter((t) => t.household_id === householdId && ids.has(t.account_id)).length;
+  }
+  async storedTxns(householdId: string, accountIds: string[]): Promise<{ id: string; accountId: string; date: string; amount: number }[] | null> {
+    const ids = new Set(accountIds);
+    return [...this.txns.values()].filter((t) => t.household_id === householdId && ids.has(t.account_id)).map((t) => ({ id: t.id, accountId: t.account_id, date: t.date, amount: t.amount }));
   }
 }

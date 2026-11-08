@@ -219,3 +219,10 @@ then which of that customer's accounts to include (existing `bank_account_option
 | POST | `/plaid/sandbox_connect` | `{household_id, profile_id?, select: true}` → creates the item from that profile's custom-user JSON (default: the existing family profile), writes account options, status `selecting` |
 
 The Plaid Link path (real sandbox UI) stays available as a secondary option.
+
+As built (worker): `GET /plaid/sandbox_profiles` serves `data/plaid/profiles/index.json` as is (an array, family demo first, then `pnc_c001`..`pnc_c030`; each entry may carry
+extra fields such as `persona`, `first_name`, `monthly_income`, `cash`, `debts`, `window` and per-account `rate_pct` / `monthly_payment` / `keystone_type`), cached with `Cache-Control: max-age=300`,
+and answers even without Plaid keys. `POST /plaid/sandbox_connect` takes an optional `profile_id`: missing or `family_demo` = the old default (still falls back to `user_transactions_dynamic`
+if Plaid rejects it); a PNC id never falls back to another sandbox user; unknown id = 404 `{error:"unknown_profile", profiles:[...]}`; `profile_id` together with `username` = 400; the response
+echoes `profile_id`. A second connect with the same profile on the same household reuses its item (matched by account masks); a different profile creates a second item on that household, so
+call it once per household (there is no reducer to remove a `plaid_item`; `delete_sandbox` clears everything). Profile data and license: `data/pnc/README.md`.

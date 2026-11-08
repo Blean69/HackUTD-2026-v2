@@ -48,7 +48,7 @@ export function mapAccountType(type: string, subtype: string | null | undefined)
     if (s === 'mortgage') return ok('mortgage', 'loan/mortgage');
     if (s === 'auto') return ok('auto_loan', 'loan/auto');
     if (s === 'student') return ok('personal_loan', 'student loans are filed as personal loans');
-    if (s === 'personal') return ok('personal_loan', 'loan/personal');
+    if (s === 'personal' || s === 'consumer') return ok('personal_loan', `loan/${s}`); // Plaid has no 'personal' subtype: a personal loan is its 'consumer' loan
     if (s === 'home equity') return guess('mortgage', 'home equity loans are secured by the house');
     return guess('personal_loan', `loan/${s || 'unknown'}`);
   }
@@ -104,6 +104,21 @@ export function liabilityFacts(l: PlaidLiabilities | null | undefined): Map<stri
     put(s.account_id, { ...(s.interest_rate_percentage != null ? { rate_pct: s.interest_rate_percentage } : {}), ...(s.minimum_payment_amount != null ? { monthly_payment: s.minimum_payment_amount } : {}), ...(s.expected_payoff_date ? { maturity_date: s.expected_payoff_date } : {}), ...(s.origination_date ? { opened_date: s.origination_date } : {}) });
   }
   return out;
+}
+
+/** Loan types whose payment Plaid's liabilities cannot give us (custom sandbox users, many real banks): read it from the payment history instead. */
+export const PAID_FROM_HISTORY: ReadonlySet<string> = new Set(['mortgage', 'auto_loan', 'personal_loan']);
+
+/**
+ * The monthly payment of a loan account, read from what was actually paid: the median of the latest three payments
+ * (Keystone sign: a payment received on a debt account is positive; interest and fees are negative and ignored).
+ * Needs at least two payments so one lump sum is not mistaken for a schedule.
+ */
+export function inferMonthlyPayment(rows: { date: string; amount: number }[]): number | undefined {
+  const pays = rows.filter((r) => r.amount > 0).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  if (pays.length < 2) return undefined;
+  const last = pays.slice(0, 3).map((r) => r.amount).sort((a, b) => a - b);
+  return round2(last.length === 3 ? last[1]! : (last[0]! + last[1]!) / 2);
 }
 
 /** Deposit accounts hold money (may be overdrawn); debt accounts hold a positive amount owed. */

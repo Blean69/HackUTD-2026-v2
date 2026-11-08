@@ -19,8 +19,8 @@ export interface PlaidRuntime {
   pollMs: number;
   /**
    * Extra polls a fresh item must answer with no new or changed rows before its history counts as loaded (default 0 when unset,
-   * 1 in the real runtime). Plaid's sandbox reports HISTORICAL_UPDATE_COMPLETE with only the first ~40 rows of a custom user and
-   * delivers the rest on the next poll.
+   * 3 in the real runtime). Plaid's sandbox reports HISTORICAL_UPDATE_COMPLETE with only the first ~20-40 rows of a custom user and
+   * delivers the rest over the next polls; a 170-row PNC profile was cut to 29 rows with 1 (checked live), so 3 quiet polls are required.
    */
   quietPolls?: number;
 }
@@ -49,7 +49,7 @@ function build(): PlaidRuntime {
       console.warn(`[plaid] not usable: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  return { config, client, store: null, sleep, pollAttempts: int(process.env.PLAID_POLL_ATTEMPTS, 10), pollMs: int(process.env.PLAID_POLL_MS, 3000), quietPolls: int(process.env.PLAID_QUIET_POLLS, 1) };
+  return { config, client, store: null, sleep, pollAttempts: int(process.env.PLAID_POLL_ATTEMPTS, 15), pollMs: int(process.env.PLAID_POLL_MS, 3000), quietPolls: int(process.env.PLAID_QUIET_POLLS, 3) };
 }
 
 export function getPlaidRuntime(): PlaidRuntime {

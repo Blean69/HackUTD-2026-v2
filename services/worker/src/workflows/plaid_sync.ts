@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { emitPlan } from '../agent/loop.js';
 import type { RunContext } from '../agent/run.js';
 import { structured } from '../llm/structured.js';
-import { ACCOUNT_TYPES, DEBT_TYPES, mapAccount, mapAccountType, liabilityFacts, mapTxn, accountId, txnId, type AccountRow, type AccountType, type TxnRow } from '../plaid/mapping.js';
+import { ACCOUNT_TYPES, DEBT_TYPES, PAID_FROM_HISTORY, inferMonthlyPayment, mapAccount, mapAccountType, liabilityFacts, mapTxn, accountId, txnId, type AccountRow, type AccountType, type TxnRow } from '../plaid/mapping.js';
 import { getPlaidRuntime, type PlaidRuntime } from '../plaid/runtime.js';
 import type { PlaidItem } from '../plaid/store.js';
 import { isPlaidError, type PlaidAccount, type PlaidClient, type PlaidLiabilities, type PlaidTransaction } from '../plaid/types.js';
@@ -301,6 +301,25 @@ async function syncItem(run: RunContext, rt: PlaidRuntime, item: PlaidItem): Pro
     else orphaned++;
   }
   txnRows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1));
+  // Loans without terms from /liabilities/get (mortgages are not supported by the custom sandbox; any loan block breaks it): the
+  // monthly payment is read from the payments on the loan account, using what earlier syncs stored plus this run's rows.
+  const needPayment = accountRows.filter((a) => PAID_FROM_HISTORY.has(a.type) && a.monthly_payment === undefined);
+  if (needPayment.length) {
+    const stored = fresh ? [] : ((await store.storedTxns(hh, needPayment.map((a) => a.id)).catch(() => null)) ?? []);
+    const inferred: { account: string; monthly_payment: number }[] = [];
+    for (const a of needPayment) {
+      const rows = new Map<string, { date: string; amount: number }>();
+      for (const r of stored) if (r.accountId === a.id) rows.set(r.id, r);
+      for (const r of txnRows) if (r.account_id === a.id) rows.set(r.id, r);
+      for (const id of removedIds) rows.delete(txnId(id));
+      const pay = inferMonthlyPayment([...rows.values()]);
+      if (pay !== undefined) {
+        a.monthly_payment = pay;
+        inferred.push({ account: a.nickname, monthly_payment: pay });
+      }
+    }
+    if (inferred.length) run.emit('account_mapper', 'message', `Plaid gave no loan terms for ${plural(inferred.length, 'loan')}; read the monthly payment from the payment history: ${inferred.map((i) => `${i.account} $${i.monthly_payment.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).join(', ')}`, { inferred });
+  }
   run.emit('account_mapper', 'message', `Mapped ${plural(txnRows.length, 'transaction')} (Plaid positive = money out, Keystone negative = money out)${orphaned ? `; skipped ${orphaned} on accounts Plaid no longer lists` : ''}${leftOut ? `; left out ${leftOut} on accounts the family did not select` : ''}`, { sample: txnRows.slice(0, 3).map((t) => ({ date: t.date, merchant: t.merchant, amount: t.amount, category: t.category })) });
 
   // 5. write to SpacetimeDB

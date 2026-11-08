@@ -35,7 +35,7 @@ export function createPlaidClient(cfg: PlaidConfig): PlaidClient {
     linkTokenCreate: (r) =>
       wrap(api.linkTokenCreate({ client_name: 'Keystone', language: 'en', country_codes: countries.length ? countries : [CountryCode.Us], user: { client_user_id: r.client_user_id }, products: products(r.products) })),
     sandboxPublicTokenCreate: (r) =>
-      wrap(api.sandboxPublicTokenCreate({ institution_id: r.institution_id, initial_products: products(r.initial_products), options: { override_username: r.username, override_password: r.password ?? 'pass_good', ...(r.password ? { transactions: { days_requested: 180 } } : {}) } })),  // a custom user carries ~6 months: Plaid's default window is 90 days
+      wrap(api.sandboxPublicTokenCreate({ institution_id: r.institution_id, initial_products: products(r.initial_products), options: { override_username: r.username, override_password: r.password ?? 'pass_good', ...(r.password ? { transactions: { days_requested: 365 } } : {}) } })),  // a custom user carries ~6 months of history: Plaid's default window is 90 days, and 180 silently clips the first ~10 days of a 6-month profile once its dates roll forward (checked live)
     itemPublicTokenExchange: (public_token) => wrap(api.itemPublicTokenExchange({ public_token })),
     async institutionName(institution_id) {
       try {

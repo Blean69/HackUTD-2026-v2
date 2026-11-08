@@ -3,6 +3,7 @@
 // agent_set_account_options -> bank_connection "selecting"; the family picks accounts and select_bank_accounts queues the sync.
 // Shared by POST /plaid/exchange and POST /plaid/sandbox_connect. The access token never leaves this process.
 import { CUSTOM_SANDBOX_USER } from './custom_user.js';
+import { profileMasks } from './profiles.js';
 import { isPlaidError, type PlaidClient, type PlaidConfig } from './types.js';
 import type { AccountOption, PlaidStore } from './store.js';
 
@@ -61,28 +62,69 @@ export interface SandboxResult extends Linked {
   products: string[];
   /** true when the household already had this institution linked: no new item, just a fresh sync (or a fresh offer in select mode). */
   reused: boolean;
+  /** The sandbox profile the item was built from (echoed when the caller asked for one). */
+  profile_id?: string;
   /** Sandbox users Plaid rejected before this one worked (for example the custom user), with Plaid's error code. */
   rejected?: { username: string; code: string; detail: string }[];
 }
 
+export interface SandboxOptions {
+  householdId: string;
+  username?: string;
+  institutionId?: string;
+  forceNew?: boolean;
+  select?: boolean;
+  /** The custom-user JSON string (a profile from data/plaid/profiles, or data/plaid/sandbox_user.json for the family demo). */
+  customUser?: string | null;
+  profileId?: string;
+  /**
+   * An explicitly chosen profile (a PNC customer): never swap in another sandbox user when Plaid rejects it (the family would
+   * silently get somebody else's bank), and only reuse an existing item when it was built from the same profile.
+   */
+  strictProfile?: boolean;
+}
+
+/** Is this already-linked item the requested profile? Compared by account masks (every profile has its own set), so it works across restarts. */
+async function itemIsProfile(client: PlaidClient, accessToken: string, customUser: string): Promise<boolean> {
+  const want = profileMasks(customUser);
+  if (!want.size) return false;
+  try {
+    const have = new Set((await client.accountsGet(accessToken)).accounts.map((a) => a.mask ?? ''));
+    return have.size === want.size && [...want].every((m) => have.has(m));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * /sandbox/public_token/create on First Platypus Bank, then the same path as a Link exchange. Without an explicit username the
- * demo bank is the custom user (`customUser` = the contents of data/plaid/sandbox_user.json) when available; if Plaid rejects it
- * (or no file is configured) the worker falls back to user_transactions_dynamic, then user_good. `select` stops after offering
- * the accounts (onboarding).
+ * demo bank is the custom user (`customUser` = the contents of a profile file) when available; if Plaid rejects it
+ * (or no file is configured) the worker falls back to user_transactions_dynamic, then user_good, unless `strictProfile` is set.
+ * `select` stops after offering the accounts (onboarding).
  */
-export async function sandboxConnect(rt: { client: PlaidClient; store: PlaidStore; config: PlaidConfig }, o: { householdId: string; username?: string; institutionId?: string; forceNew?: boolean; select?: boolean; customUser?: string | null }): Promise<SandboxResult> {
+export async function sandboxConnect(rt: { client: PlaidClient; store: PlaidStore; config: PlaidConfig }, o: SandboxOptions): Promise<SandboxResult> {
   const institution = o.institutionId || SANDBOX_INSTITUTION;
+  const profile = o.profileId ? { profile_id: o.profileId } : {};
   // a second click on "quick connect" must not stack a second copy of the same sandbox bank on the household
   if (!o.forceNew) {
-    const existing = (await rt.store.items(o.householdId)).find((i) => i.institutionId === institution);
+    const candidates = (await rt.store.items(o.householdId)).filter((i) => i.institutionId === institution);
+    let existing = candidates[0];
+    if (o.strictProfile && o.customUser) {
+      existing = undefined;
+      for (const c of candidates) {
+        if (await itemIsProfile(rt.client, c.accessToken, o.customUser)) {
+          existing = c;
+          break;
+        }
+      }
+    }
     if (existing) {
       const accounts = o.select ? await offerAccounts(rt.client, rt.store, { householdId: o.householdId, itemId: existing.itemId, accessToken: existing.accessToken, institutionName: existing.institutionName }) : undefined;
       if (!o.select) await rt.store.requestSync(o.householdId);
-      return { item_id: existing.itemId, institution_id: institution, institution_name: existing.institutionName, username: o.username ?? DEFAULT_SANDBOX_USER, products: rt.config.products, reused: true, ...(accounts !== undefined ? { accounts } : {}) };
+      return { item_id: existing.itemId, institution_id: institution, institution_name: existing.institutionName, username: o.username ?? (o.strictProfile && o.customUser ? CUSTOM_SANDBOX_USER : DEFAULT_SANDBOX_USER), products: rt.config.products, reused: true, ...profile, ...(accounts !== undefined ? { accounts } : {}) };
     }
   }
-  const users = o.username ? [o.username] : [...(o.customUser ? [CUSTOM_SANDBOX_USER] : []), DEFAULT_SANDBOX_USER, FALLBACK_SANDBOX_USER];
+  const users = o.username ? [o.username] : o.strictProfile ? [CUSTOM_SANDBOX_USER] : [...(o.customUser ? [CUSTOM_SANDBOX_USER] : []), DEFAULT_SANDBOX_USER, FALLBACK_SANDBOX_USER];
   const rejected: NonNullable<SandboxResult['rejected']> = [];
   const all = rt.config.products;
   const productSets = all.length > 1 || all[0] !== 'transactions' ? [all, ['transactions']] : [all];
@@ -94,7 +136,7 @@ export async function sandboxConnect(rt: { client: PlaidClient; store: PlaidStor
         const pub = await rt.client.sandboxPublicTokenCreate({ institution_id: institution, initial_products: products, username, ...(password ? { password } : {}) });
         const linked = await linkItem(rt.client, rt.store, { householdId: o.householdId, publicToken: pub.public_token, institutionId: institution, ...(o.select ? { select: true } : {}), ...(institution === SANDBOX_INSTITUTION ? { institutionName: SANDBOX_INSTITUTION_NAME } : {}) });
         const before = rejected.filter((r) => r.username !== username); // a user that worked on a second try was not "rejected"
-        return { ...linked, username, products, reused: false, ...(before.length ? { rejected: before } : {}) };
+        return { ...linked, username, products, reused: false, ...profile, ...(before.length ? { rejected: before } : {}) };
       } catch (e) {
         last = e;
         if (!isPlaidError(e)) throw e; // store / network problems are not a reason to try another user

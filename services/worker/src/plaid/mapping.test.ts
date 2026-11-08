@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { liabilities, pAcct, ptxn } from '../testing/plaid_fake.js';
-import { accountId, liabilityFacts, mapAccount, mapAccountType, mapBalance, mapCategory, mapTxn, txnId } from './mapping.js';
+import { accountId, inferMonthlyPayment, liabilityFacts, mapAccount, mapAccountType, mapBalance, mapCategory, mapTxn, txnId } from './mapping.js';
 
 describe('Plaid account type mapping', () => {
   it.each([
@@ -17,6 +17,7 @@ describe('Plaid account type mapping', () => {
     ['loan', 'auto', 'auto_loan'],
     ['loan', 'student', 'personal_loan'],
     ['loan', 'personal', 'personal_loan'],
+    ['loan', 'consumer', 'personal_loan'], // how data/pnc_profiles.py files a PNC personal loan
   ])('%s/%s -> %s without asking a model', (type, subtype, want) => {
     const d = mapAccountType(type, subtype);
     expect(d.type).toBe(want);
@@ -98,5 +99,24 @@ describe('Plaid transaction rows', () => {
   it('ids carry the plaid prefixes', () => {
     expect(accountId('abc')).toBe('acct_plaid_abc');
     expect(txnId('xyz')).toBe('txn_plaid_xyz');
+  });
+});
+
+describe('inferMonthlyPayment', () => {
+  it('is the median of the latest three payments (Keystone sign: payments positive, interest and fees negative)', () => {
+    const rows = [
+      { date: '2026-05-05', amount: 999 },
+      { date: '2026-08-05', amount: 1810 },
+      { date: '2026-09-05', amount: 1830 },
+      { date: '2026-10-05', amount: 1820 },
+      { date: '2026-10-05', amount: -220 }, // interest
+    ];
+    expect(inferMonthlyPayment(rows)).toBe(1820);
+    expect(inferMonthlyPayment(rows.slice(2, 4))).toBe(1825); // two payments: their mean
+  });
+  it('needs two payments, and ignores accounts with none', () => {
+    expect(inferMonthlyPayment([{ date: '2026-10-05', amount: 300 }])).toBeUndefined();
+    expect(inferMonthlyPayment([{ date: '2026-10-05', amount: -30 }, { date: '2026-09-05', amount: -30 }])).toBeUndefined();
+    expect(inferMonthlyPayment([])).toBeUndefined();
   });
 });

@@ -6,7 +6,8 @@
 Deterministic: same seed -> byte-identical files. Pure standard library, Python 3.12+.
 Writes households, members, accounts, transactions, credit_profiles, obligations, conversations, proposals and
 votes (.json) into data/seed/ (see ../docs/contracts.md sections 1 and 6, and data/README.md), plus the Plaid
-Sandbox custom user (the demo bank for onboarding, contracts.md section 7) into ../plaid/sandbox_user.json.
+Sandbox custom user (the demo bank for onboarding, contracts.md section 7) into ../plaid/sandbox_user.json, and PNC's
+HackUTD customers as selectable Plaid custom users into ../plaid/profiles/ (pnc_profiles.py, contracts.md section 7b).
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from convos import build_conversations  # noqa: E402
 from households import build_all, to_records  # noqa: E402
 from ledger import TODAY, WIN_END  # noqa: E402
 from plaid_user import build_sandbox_user, dump_config as dump_plaid_user  # noqa: E402
+from pnc_profiles import generate as generate_pnc_profiles  # noqa: E402
 from proposals import build_proposals, validate_proposals  # noqa: E402
 
 FILES = ["households", "members", "accounts", "transactions", "credit_profiles", "obligations", "conversations",
@@ -153,6 +155,8 @@ def main() -> int:
     with open(plaid_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(dump_plaid_user(build_sandbox_user(args.seed)))
     print(f"{'plaid/sandbox_user.json':<22}{'':>6}      {os.path.getsize(plaid_path) / 1024:>9.1f} KB   (Plaid Sandbox custom user)")
+    pnc = generate_pnc_profiles(plaid_dir)             # PNC's 30 customers -> plaid/profiles/*.json (does not depend on --seed)
+    print(f"{'plaid/profiles/':<22}{pnc['profiles'] + 1:>6} files {sum(os.path.getsize(os.path.join(plaid_dir, 'profiles', f)) for f in os.listdir(os.path.join(plaid_dir, 'profiles'))) / 1024:>9.1f} KB   (PNC customers as Plaid custom users + index.json; see data/pnc/README.md)")
     if args.report:
         report(rec, paths)
     return 0

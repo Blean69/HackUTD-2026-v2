@@ -1,0 +1,2437 @@
+[
+ {
+  "profile_id": "family_demo",
+  "display_name": "The Whitfields, a two-income Plano family with a mortgage, car loan and kids' activities",
+  "summary": "The default demo bank: 7 accounts (checking, savings, card, mortgage, auto loan, IRA, CD), about six months of payroll, bills and groceries; $228.2k of debt.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "0001",
+    "balance": 6200
+   },
+   {
+    "name": "High-Yield Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "0002",
+    "balance": 18500
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "0003",
+    "balance": 1850
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "0004",
+    "balance": 212000
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "0005",
+    "balance": 14300
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "0006",
+    "balance": 88000
+   },
+   {
+    "name": "24-Month CD",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "0007",
+    "balance": 30000
+   }
+  ],
+  "txn_count": 226,
+  "first_name": "Whitfield family",
+  "persona": "two-income family, mortgage and auto loan, saving for the kids",
+  "source": "keystone_synthetic",
+  "customer_id": "",
+  "cash": 54700,
+  "debts": 228150
+ },
+ {
+  "profile_id": "pnc_c001",
+  "display_name": "Maya, early-career nurse practitioner, saving for a first home",
+  "summary": "Earns $9.7k/mo and spends $6.4k before debt payments; 5 accounts, $19.0k in checking and savings, $7.0k in an IRA, $7.6k of debt, card 26% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "5395",
+    "balance": 1604,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "6800",
+    "balance": 17416.6,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "9792",
+    "balance": 6571.46,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 197.14
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "5324",
+    "balance": 1050.28,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 29.17
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "8669",
+    "balance": 6994.56,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 136,
+  "first_name": "Maya",
+  "persona": "early-career nurse practitioner, saving for a first home",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C001",
+  "monthly_income": 9710.63,
+  "monthly_expenses": 6359.87,
+  "cash": 19020.6,
+  "debts": 7621.74,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c002",
+  "display_name": "Marcus, mid-career teacher, balancing the mortgage with retirement saving",
+  "summary": "Earns $6.1k/mo and spends $3.7k before debt payments; 8 accounts, $22.0k in checking and savings, $65.5k in an IRA, $45.1k of debt, card 7% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "4577",
+    "balance": 4007.36,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "1479",
+    "balance": 17991.23,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "9645",
+    "balance": 13294.13,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "7572",
+    "balance": 1755.27,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 52.66
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "5250",
+    "balance": 19590.45,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 408.13
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "5034",
+    "balance": 3249.67,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 90.27
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "4155",
+    "balance": 20520.45,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 133.38
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "9754",
+    "balance": 65502.11,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 190,
+  "first_name": "Marcus",
+  "persona": "mid-career teacher, balancing the mortgage with retirement saving",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C002",
+  "monthly_income": 6094.69,
+  "monthly_expenses": 3733.89,
+  "cash": 21998.59,
+  "debts": 45115.84,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c003",
+  "display_name": "Elena, mid-career pharmacist, paying down a nearly maxed-out credit card",
+  "summary": "Earns $9.2k/mo and spends $6.3k before debt payments; 7 accounts, $13.7k in checking and savings, $55.8k in an IRA, $50.9k of debt, card 94% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7234",
+    "balance": 8994.16,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7405",
+    "balance": 4666.12,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "1834",
+    "balance": 7227.13,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "7522",
+    "balance": 8283.99,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 248.52
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "1614",
+    "balance": 28695.62,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 597.83
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "3602",
+    "balance": 13921.68,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 386.71
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "2331",
+    "balance": 55799.65,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Elena",
+  "persona": "mid-career pharmacist, paying down a nearly maxed-out credit card",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C003",
+  "monthly_income": 9209.62,
+  "monthly_expenses": 6314.28,
+  "cash": 13660.28,
+  "debts": 50901.29,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c004",
+  "display_name": "Darius, late-career line cook, buried in debt payments and looking for a plan",
+  "summary": "Earns $4.2k/mo and spends $3.0k before debt payments; 6 accounts, $12.1k in checking and savings, $79.7k in an IRA, $268.4k of debt, card 16% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "2422",
+    "balance": 2569.88,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7209",
+    "balance": 9561.81,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "4757",
+    "balance": 5032.69,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "3930",
+    "balance": 1225.82,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 36.77
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "1206",
+    "balance": 267125.43,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1736.32
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "9090",
+    "balance": 79679.65,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Darius",
+  "persona": "late-career line cook, buried in debt payments and looking for a plan",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C004",
+  "monthly_income": 4221.35,
+  "monthly_expenses": 2966.02,
+  "cash": 12131.69,
+  "debts": 268351.25,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c005",
+  "display_name": "Priya, early-career paralegal, buried in debt payments and looking for a plan",
+  "summary": "Earns $5.3k/mo and spends $4.5k before debt payments; 8 accounts, $29.0k in checking and savings, $1.2k in an IRA, $296.0k of debt, card 33% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "2403",
+    "balance": 1424.89,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7603",
+    "balance": 27623.28,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "3578",
+    "balance": 3198.86,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4235",
+    "balance": 7492.24,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 224.77
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "8499",
+    "balance": 17710.32,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 368.96
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "2126",
+    "balance": 4699.6,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 130.54
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "2935",
+    "balance": 266087.27,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1729.57
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "1092",
+    "balance": 1218.76,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 190,
+  "first_name": "Priya",
+  "persona": "early-career paralegal, buried in debt payments and looking for a plan",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C005",
+  "monthly_income": 5273.01,
+  "monthly_expenses": 4492.24,
+  "cash": 29048.17,
+  "debts": 295989.43,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c006",
+  "display_name": "Tomas, late-career line cook, buried in debt payments and looking for a plan",
+  "summary": "Earns $4.2k/mo and spends $2.9k before debt payments; 8 accounts, $29.7k in checking and savings, $75.1k in an IRA, $258.4k of debt, card 66% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "2255",
+    "balance": 8533.35,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "1954",
+    "balance": 21131.81,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "9466",
+    "balance": 10066.06,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "5111",
+    "balance": 6667.18,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 200.02
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "7515",
+    "balance": 9441.15,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 196.69
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "9887",
+    "balance": 9441.16,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 262.25
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "5027",
+    "balance": 232803.29,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1513.22
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "2206",
+    "balance": 75069.05,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 190,
+  "first_name": "Tomas",
+  "persona": "late-career line cook, buried in debt payments and looking for a plan",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C006",
+  "monthly_income": 4199.05,
+  "monthly_expenses": 2864.81,
+  "cash": 29665.16,
+  "debts": 258352.78,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c007",
+  "display_name": "Aaliyah, early-career customer-success rep, living close to the edge month to month",
+  "summary": "Earns $6.9k/mo and spends $6.3k before debt payments; 7 accounts, $26.6k in checking and savings, $3.9k in an IRA, $27.4k of debt, card 40% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7408",
+    "balance": 2977.81,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "3217",
+    "balance": 23602.05,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "8091",
+    "balance": 9471.72,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "1248",
+    "balance": 7782.39,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 233.47
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "7492",
+    "balance": 7770.55,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 161.89
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "3506",
+    "balance": 11873.01,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 329.81
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "1639",
+    "balance": 3926,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Aaliyah",
+  "persona": "early-career customer-success rep, living close to the edge month to month",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C007",
+  "monthly_income": 6881.81,
+  "monthly_expenses": 6250.49,
+  "cash": 26579.86,
+  "debts": 27425.95,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c008",
+  "display_name": "Wei, mid-career pharmacist, working down car and personal-loan payments",
+  "summary": "Earns $9.2k/mo and spends $7.0k before debt payments; 8 accounts, $19.7k in checking and savings, $55.4k in an IRA, $268.7k of debt, card 42% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "6553",
+    "balance": 8446.54,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7977",
+    "balance": 11235.98,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "8681",
+    "balance": 12388.76,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "9917",
+    "balance": 10176.87,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 305.31
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "6994",
+    "balance": 1878.98,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 39.15
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "1155",
+    "balance": 1172.51,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 32.57
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "8617",
+    "balance": 255427.19,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1660.28
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "2164",
+    "balance": 55378.24,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 190,
+  "first_name": "Wei",
+  "persona": "mid-career pharmacist, working down car and personal-loan payments",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C008",
+  "monthly_income": 9196.07,
+  "monthly_expenses": 7000.63,
+  "cash": 19682.52,
+  "debts": 268655.55,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c009",
+  "display_name": "Grace, mid-career attorney, paying the mortgage down fast while investing the rest",
+  "summary": "Earns $13.9k/mo and spends $8.0k before debt payments; 6 accounts, $31.1k in checking and savings, $66.5k in an IRA, $87.6k of debt, card 48% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "8997",
+    "balance": 3258.73,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "1628",
+    "balance": 27802.83,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4721",
+    "balance": 6675.24,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 200.26
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "3374",
+    "balance": 702.22,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 14.63
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "3145",
+    "balance": 80195.37,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 521.27
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "2028",
+    "balance": 66460.12,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 156,
+  "first_name": "Grace",
+  "persona": "mid-career attorney, paying the mortgage down fast while investing the rest",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C009",
+  "monthly_income": 13888.01,
+  "monthly_expenses": 7967.53,
+  "cash": 31061.56,
+  "debts": 87572.83,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c010",
+  "display_name": "Omar, late-career dental hygienist, saving for a first home",
+  "summary": "Earns $4.7k/mo and spends $3.1k before debt payments; 6 accounts, $11.1k in checking and savings, $73.4k in an IRA, $16.5k of debt, card 9% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "2277",
+    "balance": 2206.24,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7860",
+    "balance": 8879.08,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "9059",
+    "balance": 1662.92,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 49.89
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "5177",
+    "balance": 10113.42,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 210.7
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "4530",
+    "balance": 4703.73,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 130.66
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "7468",
+    "balance": 73368.85,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Omar",
+  "persona": "late-career dental hygienist, saving for a first home",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C010",
+  "monthly_income": 4711.01,
+  "monthly_expenses": 3106.45,
+  "cash": 11085.32,
+  "debts": 16480.07,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c011",
+  "display_name": "Sofia, early-career electrician, building a real emergency fund",
+  "summary": "Earns $6.5k/mo and spends $4.3k before debt payments; 6 accounts, $8.0k in checking and savings, $16.6k in an IRA, $121.4k of debt, card 53% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "6039",
+    "balance": 5827.95,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "3633",
+    "balance": 2189.62,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "5846",
+    "balance": 3079.72,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 92.39
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "5403",
+    "balance": 10161.14,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 282.25
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "4682",
+    "balance": 108204.24,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 703.33
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "6295",
+    "balance": 16556.8,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Sofia",
+  "persona": "early-career electrician, building a real emergency fund",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C011",
+  "monthly_income": 6476.88,
+  "monthly_expenses": 4293.59,
+  "cash": 8017.57,
+  "debts": 121445.1,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c012",
+  "display_name": "Jamal, early-career accountant, paying the mortgage down fast while investing the rest",
+  "summary": "Earns $10.8k/mo and spends $5.6k before debt payments; 5 accounts, $24.9k in checking and savings, $37.5k in an IRA, $33.7k of debt, card 9% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "3673",
+    "balance": 5241.98,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "3037",
+    "balance": 19694.85,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4449",
+    "balance": 1501.85,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 45.06
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "4357",
+    "balance": 32215.27,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 209.4
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "3283",
+    "balance": 37474.53,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 138,
+  "first_name": "Jamal",
+  "persona": "early-career accountant, paying the mortgage down fast while investing the rest",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C012",
+  "monthly_income": 10793.98,
+  "monthly_expenses": 5556.86,
+  "cash": 24936.83,
+  "debts": 33717.12,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c013",
+  "display_name": "Hannah, mid-career project manager, saving for a first home",
+  "summary": "Earns $9.5k/mo and spends $5.8k before debt payments; 5 accounts, $11.5k in checking and savings, $74.0k in an IRA, $9.0k of debt, card 18% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "9202",
+    "balance": 6108.95,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7170",
+    "balance": 5409.81,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "9512",
+    "balance": 1323.61,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 39.71
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "6341",
+    "balance": 7692.95,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 213.69
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "6257",
+    "balance": 74036.33,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 136,
+  "first_name": "Hannah",
+  "persona": "mid-career project manager, saving for a first home",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C013",
+  "monthly_income": 9495.65,
+  "monthly_expenses": 5827.88,
+  "cash": 11518.76,
+  "debts": 9016.56,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c014",
+  "display_name": "Luis, mid-career sales director, balancing the mortgage with retirement saving",
+  "summary": "Earns $13.5k/mo and spends $9.3k before debt payments; 6 accounts, $20.9k in checking and savings, $55.2k in an IRA, $161.1k of debt, card 31% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "1899",
+    "balance": 6788.14,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "1242",
+    "balance": 14107.41,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "6933",
+    "balance": 8931.18,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "8556",
+    "balance": 6878.98,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 206.37
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "3865",
+    "balance": 154260.68,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1002.69
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "4909",
+    "balance": 55165.17,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 155,
+  "first_name": "Luis",
+  "persona": "mid-career sales director, balancing the mortgage with retirement saving",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C014",
+  "monthly_income": 13475.32,
+  "monthly_expenses": 9300.9,
+  "cash": 20895.55,
+  "debts": 161139.66,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c015",
+  "display_name": "Keiko, mid-career physician assistant, building a real emergency fund",
+  "summary": "Earns $11.0k/mo and spends $9.0k before debt payments; 7 accounts, $10.3k in checking and savings, $42.8k in an IRA, $32.4k of debt, card 69% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "4096",
+    "balance": 6935.57,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "3830",
+    "balance": 3327.71,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "1387",
+    "balance": 693.35,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "9310",
+    "balance": 6985.17,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 209.56
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "4562",
+    "balance": 19602.23,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 408.38
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "2339",
+    "balance": 5776.69,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 160.46
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "4120",
+    "balance": 42780.76,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Keiko",
+  "persona": "mid-career physician assistant, building a real emergency fund",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C015",
+  "monthly_income": 11041.95,
+  "monthly_expenses": 9034.32,
+  "cash": 10263.28,
+  "debts": 32364.09,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c016",
+  "display_name": "Andre, mid-career pharmacist, living close to the edge month to month",
+  "summary": "Earns $9.3k/mo and spends $8.3k before debt payments; 6 accounts, $29.8k in checking and savings, $53.4k in an IRA, $298.3k of debt, card 18% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7847",
+    "balance": 2551.35,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "1290",
+    "balance": 27237.97,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "5594",
+    "balance": 8950.76,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "6763",
+    "balance": 1696.12,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 50.88
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "8108",
+    "balance": 296604.29,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1927.93
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "3596",
+    "balance": 53408.33,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Andre",
+  "persona": "mid-career pharmacist, living close to the edge month to month",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C016",
+  "monthly_income": 9310.21,
+  "monthly_expenses": 8338.51,
+  "cash": 29789.32,
+  "debts": 298300.41,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c017",
+  "display_name": "Nora, early-career pharmacist, paying the mortgage down fast while investing the rest",
+  "summary": "Earns $9.7k/mo and spends $4.9k before debt payments; 6 accounts, $11.6k in checking and savings, $18.1k in an IRA, $89.6k of debt, card 36% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "1322",
+    "balance": 4294.82,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "4196",
+    "balance": 7324.16,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4680",
+    "balance": 8170.06,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 245.1
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "3945",
+    "balance": 4800.19,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 100.0
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "9469",
+    "balance": 76602.23,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 497.91
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "4767",
+    "balance": 18115.04,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Nora",
+  "persona": "early-career pharmacist, paying the mortgage down fast while investing the rest",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C017",
+  "monthly_income": 9741.28,
+  "monthly_expenses": 4878.39,
+  "cash": 11618.98,
+  "debts": 89572.48,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c018",
+  "display_name": "Kwame, mid-career attorney, paying down a nearly maxed-out credit card",
+  "summary": "Earns $13.2k/mo and spends $12.0k before debt payments; 7 accounts, $21.0k in checking and savings, $48.1k in an IRA, $279.4k of debt, card 94% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7901",
+    "balance": 7447.28,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7419",
+    "balance": 13576.63,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "8237",
+    "balance": 6442.52,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "5266",
+    "balance": 5344.03,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 160.32
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "1197",
+    "balance": 8992.5,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 249.79
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "5499",
+    "balance": 265060.15,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1722.89
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "8409",
+    "balance": 48094.33,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Kwame",
+  "persona": "mid-career attorney, paying down a nearly maxed-out credit card",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C018",
+  "monthly_income": 13175.6,
+  "monthly_expenses": 11987.95,
+  "cash": 21023.91,
+  "debts": 279396.68,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c019",
+  "display_name": "Isabel, early-career physician assistant, paying the mortgage down fast while investing the rest",
+  "summary": "Earns $12.3k/mo and spends $6.7k before debt payments; 8 accounts, $20.1k in checking and savings, $4.6k in an IRA, $192.7k of debt, card 31% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "9342",
+    "balance": 8508.1,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "5493",
+    "balance": 11548.46,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "9874",
+    "balance": 12189.62,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "2186",
+    "balance": 9218.25,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 276.55
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "6185",
+    "balance": 21798.61,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 454.14
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "2416",
+    "balance": 2688.08,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 74.67
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "4110",
+    "balance": 158962.21,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1033.25
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "7482",
+    "balance": 4633.76,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 191,
+  "first_name": "Isabel",
+  "persona": "early-career physician assistant, paying the mortgage down fast while investing the rest",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C019",
+  "monthly_income": 12329.86,
+  "monthly_expenses": 6675.48,
+  "cash": 20056.56,
+  "debts": 192667.15,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c020",
+  "display_name": "Ravi, mid-career electrician, saving for a first home",
+  "summary": "Earns $6.7k/mo and spends $3.3k before debt payments; 7 accounts, $11.9k in checking and savings, $25.0k in an IRA, $25.8k of debt, card 15% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "4058",
+    "balance": 6510.85,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "5319",
+    "balance": 5356.09,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "1121",
+    "balance": 349.96,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "7655",
+    "balance": 3075.83,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 92.27
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "3420",
+    "balance": 16888.02,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 351.83
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "7889",
+    "balance": 5865.85,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 162.94
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "4704",
+    "balance": 24971.04,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Ravi",
+  "persona": "mid-career electrician, saving for a first home",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C020",
+  "monthly_income": 6674.2,
+  "monthly_expenses": 3264.19,
+  "cash": 11866.94,
+  "debts": 25829.7,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c021",
+  "display_name": "Tessa, early-career accountant, paying the mortgage down fast while investing the rest",
+  "summary": "Earns $7.8k/mo and spends $4.0k before debt payments; 7 accounts, $12.7k in checking and savings, $6.7k in an IRA, $151.1k of debt, card 21% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7280",
+    "balance": 1267.11,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "2211",
+    "balance": 11470.84,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "2167",
+    "balance": 6244.24,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "8370",
+    "balance": 3537.81,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 106.13
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "8925",
+    "balance": 7727.75,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 214.66
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "2291",
+    "balance": 139848.42,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 909.01
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "3012",
+    "balance": 6655.98,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Tessa",
+  "persona": "early-career accountant, paying the mortgage down fast while investing the rest",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C021",
+  "monthly_income": 7814.72,
+  "monthly_expenses": 3972.77,
+  "cash": 12737.95,
+  "debts": 151113.98,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c022",
+  "display_name": "Mateo, early-career delivery driver, buried in debt payments and looking for a plan",
+  "summary": "Earns $4.5k/mo and spends $3.0k before debt payments; 6 accounts, $22.7k in checking and savings, $11.7k in an IRA, $317.4k of debt, card 37% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7759",
+    "balance": 5453.82,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "4551",
+    "balance": 17291.82,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "5551",
+    "balance": 9908.14,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 297.24
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "2537",
+    "balance": 12972.81,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 270.27
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "6190",
+    "balance": 294563.02,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1914.66
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "2421",
+    "balance": 11689.55,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Mateo",
+  "persona": "early-career delivery driver, buried in debt payments and looking for a plan",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C022",
+  "monthly_income": 4489.17,
+  "monthly_expenses": 3031.37,
+  "cash": 22745.64,
+  "debts": 317443.97,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c023",
+  "display_name": "Leila, early-career sales director, balancing the mortgage with retirement saving",
+  "summary": "Earns $13.1k/mo and spends $7.9k before debt payments; 7 accounts, $26.7k in checking and savings, $2.1k in an IRA, $293.0k of debt, card 24% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7202",
+    "balance": 6599.96,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "8908",
+    "balance": 20110.53,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "4996",
+    "balance": 2046.28,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4887",
+    "balance": 6863.75,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 205.91
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "3039",
+    "balance": 4460.15,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 123.89
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "8747",
+    "balance": 281647.64,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1830.71
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "7222",
+    "balance": 2132.1,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 172,
+  "first_name": "Leila",
+  "persona": "early-career sales director, balancing the mortgage with retirement saving",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C023",
+  "monthly_income": 13071.99,
+  "monthly_expenses": 7921.08,
+  "cash": 26710.49,
+  "debts": 292971.54,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c024",
+  "display_name": "Caleb, mid-career accountant, working off an over-limit credit card",
+  "summary": "Earns $8.5k/mo and spends $5.6k before debt payments; 7 accounts, $18.7k in checking and savings, $50.0k in an IRA, $334.6k of debt, card 187% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "7839",
+    "balance": 6122.85,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "7497",
+    "balance": 12577.24,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4549",
+    "balance": 9971.34,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 299.14
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "8909",
+    "balance": 28908.09,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 602.25
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "4603",
+    "balance": 13901.14,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 386.14
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "6644",
+    "balance": 281770.84,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1831.51
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "4722",
+    "balance": 50025.78,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 173,
+  "first_name": "Caleb",
+  "persona": "mid-career accountant, working off an over-limit credit card",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C024",
+  "monthly_income": 8476.42,
+  "monthly_expenses": 5557.68,
+  "cash": 18700.09,
+  "debts": 334551.41,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c025",
+  "display_name": "Imani, mid-career dental hygienist, working down car and personal-loan payments",
+  "summary": "Earns $5.6k/mo and spends $2.9k before debt payments; 6 accounts, $15.3k in checking and savings, $26.4k in an IRA, $207.9k of debt, card 14% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "9320",
+    "balance": 5313.1,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "2485",
+    "balance": 10027.3,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "2707",
+    "balance": 2633.01,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 78.99
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "2872",
+    "balance": 6129.05,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 170.25
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "7897",
+    "balance": 199162.14,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1294.55
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "8432",
+    "balance": 26420.93,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 155,
+  "first_name": "Imani",
+  "persona": "mid-career dental hygienist, working down car and personal-loan payments",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C025",
+  "monthly_income": 5609.53,
+  "monthly_expenses": 2922.44,
+  "cash": 15340.4,
+  "debts": 207924.2,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c026",
+  "display_name": "Noah, mid-career sales director, building a real emergency fund",
+  "summary": "Earns $12.2k/mo and spends $7.2k before debt payments; 8 accounts, $11.2k in checking and savings, $75.9k in an IRA, $293.8k of debt, card 27% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "9870",
+    "balance": 1973.26,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "8772",
+    "balance": 9215.65,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "5206",
+    "balance": 11310.94,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4224",
+    "balance": 3400.65,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 102.02
+   },
+   {
+    "name": "Auto Loan",
+    "type": "loan",
+    "subtype": "auto",
+    "mask": "6491",
+    "balance": 5494.67,
+    "keystone_type": "auto_loan",
+    "rate_pct": 7.5,
+    "monthly_payment": 114.47
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "2568",
+    "balance": 7538.92,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 209.41
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "6237",
+    "balance": 277350.54,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 1802.78
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "1425",
+    "balance": 75874.32,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 190,
+  "first_name": "Noah",
+  "persona": "mid-career sales director, building a real emergency fund",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C026",
+  "monthly_income": 12175.14,
+  "monthly_expenses": 7213.79,
+  "cash": 11188.91,
+  "debts": 293784.78,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c027",
+  "display_name": "Camila, late-career home health aide, paying down a nearly maxed-out credit card",
+  "summary": "Earns $3.6k/mo and spends $3.3k before debt payments; 5 accounts, $18.3k in checking and savings, $78.1k in an IRA, $314.2k of debt, card 78% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "5286",
+    "balance": 8567.16,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "9220",
+    "balance": 9766.18,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "3397",
+    "balance": 6362.53,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 190.88
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "3453",
+    "balance": 307829.42,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 2000.89
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "3041",
+    "balance": 78140.62,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 136,
+  "first_name": "Camila",
+  "persona": "late-career home health aide, paying down a nearly maxed-out credit card",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C027",
+  "monthly_income": 3578.18,
+  "monthly_expenses": 3324.91,
+  "cash": 18333.34,
+  "debts": 314191.95,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c028",
+  "display_name": "Devon, late-career paralegal, paying the mortgage down fast while investing the rest",
+  "summary": "Earns $6.7k/mo and spends $3.5k before debt payments; 6 accounts, $17.5k in checking and savings, $74.5k in an IRA, $53.7k of debt, card 15% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "1115",
+    "balance": 6268.84,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "2610",
+    "balance": 11252.87,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "5162",
+    "balance": 5944.04,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "6349",
+    "balance": 4239.14,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 127.17
+   },
+   {
+    "name": "Home Mortgage",
+    "type": "loan",
+    "subtype": "mortgage",
+    "mask": "7146",
+    "balance": 49417.25,
+    "keystone_type": "mortgage",
+    "rate_pct": 6.5,
+    "monthly_payment": 321.21
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "5281",
+    "balance": 74546.62,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Devon",
+  "persona": "late-career paralegal, paying the mortgage down fast while investing the rest",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C028",
+  "monthly_income": 6700.15,
+  "monthly_expenses": 3460.02,
+  "cash": 17521.71,
+  "debts": 53656.39,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c029",
+  "display_name": "Anika, mid-career software engineer, building a steady nest egg",
+  "summary": "Earns $13.1k/mo and spends $11.5k before debt payments; 6 accounts, $24.8k in checking and savings, $80.0k in an IRA, $9.8k of debt, card 29% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "3901",
+    "balance": 4230.58,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "9807",
+    "balance": 20564.69,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "7140",
+    "balance": 5710.58,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "2991",
+    "balance": 5962.19,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 178.87
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "3677",
+    "balance": 3857.39,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 107.15
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "8571",
+    "balance": 79951.99,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Anika",
+  "persona": "mid-career software engineer, building a steady nest egg",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C029",
+  "monthly_income": 13115.94,
+  "monthly_expenses": 11513.38,
+  "cash": 24795.27,
+  "debts": 9819.58,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ },
+ {
+  "profile_id": "pnc_c030",
+  "display_name": "Ben, mid-career paralegal, building a steady nest egg",
+  "summary": "Earns $6.2k/mo and spends $4.9k before debt payments; 6 accounts, $27.6k in checking and savings, $48.6k in an IRA, $13.1k of debt, card 32% used.",
+  "accounts": [
+   {
+    "name": "Everyday Checking",
+    "type": "depository",
+    "subtype": "checking",
+    "mask": "1191",
+    "balance": 3279.1,
+    "keystone_type": "checking"
+   },
+   {
+    "name": "Savings",
+    "type": "depository",
+    "subtype": "savings",
+    "mask": "2968",
+    "balance": 24286.93,
+    "keystone_type": "savings"
+   },
+   {
+    "name": "Certificate of Deposit",
+    "type": "depository",
+    "subtype": "cd",
+    "mask": "3499",
+    "balance": 9808.35,
+    "keystone_type": "cd"
+   },
+   {
+    "name": "Rewards Visa",
+    "type": "credit",
+    "subtype": "credit card",
+    "mask": "4508",
+    "balance": 6829.29,
+    "keystone_type": "credit_card",
+    "rate_pct": 22.5,
+    "monthly_payment": 204.88
+   },
+   {
+    "name": "Personal Loan",
+    "type": "loan",
+    "subtype": "consumer",
+    "mask": "4754",
+    "balance": 6301.72,
+    "keystone_type": "personal_loan",
+    "rate_pct": 11.0,
+    "monthly_payment": 175.05
+   },
+   {
+    "name": "Traditional IRA",
+    "type": "investment",
+    "subtype": "ira",
+    "mask": "2538",
+    "balance": 48575.38,
+    "keystone_type": "ira"
+   }
+  ],
+  "txn_count": 154,
+  "first_name": "Ben",
+  "persona": "mid-career paralegal, building a steady nest egg",
+  "source": "pnc_hackutd_2026",
+  "customer_id": "C030",
+  "monthly_income": 6240.85,
+  "monthly_expenses": 4936.46,
+  "cash": 27566.03,
+  "debts": 13131.01,
+  "months": 6,
+  "window": {
+   "from": "2026-05-07",
+   "to": "2026-11-06"
+  }
+ }
+]
