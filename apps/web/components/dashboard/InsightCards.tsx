@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Donut } from "@/components/charts/Donut";
 import { SERIES } from "@/components/charts/theme";
 import { Mascot, Peek, type MascotMood } from "@/components/Mascot";
@@ -38,6 +38,7 @@ export function InsightCards({ fin }: { fin: RoomFinance }) {
   const srTone: Tone = sr === null ? "watch" : sr >= 15 ? "good" : sr >= 5 ? "watch" : "risk";
   const rwTone: Tone = runway === null ? "watch" : runway >= 6 ? "good" : runway >= 3 ? "watch" : "risk";
   const mood: MascotMood = srTone === "risk" || rwTone === "risk" ? "worried" : srTone === "good" && rwTone === "good" ? "cheer" : "happy";
+  const [hot, setHot] = useState<string | null>(null);
   const slices = spend.categories.map((c, i) => ({ key: c.category, value: c.value, color: SERIES[i % SERIES.length], label: categoryLabel(c.category) }));
 
   return (
@@ -48,13 +49,13 @@ export function InsightCards({ fin }: { fin: RoomFinance }) {
         <Peek mood={mood} />
         {slices.length ? (
           <div className="flex items-center gap-4">
-            <Donut slices={slices} size={112} thickness={14} label="Spending by category, last 90 days">
+            <Donut slices={slices} size={116} thickness={14} label="Spending by category, last 90 days" format={(n) => usd(n, { compact: true })} active={hot} onActive={setHot}>
               <span className="figure text-label"><CountUp value={spend.total} format={(n) => usd(n, { compact: true })} /></span>
               <span className="text-caption text-ink-3">spent</span>
             </Donut>
             <ul className="min-w-0 flex-1 space-y-1.5">
               {spend.categories.map((c, i) => (
-                <li key={c.category} className="motion-fade flex items-center gap-2 text-label" style={{ ["--i" as string]: i }}>
+                <li key={c.category} className={cx("motion-fade -mx-1.5 flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 text-label transition-colors", hot === c.category && "bg-surface-2")} style={{ ["--i" as string]: i }} onPointerEnter={() => setHot(c.category)} onPointerLeave={() => setHot(null)}>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: SERIES[i % SERIES.length] }} aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate text-ink-2">{categoryLabel(c.category)}</span>
                   <span className="num font-medium text-ink">{c.share.toFixed(0)}%</span>
@@ -72,6 +73,7 @@ const ASSET_LABEL: Record<string, string> = { checking: "Checking", savings: "Sa
 
 /** What the household owns, by kind. Debts are not in here; they are on the Accounts card. */
 export function AssetCard({ fin, className }: { fin: RoomFinance; className?: string }) {
+  const [hot, setHot] = useState<string | null>(null);
   const by = new Map<string, number>();
   for (const a of fin.accounts) if (["checking", "savings", "cd", "ira"].includes(a.type) && a.balance > 0) by.set(a.type, (by.get(a.type) ?? 0) + a.balance);
   if (fin.property > 0) by.set("home", fin.property);
@@ -82,13 +84,13 @@ export function AssetCard({ fin, className }: { fin: RoomFinance; className?: st
     <Panel id="asset-allocation" title="Asset allocation" className={className}>
       {rows.length ? (
         <div className="flex flex-col items-center gap-3">
-          <Donut slices={slices} size={124} thickness={16} label="Assets by kind">
+          <Donut slices={slices} size={132} thickness={16} label="Assets by kind" format={(n) => usd(n, { compact: true })} active={hot} onActive={setHot}>
             <span className="figure text-lead"><CountUp value={total} format={(n) => usd(n, { compact: true })} /></span>
             <span className="text-caption text-ink-3">total assets</span>
           </Donut>
           <ul className="w-full space-y-1.5">
             {slices.map((s) => (
-              <li key={s.key} className="flex items-center gap-2 text-label">
+              <li key={s.key} className={cx("-mx-1.5 flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-0.5 text-label transition-colors", hot === s.key && "bg-surface-2")} onPointerEnter={() => setHot(s.key)} onPointerLeave={() => setHot(null)} onClick={() => setHot(hot === s.key ? null : s.key)}>
                 <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate text-ink-2">{s.label}</span>
                 <span className="num font-medium text-ink">{((s.value / total) * 100).toFixed(1)}%</span>
