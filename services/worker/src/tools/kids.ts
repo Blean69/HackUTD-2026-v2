@@ -12,12 +12,23 @@ const MAX_DEPOSIT = 100; // per deposit, by voice (the module allows up to 500 f
 export const isKid = (m: Member): boolean => /child|kid|teen/i.test(m.role) || (m.age > 0 && m.age < 18);
 const first = (m: Member): string => m.name.split(/\s+/)[0] ?? m.name;
 
-/** The kid the caller named, by first name (case-insensitive, prefix allowed: "Sof" finds Sofia). */
+/** Spelling-blind form of a name, for what speech recognition writes: "Sophia" = "Sofia", "Matteo" = "Mateo". */
+export const sounds = (s: string): string => s.toLowerCase().replace(/'s$/, '').replace(/ph/g, 'f').replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
+function editDistance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array<number>(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length]![b.length]!;
+}
+
+/** The kid the caller named, by first name: case- and spelling-tolerant ("Sophia" finds Sofia), prefix allowed ("Sof"). */
 export function findKid(data: HouseholdData, name: string): Member | { error: string } {
   const kids = data.members.filter(isKid);
   if (!kids.length) return { error: 'This household has no kids or teens on file.' };
   const want = name.trim().toLowerCase().replace(/'s$/, '');
-  const hit = kids.find((k) => first(k).toLowerCase() === want) ?? kids.find((k) => k.name.toLowerCase().startsWith(want) && want.length >= 3);
+  const near = kids.filter((k) => { const a = sounds(first(k)); const b = sounds(want); return a.length >= 3 && (a === b || editDistance(a, b) <= 1); });
+  const hit = kids.find((k) => first(k).toLowerCase() === want) ?? kids.find((k) => k.name.toLowerCase().startsWith(want) && want.length >= 3) ?? (near.length === 1 ? near[0] : undefined);
   return hit ?? { error: `No kid named "${name}". The kids are ${kids.map(first).join(' and ')}.` };
 }
 

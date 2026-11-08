@@ -28,6 +28,9 @@ describe('Brian controls Kids and Teens', () => {
     expect((findKid(data, 'sofia') as { id: string }).id).toBe('mem_s');
     expect((findKid(data, "Mateo's") as { id: string }).id).toBe('mem_m');
     expect((findKid(data, 'Marisol') as { error: string }).error).toMatch(/Sofia and Mateo/); // a parent is not a kid
+    expect((findKid(data, 'Matteo') as { id: string }).id).toBe('mem_m'); // what speech recognition writes
+    expect((findKid(data, 'Sophia') as { id: string }).id).toBe('mem_s');
+    expect('error' in findKid(data, 'Max')).toBe(true);
   });
 
   it('reads chores and jars', () => {
