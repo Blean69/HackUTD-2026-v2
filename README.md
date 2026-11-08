@@ -49,6 +49,48 @@ Talk button (WebRTC) ────┴► voice service (Python, Pipecat) ──�
   2.14.1). Every merge to `main` deploys itself within a minute, with health checks and automatic rollback ([infra/DEPLOY.md](infra/DEPLOY.md)).
 - **Tests:** 1,000+ across the module (vitest against a real in-memory datastore), the worker and the voice service.
 
+## Agent architecture
+
+![Brianotron agent architecture: the agent team and Brian, the voice agent](docs/img/agent-architecture.png)
+
+Nemotron agents in Brianotron are a job queue, not a chat box. Most runs start from something the family does, not from a chat message.
+
+**1. Background agents (the agent team)**
+
+```
+ TRIGGER (a reducer)         SPACETIMEDB                 AGENT WORKER (Node)
+ Table Mode ends     ──┐
+ what-if or vote     ──┤     agent_job row     ─claim─►  PLAN     Nemotron 3 Ultra
+ Ask Brianotron      ──┼──►  (the queue)                 ACT      26 tools on the family's data
+ bank synced (Plaid) ──┤                                 OBSERVE  tool results as JSON
+ onboarding done     ──┘                                 CHECK    every $ and % vs the data,
+                                                                  advice reviewer
+                             trace_event rows  ◄───────  DECIDE   goal cards, verdict, answer
+                             results           ◄───────  worker-only reducers
+ every phone  ◄── live subscription ── Agent Trail · goal cards · verdicts · answers
+```
+
+- **Seven workflows:** Table Mode goals (`huddle`), What-If and family votes (`what_if`), Ask Brianotron (`coach`), bank sync (`plaid_sync`), first insights (`onboarding_insights`), scam check (`scam_check`) and data quality (`data_quality`).
+- **Two models, each where it fits:** Nemotron 3 Ultra plans, calls tools and reviews advice; Nemotron 3.5 Lightning does the fast steps and structured extraction.
+- **26 tools** in one registry, each a plain function with a JSON schema: ledger, bills and savings finder, 90-day forecast, month-by-month simulator, goal feasibility, simulated credit, scam and anomaly detectors, FRED rates, College Scorecard, plus confirm-first writes for goals, what-ifs, votes and kids' chores and jars.
+- **Guardrails in code:** a grounding check rewrites any answer with a figure that isn't in the tool results; an advice reviewer blocks moving money, gambling and anything the family can't afford.
+- **Honest failover:** NVIDIA first, then Qwen on tenvor.io, then local rules, and every trace row names the model and provider that answered. A replay of an identical earlier run is labelled "cache".
+
+**2. Brian, the voice agent**
+
+```
+ phone call (SignalWire) / Talk button (WebRTC)
+   └─► PIN gate ─► Nemotron ASR ─► Nemotron 3.5 Lightning (NVIDIA L40S via Brev, vLLM, NVFP4)
+                                      │  tool calls ─► the same tools, through the worker
+                                      │  app changes: propose ─► spoken "yes" ─► commit
+                                      ▼
+            leak guard ─► speech normalizer ─► ElevenLabs voice ─► caller
+   hang up ─► 15 s ─► critical alert? ─► Brian calls you back (SignalWire)
+```
+
+- Brian uses the same household tools as the agent team, so a phone answer and a dashboard number never disagree.
+- Every call is a traced `phone` run in the Agent Trail. Raw caller numbers are never stored, and Brian never asks for codes, PINs or money.
+
 ## Tech stack
 
 | Layer | Stack |
