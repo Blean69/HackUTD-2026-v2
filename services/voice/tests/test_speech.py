@@ -297,3 +297,14 @@ async def test_pipecat_text_transform_entry_points():
     assert await speech_transform("About $35k") == "About thirty-five thousand dollars."
     assert normalize_for_speech("Due 2026-12-24", today="2026-11-07") == "Due December twenty-fourth."
     assert speech.SpeechNormalizer().today is not None
+
+
+def test_the_product_name_is_respelled_for_the_voice_only():
+    """ElevenLabs said "Brianotron" as "bre-anna-tron"; the TTS gets "Bryan-o-tron", the log keeps the real name."""
+    import asyncio
+    spoken = []
+    n = SpeechNormalizer()
+    n.on_spoken = spoken.append
+    out = asyncio.run(n.transform("Hi, it's Brian again from your Brianotron app."))
+    assert out == "Hi, it's Brian again from your Bryan-o-tron app."
+    assert spoken == ["Hi, it's Brian again from your Brianotron app."]

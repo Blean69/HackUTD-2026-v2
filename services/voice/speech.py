@@ -74,6 +74,9 @@ _DAY_MONTH = re.compile(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_RE
 _ORDINAL = re.compile(r"\b(\d{1,3})(st|nd|rd|th)\b", re.I)
 _TIME_AMPM = re.compile(r"\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?([ap])\.?\s?m\b\.?", re.I)
 _TIME_24 = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b(?!\s?[ap]\.?m)(?![:\d])")
+# Names the voice gets wrong, respelled for the TTS only (logs and transcripts keep the real spelling). Checked with ElevenLabs
+# speech-to-text: "Brianotron" came back as "Brianatron" ("bre-anna-tron"); "Bryan-o-tron" comes back as "Brianotron".
+_SAY_AS = ((re.compile(r"\bBrianotron\b", re.I), "Bryan-o-tron"),)
 _PHONE = re.compile(r"(?<![\d$])(?:\+?1[-. ])?\(?\d{3}\)?[-. ]\d{3}[-. ]\d{4}(?!\d)")
 _MONEY_RANGE = re.compile(rf"(-?)\$\s?({_NUM})(?:\s?([kKmM])\b)?\s?(?:{_DASH}\s?\$?|\bto\s+\$)\s?({_NUM})(?:\s?([kKmM])\b)?")
 _MONEY_WORD = re.compile(rf"(-?)\$\s?({_NUM})(?:\s?(?:([kKmM])\b|(thousand|million|billion|grand)\b))?(?:\s(?:USD|dollars?|bucks)\b)?", re.I)
@@ -275,6 +278,13 @@ def say_money(amount: float, *, hedged: str | bool = "", large_unit: str | None 
 
 
 # ---- the normalizer --------------------------------------------------------------------------------------------------------------
+def say_as(text: str) -> str:
+    """The text as the voice should hear it (only the TTS gets this; see _SAY_AS)."""
+    for rx, spoken in _SAY_AS:
+        text = rx.sub(spoken, text)
+    return text
+
+
 class SpeechNormalizer:
     """`today` decides which dates need a year: "November twenty-fourth" this year, "March twenty twenty-eight" later."""
 
@@ -303,7 +313,7 @@ class SpeechNormalizer:
                 self.on_spoken(out)
             except Exception:  # pragma: no cover - a log must never break speech
                 pass
-        return out
+        return say_as(out)
 
     def normalize(self, text: str) -> str:
         t = self._strip_markup(text or "")
