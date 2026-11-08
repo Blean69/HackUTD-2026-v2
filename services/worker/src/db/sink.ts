@@ -69,6 +69,21 @@ export class SpacetimeSink implements WorkerSink {
   depositKidJar(d: { household_id: string; member_id: string; amount: number }): Promise<void> {
     return this.conn.reducers.depositKidJar({ householdId: d.household_id, memberId: d.member_id, amount: d.amount });
   }
+  deleteGoal(goalId: string): Promise<void> {
+    return this.conn.reducers.deleteGoal({ id: goalId });
+  }
+  ackAlert(alertId: string, displayName: string): Promise<void> {
+    return this.conn.reducers.ackAlert({ alertId, displayName });
+  }
+  approveKidTask(taskId: string): Promise<void> {
+    return this.conn.reducers.approveKidTask({ taskId });
+  }
+  setKidGoal(g: { household_id: string; member_id: string; title: string; target: number }): Promise<void> {
+    return this.conn.reducers.setKidGoal({ householdId: g.household_id, memberId: g.member_id, title: g.title, target: g.target });
+  }
+  requestSimulation(r: { household_id: string; prompt: string; requested_by_name: string }): Promise<void> {
+    return this.conn.reducers.agentRequestSimulation({ householdId: r.household_id, prompt: r.prompt, requestedByName: r.requested_by_name });
+  }
   setHuddleStatus(huddleId: string, status: string): Promise<void> {
     return this.conn.reducers.setHuddleStatus({ huddleId, status });
   }

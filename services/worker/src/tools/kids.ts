@@ -1,26 +1,21 @@
 // Kids and teens tools (contracts.md section 12) for Brian: read the kids' chores and allowance jars, add a chore, put money in
-// a jar. The jar is allowance bookkeeping inside the app, not a bank transfer. The two write tools need `confirmed: true` (Brian
-// says the action back and waits for a yes) and the call session's `act` (no other agent can write).
+// a jar, approve a finished chore, set a savings goal. The jar is allowance bookkeeping inside the app, not a bank transfer. The
+// write tools need `confirmed: true` (Brian says the action back and waits for a yes) and the call session's `act` (no other agent can write).
 import { z } from 'zod';
 import type { HouseholdData, Member } from '../types.js';
 import { round2, usd } from '../util.js';
+import { editDistance, gate, pickByWords, sounds, spend } from './confirm.js';
 import { defineTool, type ToolContext } from './registry.js';
+
+export { sounds }; // the spelling-blind name form now lives in confirm.ts, shared with the other write tools
 
 const MAX_REWARD = 50; // per chore, by voice
 const MAX_DEPOSIT = 100; // per deposit, by voice (the module allows up to 500 from the app)
+const MAX_APPROVE = 100; // per approved chore, by voice (the same cap as a deposit)
+const MAX_KID_GOAL = 5000; // a kid's savings goal, by voice
 
 export const isKid = (m: Member): boolean => /child|kid|teen/i.test(m.role) || (m.age > 0 && m.age < 18);
 const first = (m: Member): string => m.name.split(/\s+/)[0] ?? m.name;
-
-/** Spelling-blind form of a name, for what speech recognition writes: "Sophia" = "Sofia", "Matteo" = "Mateo". */
-export const sounds = (s: string): string => s.toLowerCase().replace(/'s$/, '').replace(/ph/g, 'f').replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
-function editDistance(a: string, b: string): number {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array<number>(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
-  for (let i = 1; i <= a.length; i++)
-    for (let j = 1; j <= b.length; j++) d[i]![j] = Math.min(d[i - 1]![j]! + 1, d[i]![j - 1]! + 1, d[i - 1]![j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return d[a.length]![b.length]!;
-}
 
 /** The kid the caller named, by first name: case- and spelling-tolerant ("Sophia" finds Sofia), prefix allowed ("Sof"). */
 export function findKid(data: HouseholdData, name: string): Member | { error: string } {
@@ -82,6 +77,7 @@ export const addKidChore = defineTool({
       return { done: false, ask: `Add "${a.chore.trim()}" for ${first(kid)}, ${usd(a.reward)}?`, note: 'Not added yet: ask the caller exactly this and wait for a yes, then call again with confirmed true.' };
     }
     await ctx.act.addKidTask(kid.id, a.chore.trim(), round2(a.reward));
+    spend(ctx.act, key);
     return { done: true, kid: first(kid), chore: a.chore.trim(), reward: round2(a.reward), note: 'It is on the Kids page now.' };
   },
   summarize: (r) => (r.done ? `Added "${r.chore}" for ${r.kid} (${usd(r.reward)} when approved)` : r.ask ? `Asked first: ${r.ask}` : `Not added: ${r.note}`),
@@ -107,12 +103,72 @@ export const addToKidJar = defineTool({
       return { done: false, ask: `Add ${usd(amount)} to ${first(kid)}'s jar?`, note: 'Not added yet: ask the caller exactly this and wait for a yes, then call again with confirmed true.' };
     }
     await ctx.act.depositKidJar(kid.id, amount);
+    spend(ctx.act, key);
     const before = jarOf(ctx.data, kid.id)?.balance ?? 0;
     return { done: true, kid: first(kid), added: amount, new_balance: round2(before + amount) };
   },
   summarize: (r) => (r.done ? `Added ${usd(r.added)} to ${r.kid}'s jar (now ${usd(r.new_balance)})` : r.ask ? `Asked first: ${r.ask}` : `Not added: ${r.note}`),
 });
 
-export const kidTools = [getKids, addKidChore, addToKidJar];
-/** Tools that change data: kept out of agents that act without a person confirming (Ask, Table Mode, what-ifs). */
-export const WRITE_TOOLS = new Set(['add_kid_chore', 'add_to_kid_jar']);
+export const approveKidChore = defineTool({
+  name: 'approve_kid_chore',
+  description: `Approve a chore a kid marked done and pay its reward (up to $${MAX_APPROVE}) into their jar in the app. Only after the caller said yes to exactly this chore: set confirmed to true.`,
+  schema: z.object({
+    kid_name: z.string().describe("The kid's first name, e.g. Sofia"),
+    chore: z.string().max(80).optional().describe('A few words of the chore, only if that kid has more than one waiting'),
+    confirmed: z.boolean().describe('true only after the caller confirmed this exact chore'),
+  }),
+  describe: (a) => `Approving ${a.kid_name}'s finished chore${a.chore ? `: "${a.chore}"` : ''}`,
+  run: async (a, ctx) => {
+    needsAct(ctx);
+    const kid = findKid(ctx.data, a.kid_name);
+    if ('error' in kid) return { done: false, note: kid.error };
+    const mine = (ctx.data.kid_tasks ?? []).filter((t) => t.member_id === kid.id);
+    const waiting = mine.filter((t) => t.status === 'done');
+    if (!waiting.length) {
+      const open = mine.filter((t) => t.status === 'open').length;
+      return { done: false, note: `${first(kid)} has no chores waiting for approval${open ? `; ${open} still open` : ''}.` };
+    }
+    const task = pickByWords(waiting, a.chore ?? '', (t) => t.title, 'chore');
+    if ('error' in task) return { done: false, note: task.error };
+    if (task.reward > MAX_APPROVE) return { done: false, note: `That chore pays ${usd(task.reward)}, more than Brian approves by voice. A parent can approve it on the Kids page.` };
+    const key = `approve:${task.id}`;
+    const ask = gate(ctx.act, key, a.confirmed, `Approve "${task.title}" for ${first(kid)} and pay ${usd(task.reward)} into the jar?`);
+    if (ask) return ask;
+    await ctx.act.approveKidTask(task.id);
+    spend(ctx.act, key);
+    return { done: true, kid: first(kid), chore: task.title, paid: round2(task.reward), new_balance: round2((jarOf(ctx.data, kid.id)?.balance ?? 0) + task.reward) };
+  },
+  summarize: (r) => (r.done ? `Approved "${r.chore}" for ${r.kid}: ${usd(r.paid)} into the jar (now ${usd(r.new_balance)})` : r.ask ? `Asked first: ${r.ask}` : `Not approved: ${r.note}`),
+});
+
+export const setKidGoal = defineTool({
+  name: 'set_kid_goal',
+  description: `Set what one kid is saving for in the app (a title and a target up to $${MAX_KID_GOAL}); it replaces their current goal. Only after the caller said yes to exactly this goal: set confirmed to true.`,
+  schema: z.object({
+    kid_name: z.string().describe("The kid's first name, e.g. Sofia"),
+    goal: z.string().min(2).max(60).describe('What they are saving for, e.g. "Lego set"'),
+    target: z.number().positive().max(MAX_KID_GOAL).describe('Dollars needed'),
+    confirmed: z.boolean().describe('true only after the caller confirmed this exact goal and target'),
+  }),
+  describe: (a) => `Setting ${a.kid_name}'s savings goal: "${a.goal}" (${usd(a.target)})`,
+  run: async (a, ctx) => {
+    needsAct(ctx);
+    const kid = findKid(ctx.data, a.kid_name);
+    if ('error' in kid) return { done: false, note: kid.error };
+    const target = round2(a.target);
+    const goal = a.goal.trim();
+    const jar = jarOf(ctx.data, kid.id);
+    const key = `kidgoal:${kid.id}:${sounds(goal)}:${target}`;
+    const ask = gate(ctx.act, key, a.confirmed, `Set ${first(kid)}'s savings goal to "${goal}", ${usd(target)}${jar?.goal_title ? `, replacing "${jar.goal_title}"` : ''}?`);
+    if (ask) return ask;
+    await ctx.act.setKidGoal(kid.id, goal, target);
+    spend(ctx.act, key);
+    return { done: true, kid: first(kid), goal, target, saved_so_far: round2(jar?.balance ?? 0), note: 'It is on the Kids page now.' };
+  },
+  summarize: (r) => (r.done ? `Set ${r.kid}'s savings goal: "${r.goal}" (${usd(r.target)})` : r.ask ? `Asked first: ${r.ask}` : `Not set: ${r.note}`),
+});
+
+export const kidTools = [getKids, addKidChore, addToKidJar, approveKidChore, setKidGoal];
+/** Tools that change data: kept out of agents that act without a person confirming (Ask, Table Mode, what-ifs). The other write tools add theirs in tools/index.ts. */
+export const WRITE_TOOLS = new Set(['add_kid_chore', 'add_to_kid_jar', 'approve_kid_chore', 'set_kid_goal']);

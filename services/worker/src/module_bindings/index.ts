@@ -41,6 +41,7 @@ import AgentCoachReplyReducer from "./agent_coach_reply_reducer";
 import AgentCreateAlertReducer from "./agent_create_alert_reducer";
 import AgentEnqueueJobReducer from "./agent_enqueue_job_reducer";
 import AgentRemoveTxnsReducer from "./agent_remove_txns_reducer";
+import AgentRequestSimulationReducer from "./agent_request_simulation_reducer";
 import AgentSavePlaidItemReducer from "./agent_save_plaid_item_reducer";
 import AgentSetAccountOptionsReducer from "./agent_set_account_options_reducer";
 import AgentSetBankConnectionReducer from "./agent_set_bank_connection_reducer";
@@ -630,6 +631,7 @@ const reducersSchema = __reducers(
   __reducerSchema("agent_create_alert", AgentCreateAlertReducer),
   __reducerSchema("agent_enqueue_job", AgentEnqueueJobReducer),
   __reducerSchema("agent_remove_txns", AgentRemoveTxnsReducer),
+  __reducerSchema("agent_request_simulation", AgentRequestSimulationReducer),
   __reducerSchema("agent_save_plaid_item", AgentSavePlaidItemReducer),
   __reducerSchema("agent_set_account_options", AgentSetAccountOptionsReducer),
   __reducerSchema("agent_set_bank_connection", AgentSetBankConnectionReducer),

@@ -95,6 +95,11 @@ drops `anomaly_truth`, so ground truth is unreachable), `detect_scam_signals` (p
 gift-card / wire / crypto payments), `fred_series` (live FRED or fixed table), `college_scorecard` (live API with disk cache,
 fixed UT Dallas / UT Austin fallback). External calls time out after 5 s and always say which path answered.
 
+**Tools that change data (Brian only).** `add_kid_chore`, `add_to_kid_jar`, `approve_kid_chore`, `set_kid_goal`, `change_goal`, `save_what_if`,
+`create_proposal`, `mark_alert_handled` (reads: `get_kids`, `get_goals`, `get_alerts`, `get_proposals`). Each takes `confirmed`; the first call only returns
+`{done: false, ask}` and the write happens on a later `confirmed: true` call that the call session sees was proposed at least 2.5 s earlier (`src/tools/confirm.ts`,
+`act` in `src/phone/session.ts`). They are listed in `WRITE_TOOLS`, so the Ask coach, Table Mode and what-ifs never get them. Contract: docs/contracts.md section 8a.
+
 **Add a tool:** create `defineTool({ name, description, schema: z.object({...}), run: (args, { data, external }) => ... })`
 in a new file and add it to `buildRegistry()`. Household data (`ctx.data`) comes from the SDK's client cache. Return small JSON.
 

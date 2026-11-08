@@ -1,5 +1,6 @@
 // One registry of agent tools. Each tool = zod schema (-> JSON schema for the model) + a plain function returning small JSON.
 import { z } from 'zod';
+import type { GoalInput } from '../agent/sink.js';
 import type { ToolSpec } from '../llm/types.js';
 import { toJsonSchema } from '../llm/structured.js';
 import type { HouseholdData } from '../types.js';
@@ -13,10 +14,23 @@ export interface ToolContext {
   act?: {
     addKidTask(member_id: string, title: string, reward: number): Promise<void>;
     depositKidJar(member_id: string, amount: number): Promise<void>;
+    approveKidTask(task_id: string): Promise<void>;
+    setKidGoal(member_id: string, title: string, target: number): Promise<void>;
+    /** Goals page: create or edit (agent_upsert_goal, with the feasibility the tool just worked out) and delete. */
+    saveGoal(g: Omit<GoalInput, 'household_id'>): Promise<void>;
+    deleteGoal(goal_id: string): Promise<void>;
+    /** What-If Studio: a scenario row plus the queued what_if job, shown under Brian's name. */
+    saveWhatIf(prompt: string): Promise<void>;
+    /** Family voting: an open proposal (its affordability check is queued by the module). Voting itself stays in the app. */
+    createProposal(p: { title: string; amount: number; details: Record<string, unknown>; closes_in_days: number }): Promise<void>;
+    /** Alerts: "Mark handled". */
+    markAlertHandled(alert_id: string): Promise<void>;
     /** Two-step confirmation, enforced here rather than trusted to the prompt: propose(key) when the action is first asked
      *  for; confirmable(key) is true only for a key proposed earlier in this call, with time for a spoken yes in between. */
     propose(key: string): void;
     confirmable(key: string): boolean;
+    /** The yes for `key` is used up once its write succeeded, so the same call twice cannot write twice. Optional for fakes in tests. */
+    consume?(key: string): void;
   };
 }
 
