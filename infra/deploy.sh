@@ -243,7 +243,7 @@ rsync -az --delete -e "$RSYNC_SSH" \
   --exclude 'node_modules' --exclude '.next' --exclude '.git' --exclude '*.swp' --exclude '*.swo' \
   --exclude '.env' --exclude '.env.*' --exclude '__pycache__' --exclude '.venv' --exclude '.DS_Store' \
   --exclude '.cache' --exclude '.data' --exclude '.worker-token' --exclude '*.log' --exclude 'dist' \
-  --exclude 'qr.png' \
+  --exclude 'qr.png' --exclude '.autodeploy' --exclude '.autodeploy-paused' \
   "$ROOT/" "$TARGET:$REMOTE_DIR/"
 
 log "Uploading $(basename "$ENV_FILE") as $REMOTE_DIR/.env (mode 600)"
@@ -260,10 +260,13 @@ fi
 
 # ---- build + start ---------------------------------------------------------------------------------------------------
 log "docker compose up -d --build on the box (first build takes several minutes)"
-rssh 'bash -s' -- "$MAINCLOUD" "$REMOTE_DIR" <<'REMOTE'
+DEPLOYED_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+if [ -n "$DEPLOYED_SHA" ] && [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then DEPLOYED_SHA="$DEPLOYED_SHA-dirty"; fi
+rssh 'bash -s' -- "$MAINCLOUD" "$REMOTE_DIR" "$DEPLOYED_SHA" <<'REMOTE'
 set -euo pipefail
 MAINCLOUD="$1"
 cd "$2"
+DEPLOYED_SHA="${3:-}"
 chmod +x infra/dc infra/deploy.sh 2>/dev/null || true
 D=docker; docker info >/dev/null 2>&1 || D="sudo docker"
 DC="infra/dc"; [ "$D" = docker ] || DC="sudo infra/dc"
@@ -273,6 +276,9 @@ if [ "$MAINCLOUD" = 1 ]; then SERVICES=(caddy web worker voice); fi
 for svc in web worker voice; do $D tag "keystone-$svc:latest" "keystone-$svc:prev" 2>/dev/null || true; done
 $DC up -d --build --remove-orphans "${SERVICES[@]}"
 $DC ps
+# Tell the auto-deploy timer (infra/autodeploy.sh) what is running now. If this is not origin/main, the timer deploys origin/main
+# within a minute: with auto-deploy on, GitHub main is the source of truth, so push before (or instead of) running this script.
+if [ -d .autodeploy ] && [ -n "${DEPLOYED_SHA:-}" ]; then echo "$DEPLOYED_SHA" > .autodeploy/deployed; fi
 $D image prune -f >/dev/null || true
 $D builder prune -f --filter 'until=48h' >/dev/null || true   # keep the 30 GB disk from filling up over many deploys
 REMOTE

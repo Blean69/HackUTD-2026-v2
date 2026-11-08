@@ -20,3 +20,9 @@ build/
 *.swo
 *~
 .*.sw?
+
+# auto-deploy state on the production box (infra/autodeploy.sh)
+.autodeploy/
+.autodeploy-paused
+# QR codes for the demo
+qr*.png

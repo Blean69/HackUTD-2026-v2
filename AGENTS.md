@@ -84,7 +84,7 @@ regenerate both binding folders. Commit the regenerated bindings.
 
 ## Deploying
 
-See `infra/DEPLOY.md`. In short: `.env.prod` (gitignored, never committed) holds production values; `infra/deploy.sh`
+**Every push to `main` is deployed to production within about a minute** (pull-based auto-deploy with health checks and rollback, `infra/DEPLOY.md` §12). Keep main deployable, and pause it before judging (`touch /opt/keystone/.autodeploy-paused`). See `infra/DEPLOY.md`. In short: `.env.prod` (gitignored, never committed) holds production values; `infra/deploy.sh`
 rsyncs the tree to the box and runs Docker Compose; the module is published from inside the spacetime container;
 `infra/deploy.sh --seed` seeds. The production worker secret is set in the database with `infra/deploy.sh --publish`
 (or `--set-worker-hash`), which calls the publisher-only `admin_set_worker_secret_hash` reducer; no source edit. Never commit

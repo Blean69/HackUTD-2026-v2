@@ -382,3 +382,37 @@ Brev's public `https://8000-<id>.gobrev.dev` URLs sit behind Cloudflare, which c
 - vLLM requires `BREV_API_KEY` (Bearer). Check: `systemctl status brev-tunnel`; `curl -H "Authorization: Bearer $KEY" localhost:8001/v1/models`.
 - If the Brev instance is recreated, the gateway port changes: `brev ports ls <instance>` and update the unit, then `sudo systemctl restart brev-tunnel`.
 - Teardown after the event: `sudo systemctl disable --now brev-tunnel`; `brev delete keystone-nemotron` (stops billing).
+
+## 12. Auto-deploy: every push to `main` goes live
+
+The box deploys itself. `keystone-autodeploy.timer` runs [`infra/autodeploy.sh`](autodeploy.sh) every minute. It reads the
+public GitHub repo, so no SSH key or secret is stored on GitHub, and `.env` never leaves the box. For each new commit on
+`origin/main` it does the following:
+
+1. It checks out the commit. Only tracked files change.
+2. If `spacetime/` changed, it builds the module in a throwaway `node:22` container and **publishes it before any container
+   restarts**, then sets the worker-secret hash. A failed publish, such as a breaking schema change, stops there, and production
+   keeps running.
+3. It runs `docker compose up -d --build`. Only services whose image or config changed are recreated, so a web-only change
+   doesn't drop phone calls.
+4. It health-checks the worker (connected to SpacetimeDB), voice and web for up to 150 s. **If any is unhealthy, it rolls back to
+   the previous images.**
+5. If `data/seed/` or `services/worker/src/seed.ts` changed, it runs `npm run seed`, which is idempotent.
+
+A commit that failed isn't retried, and the next commit is tried normally.
+
+```bash
+ssh ubuntu@52.72.164.85 'journalctl -u keystone-autodeploy -f'          # watch it
+ssh ubuntu@52.72.164.85 'touch /opt/keystone/.autodeploy-paused'        # PAUSE (do this before judging)
+ssh ubuntu@52.72.164.85 'rm /opt/keystone/.autodeploy-paused'           # resume
+ssh ubuntu@52.72.164.85 'sudo systemctl start keystone-autodeploy'      # run now instead of waiting up to a minute
+```
+
+To set it up once (idempotent), run `bash infra/autodeploy-install.sh /opt/keystone <repo-url> main` on the box. It turns
+`/opt/keystone` into a git checkout; untracked files such as `.env` stay. `infra/deploy.sh` still works for `--publish --seed`,
+`--rollback` and `.env` changes. It records what it deployed, and if that isn't `origin/main` the timer deploys `origin/main`
+within a minute. So **push first**: GitHub `main` is the source of truth. `.env` changes are **not** picked up by the timer,
+because the file isn't in git. Upload them with `infra/deploy.sh`.
+
+A local clone can follow `main` with `infra/local-autopull.sh --install`. That's a systemd user timer that fast-forwards every
+2 minutes, only when `main` is checked out and clean.
