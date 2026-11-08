@@ -1,6 +1,6 @@
 // What a voice model needs from a tool result: a handful of rounded numbers and one-line explanations, not 4 KB of JSON.
 // The full result still goes into the trace (run.tool emits it); only the copy handed back to the voice model is trimmed.
-import { fitJson, truncate } from '../util.js';
+import { fitJson, nextDueLabel, truncate } from '../util.js';
 
 /** Tools the phone/voice agent may use (7 to 8 is plenty for a 3B-active model). Order = order in the model's tool list. */
 export const PHONE_TOOLS = ['get_health_indicators', 'get_forecast', 'get_obligations', 'get_accounts', 'get_credit_score', 'simulate_scenario', 'goal_feasibility', 'detect_scam_signals'] as const;
@@ -45,7 +45,7 @@ function indicatorValue(i: Record<string, any>): number {
   return one(i.value);
 }
 
-export function voiceView(tool: string, result: unknown): unknown {
+export function voiceView(tool: string, result: unknown, asOf = ''): unknown {
   const r = rec(result);
   let view: unknown;
   switch (tool) {
@@ -78,7 +78,7 @@ export function voiceView(tool: string, result: unknown): unknown {
           .slice()
           .sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))
           .slice(0, 6)
-          .map((o) => ({ name: o.name, amount: whole(o.amount), due_day: o.due_day, kind: o.kind })),
+          .map((o) => (asOf ? { name: o.name, amount: whole(o.amount), due: nextDueLabel(Number(o.due_day), asOf), kind: o.kind } : { name: o.name, amount: whole(o.amount), due_day: o.due_day, kind: o.kind })),
       };
       break;
     case 'get_accounts':

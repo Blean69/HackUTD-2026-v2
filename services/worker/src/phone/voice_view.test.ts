@@ -50,3 +50,20 @@ describe('voice view rounding (numbers the way people say them)', () => {
     expect(f.bills_due_total).toBe(7700);
   });
 });
+
+describe('bill due dates are said like a person would', () => {
+  it('names the next date a bill falls due, rolling into next month and clamping to its length', async () => {
+    const { nextDueLabel } = await import('../util.js');
+    expect(nextDueLabel(9, '2026-11-07')).toBe('November 9');
+    expect(nextDueLabel(7, '2026-11-07')).toBe('November 7'); // due today
+    expect(nextDueLabel(3, '2026-11-07')).toBe('December 3');
+    expect(nextDueLabel(31, '2026-11-07')).toBe('November 30');
+    expect(nextDueLabel(2, '2026-12-20')).toBe('January 2');
+    expect(nextDueLabel(12, 'not a date')).toBe('the 12th');
+  });
+
+  it('the phone view of get_obligations carries "due", never a bare day number', () => {
+    const v = voiceView('get_obligations', { count: 1, monthly_total: 612, obligations: [{ name: 'Car loan', amount: 612.4, due_day: 12, kind: 'loan' }] }, '2026-11-07') as { biggest: Record<string, unknown>[] };
+    expect(v.biggest[0]).toEqual({ name: 'Car loan', amount: 612, due: 'November 12', kind: 'loan' });
+  });
+});

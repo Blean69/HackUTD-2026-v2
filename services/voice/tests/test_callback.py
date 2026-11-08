@@ -348,6 +348,48 @@ async def test_a_failed_dial_is_logged_without_the_number_and_never_retried():
     assert "callback not placed" in text and "21211" in text and "5555550123" not in text
 
 
+class FlakyDialer(FakeDialer):
+    """Fails the first `times` dials with `fail`, then places the call."""
+
+    def __init__(self, fail: Exception, times: int = 1):
+        super().__init__()
+        self._fail, self._times = fail, times
+
+    async def call(self, to, url, *, ring_secs=0, amd="off"):
+        if self._times > 0:
+            self._times -= 1
+            self.calls.append({"to": to, "url": url, "ring_secs": ring_secs, "amd": amd})
+            raise self._fail
+        return await super().call(to, url, ring_secs=ring_secs, amd=amd)
+
+
+@pytest.mark.parametrize("fail", [DialError(503, "service_unavailable"), DialError(429, "too_many_requests"), DialError(0, "ConnectError")])
+async def test_a_refused_dial_is_retried_once_and_the_callback_still_happens(fail):
+    m, _, sleep = manager(dialer=FlakyDialer(fail))
+    m.remember("CA1", NUMBER)
+    assert m.call_ended(finished("CA1")) == "scheduled"
+    await drain(m)
+    assert len(m.dialer.calls) == 2 and m.placed == 1 and len(m.store) == 1  # refused, then placed; the plan waits for the answer
+
+
+@pytest.mark.parametrize("fail", [DialError(0, "ReadTimeout"), DialError(500, "internal"), DialError(400, "21211")])
+async def test_a_dial_that_may_have_rung_or_can_never_work_is_not_retried(fail):
+    m, _, _ = manager(dialer=FlakyDialer(fail))
+    m.remember("CA1", NUMBER)
+    m.call_ended(finished("CA1"))
+    await drain(m)
+    assert len(m.dialer.calls) == 1 and m.placed == 0 and len(m.store) == 0  # never ring twice
+
+
+@pytest.mark.parametrize("fail", [DialError(503, "service_unavailable")])
+async def test_a_second_refusal_gives_up(fail):
+    m, _, _ = manager(dialer=FlakyDialer(fail, times=2))
+    m.remember("CA1", NUMBER)
+    m.call_ended(finished("CA1"))
+    await drain(m)
+    assert len(m.dialer.calls) == 2 and m.placed == 0 and len(m.store) == 0
+
+
 # ---- alert selection inside the flow -----------------------------------------------------------------------------------------------
 async def test_the_alert_comes_from_real_signals_and_a_used_one_is_not_repeated_straight_away():
     payload = {

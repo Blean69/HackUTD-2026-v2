@@ -350,7 +350,7 @@ export class PhoneService {
       s.toolErrors++;
       return { ok: false, error: out.error, ms: out.durationMs };
     }
-    const view = voiceView(req.name, out.result);
+    const view = voiceView(req.name, out.result, s.toolContext.data?.asOf ?? '');
     const result = view && typeof view === 'object' && !Array.isArray(view) ? { ...(view as object), reply_hint: REPLY_HINT } : view;
     return { ok: true, result, summary: out.summary, ms: out.durationMs };
   }

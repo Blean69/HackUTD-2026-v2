@@ -1,7 +1,7 @@
 // The briefing the voice agent gets before the first question: a few plain lines built from the same tools the caller can
 // ask for (health indicators, forecast, obligations). Deterministic text, no LLM, so common questions need zero tool calls.
 import type { HouseholdData } from '../types.js';
-import { parseDay, truncate } from '../util.js';
+import { nextDueLabel, parseDay, truncate } from '../util.js';
 
 const money = (x: number): string => `$${Math.round(Math.abs(x)).toLocaleString('en-US')}`;
 const rec = (x: unknown): Record<string, any> => (x && typeof x === 'object' ? (x as Record<string, any>) : {});
@@ -40,7 +40,7 @@ export function buildBrief(data: HouseholdData, tools: { health?: unknown; forec
       .map((o) => ({ ...o, in: ((Number(o.due_day) - dayOfMonth + 31) % 31) }))
       .sort((a, b) => a.in - b.in)
       .slice(0, 3)
-      .map((o) => `${o.name} ${money(o.amount)} on day ${o.due_day}`);
+      .map((o) => `${o.name} ${money(o.amount)} on ${nextDueLabel(Number(o.due_day), data.asOf)}`);
     lines.push(`Bills and payments: about ${money(obl.monthly_total ?? 0)} a month. Coming up next: ${upcoming.join('; ')}.`);
   }
   return lines.slice(0, 10);

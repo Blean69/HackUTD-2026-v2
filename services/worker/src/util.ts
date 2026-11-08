@@ -28,6 +28,25 @@ export function parseDay(s: string): number | null {
   return Math.floor(ms / MS_DAY);
 }
 export const formatDay = (day: number): string => new Date(day * MS_DAY).toISOString().slice(0, 10);
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** The next date a monthly bill falls due, as people say it ("November 9"): this month if the day is still ahead (or today), else next
+ *  month, clamped to the month's length. The voice reads "November 9" as "November ninth"; a bare "day 9" came out as "day nine". */
+export function nextDueLabel(dueDay: number, asOf: string): string {
+  const today = parseDay(asOf);
+  if (today === null || !Number.isFinite(dueDay) || dueDay < 1) return `the ${Math.max(1, Math.round(dueDay || 1))}${ordinalSuffix(Math.round(dueDay || 1))}`;
+  const t = new Date(today * MS_DAY);
+  let y = t.getUTCFullYear();
+  let m = t.getUTCMonth();
+  if (Math.round(dueDay) < t.getUTCDate()) m += 1;
+  if (m > 11) { m = 0; y += 1; }
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return `${MONTHS[m]} ${Math.min(Math.round(dueDay), last)}`;
+}
+function ordinalSuffix(n: number): string {
+  const r = n % 100;
+  if (r >= 11 && r <= 13) return 'th';
+  return ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+}
 export const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 /** Whole months (fractional) between two ISO dates, never below 0. */

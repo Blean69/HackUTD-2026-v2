@@ -39,6 +39,7 @@ TOKEN_TTL_SECS = 120
 NUMBER_TTL_SECS = 30 * 60  # a remembered number older than this is dropped even if its call never reported an end
 E164 = re.compile(r"^\+[1-9]\d{7,14}$")
 RECENT_KEYS_SECS = 3600
+DIAL_RETRY_SECS = 3.0  # one retry, only when SignalWire certainly did not place the call (CallbackManager._safe_to_retry)
 
 
 # ==== log redaction ==============================================================================================================
@@ -409,6 +410,12 @@ class CallbackManager:
         return ""
 
     # ---- the callback itself ----------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _safe_to_retry(e: DialError) -> bool:
+        """SignalWire refused without placing the call (429 busy, 503 unavailable), or the request never reached it. A timeout after the
+        request was sent is NOT retried: the call may already be ringing, and a second dial would ring the person twice."""
+        return e.status in (429, 503) or (e.status == 0 and e.code in ("ConnectError", "ConnectTimeout"))
+
     def callback_url(self, token: str) -> str:
         return f"https://{self.s.public_hostname}{self.s.public_path}/twiml?cb={token}"
 
@@ -438,7 +445,14 @@ class CallbackManager:
             alert = await picking
             plan = CallbackPlan(nonce=secrets.token_urlsafe(9), household_id=job.household_id, first_name=job.first_name, caller_hash=job.who, alert=alert, expires_at=0.0)
             url = self.callback_url(self.store.add(plan))
-            res = await self.dialer.call(number, url, ring_secs=self.s.callback_ring_secs, amd=self.s.callback_amd)
+            try:
+                res = await self.dialer.call(number, url, ring_secs=self.s.callback_ring_secs, amd=self.s.callback_amd)
+            except DialError as e:
+                if not self._safe_to_retry(e):
+                    raise
+                logger.warning(f"callback dial refused ({e.status} {e.code}); retrying once in {DIAL_RETRY_SECS:g}s")
+                await self._sleep(DIAL_RETRY_SECS)
+                res = await self.dialer.call(number, url, ring_secs=self.s.callback_ring_secs, amd=self.s.callback_amd)
             self.placed += 1
             logger.info(f"callback call placed for caller {self.who(job.who)}: {res.status} (call {res.sid[-6:] or '?'}), alert {alert.source}:{alert.origin}")
         except DialError as e:
