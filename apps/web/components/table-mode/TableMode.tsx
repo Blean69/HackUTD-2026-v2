@@ -20,6 +20,8 @@ const FEAS: Record<Exclude<Feasibility, "">, { tone: Tone; label: string; hint: 
   on_track: { tone: "good", label: "On track", hint: "Fits your current cash and surplus" },
   stretch: { tone: "watch", label: "Stretch", hint: "Possible with trade-offs or financing" },
   off_track: { tone: "risk", label: "Off track", hint: "Not reachable on today's numbers" },
+  needs_details: { tone: "neutral", label: "Needs an amount", hint: "No amount was mentioned yet, so there is nothing to check. Add one on the Goals page." },
+  not_advised: { tone: "risk", label: "Not advised", hint: "Gambling or speculation: not something we score as a plan." },
 };
 
 const textareaCls =

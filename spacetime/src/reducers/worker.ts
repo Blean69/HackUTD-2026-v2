@@ -7,7 +7,8 @@ import { cleanText, enqueueJob, fail, newId, requireHousehold, WORKFLOWS, type C
 
 const ALERT_SEVERITIES = ['info', 'warn', 'critical'];
 const ALERT_KINDS = ['data_quality', 'fraud', 'scam', 'obligation', 'advisor', 'insight', 'credit'];
-const FEASIBILITIES = ['', 'on_track', 'stretch', 'off_track'];
+// needs_details: no amount was said, so there is nothing to check yet; not_advised: gambling or speculation (Table Mode guardrail)
+const FEASIBILITIES = ['', 'on_track', 'stretch', 'off_track', 'needs_details', 'not_advised'];
 const GOAL_SOURCES = ['huddle', 'manual', 'coach', 'onboarding'];
 const SCENARIO_STATUSES = ['queued', 'running', 'done', 'error'];
 const PROPOSAL_VERDICTS = ['', 'fine', 'tight', 'risky'];

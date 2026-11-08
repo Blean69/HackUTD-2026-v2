@@ -83,6 +83,8 @@ const FEAS: Record<string, { text: string; cls: string }> = {
   on_track: { text: "On track", cls: "text-good" },
   stretch: { text: "Stretch", cls: "text-watch" },
   off_track: { text: "Off track", cls: "text-risk" },
+  needs_details: { text: "Needs an amount", cls: "text-ink-3" },
+  not_advised: { text: "Not advised", cls: "text-risk" },
 };
 
 export function GoalsCard({ goals, fin, householdId, className }: { goals: readonly Goal[]; fin: RoomFinance; householdId: string; className?: string }) {

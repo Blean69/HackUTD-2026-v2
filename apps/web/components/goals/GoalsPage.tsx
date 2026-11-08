@@ -26,6 +26,8 @@ const FEAS: Record<Exclude<Feasibility, "">, { tone: Tone; label: string; hint: 
   on_track: { tone: "good", label: "On track", hint: "Fits current cash and monthly surplus" },
   stretch: { tone: "watch", label: "Stretch", hint: "Possible with trade-offs or financing" },
   off_track: { tone: "risk", label: "Off track", hint: "Not reachable on today's numbers" },
+  needs_details: { tone: "neutral", label: "Needs an amount", hint: "No amount was mentioned yet, so there is nothing to check. Add one on the Goals page." },
+  not_advised: { tone: "risk", label: "Not advised", hint: "Gambling or speculation: not something we score as a plan." },
 };
 function GoalCard({ goal, saved }: { goal: Goal; saved: ReturnType<typeof goalProgress> }) {
   const f = goal.feasibility ? FEAS[goal.feasibility] : null;
@@ -170,9 +172,9 @@ export function GoalsPage({ householdId }: { householdId: string }) {
   const [all, setAll] = useState(false);
   const shown = useMemo(() => (all ? goals : goals.slice(0, SHOWN)), [all, goals]);
   const summary = useMemo(() => {
-    const n = { on_track: 0, stretch: 0, off_track: 0, "": 0 };
+    const n = { on_track: 0, stretch: 0, off_track: 0, needs_details: 0, not_advised: 0, "": 0 };
     for (const g of goals) n[g.feasibility || ""] += 1;
-    const parts = [n.on_track && `${n.on_track} on track`, n.stretch && `${n.stretch} a stretch`, n.off_track && `${n.off_track} off track`, n[""] && `${n[""]} being checked`].filter(Boolean);
+    const parts = [n.on_track && `${n.on_track} on track`, n.stretch && `${n.stretch} a stretch`, n.off_track && `${n.off_track} off track`, n.not_advised && `${n.not_advised} not advised`, n.needs_details && `${n.needs_details} needing an amount`, n[""] && `${n[""]} being checked`].filter(Boolean);
     return `${goals.length} ${goals.length === 1 ? "goal" : "goals"}, checked against your real balances${parts.length ? `: ${parts.join(", ")}` : ""}.`;
   }, [goals]);
 

@@ -24,7 +24,7 @@ export interface GoalInput {
   target_amount: number;
   target_date: string;
   priority: number;
-  feasibility: '' | 'on_track' | 'stretch' | 'off_track';
+  feasibility: '' | 'on_track' | 'stretch' | 'off_track' | 'needs_details' | 'not_advised';
   evidence_quote: string;
   source: 'huddle' | 'manual' | 'coach' | 'onboarding';
 }

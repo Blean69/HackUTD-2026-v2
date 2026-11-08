@@ -11,6 +11,8 @@ const FEAS: Record<Feasibility, { label: string; tone: Tone }> = {
   on_track: { label: "On track", tone: "good" },
   stretch: { label: "A stretch", tone: "watch" },
   off_track: { label: "Needs a plan", tone: "risk" },
+  needs_details: { label: "Needs an amount", tone: "neutral" },
+  not_advised: { label: "Not advised", tone: "risk" },
 };
 const DOT: Record<string, string> = { info: "bg-info", warn: "bg-watch", critical: "bg-risk" };
 /** While the agents work, only their latest steps show, so the page stays calm. */

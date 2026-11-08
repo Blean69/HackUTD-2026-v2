@@ -201,7 +201,8 @@ export interface Alert {
 }
 
 export type GoalPriority = "high" | "medium" | "low";
-export type Feasibility = "" | "on_track" | "stretch" | "off_track";
+/** needs_details: no amount yet, nothing to check; not_advised: gambling or speculation (Table Mode guardrail, never "on track"). */
+export type Feasibility = "" | "on_track" | "stretch" | "off_track" | "needs_details" | "not_advised";
 
 export interface Goal {
   id: string;

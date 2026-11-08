@@ -383,7 +383,7 @@ const GOAL_MATCH: { re: RegExp; acct: RegExp }[] = [
   { re: /vacation|trip|travel|hawaii|wedding/i, acct: /vacation|travel|trip|wedding/i },
   { re: /car|vehicle|van|truck/i, acct: /car|vehicle|auto/i },
 ];
-const PACE = { on_track: 1, stretch: 0.6, off_track: 0.3, "": 0.45 } as const;
+const PACE = { on_track: 1, stretch: 0.6, off_track: 0.3, needs_details: 0.45, not_advised: 0, "": 0.45 } as const;
 
 /** Estimated funded amount: a matching savings account if there is one, otherwise how far along the timeline is. */
 export function goalProgress(goal: Goal, accounts: readonly Account[], now: Date): GoalProgress | null {

@@ -6,10 +6,23 @@ import { structured } from '../llm/structured.js';
 import type { ChatMessage } from '../llm/types.js';
 import type { ScamResult } from '../tools/scam.js';
 import { monthlyCapacity, type FeasibilityResult } from '../tools/feasibility.js';
+import { groundAnswer } from './grounding.js';
 import { savingsBalance } from '../tools/finance.js';
 import { addMonthsIso, round2, shortHash, truncate, usd } from '../util.js';
 import { householdBrief, textCacheKey } from './common.js';
 import type { WorkflowDef } from './types.js';
+
+/**
+ * Goals we will not score as a plan, however affordable: gambling, and speculation sold as a way to multiply money. The card
+ * says why in one line instead of "on track". Deterministic, so no model can talk itself into backing it.
+ */
+const GAMBLING_RE = /\bgambl|\bcasino|\bbet(?:s|ting)?\b|\blotter(?:y|ies)\b|\bscratch.?offs?\b|\bsports ?book|\bpoker\b|\bslots?\b|\bparlay/i;
+const SPECULATION_RE = /\b(?:double|triple|10x|moon)\b.*\b(?:crypto|bitcoin|coin|money|it)\b|\b(?:crypto|bitcoin|meme ?coin|meme ?stock|day ?trad|options? trad)/i;
+export function riskyGoal(text: string): { why: string } | null {
+  if (GAMBLING_RE.test(text)) return { why: 'Gambling is not a plan: the odds are set so the house wins over time.' };
+  if (SPECULATION_RE.test(text)) return { why: 'Crypto and other speculative bets can lose value fast. Keep it to money you can afford to lose, after the emergency fund.' };
+  return null;
+}
 
 const HUDDLE_TOOLS = ['detect_scam_signals', 'get_accounts', 'get_obligations', 'get_health_indicators', 'get_forecast', 'goal_feasibility', 'college_scorecard', 'fred_series'];
 
@@ -106,7 +119,7 @@ export const huddleWorkflow: WorkflowDef = {
 
     let pool = savingsBalance(run.data);
     let capacity = monthlyCapacity(run.data).surplus;
-    const posted: { title: string; feasibility: string; target_amount: number; target_date: string; required_monthly?: number; available_monthly?: number }[] = [];
+    const posted: { title: string; feasibility: string; target_amount: number; target_date: string; caution?: string; required_monthly?: number; available_monthly?: number }[] = [];
     const goals = [...extracted.goals].sort((a, b) => a.priority - b.priority);
 
     for (const [i, g] of goals.entries()) {
@@ -136,8 +149,10 @@ export const huddleWorkflow: WorkflowDef = {
         }
       }
 
+      const risky = riskyGoal(`${g.title} ${g.evidence_quote ?? ''}`);
+      if (risky) notes.push(risky.why);
       let feas: FeasibilityResult | undefined;
-      if (amount > 0) {
+      if (amount > 0 && !risky) {
         const date = g.target_date || addMonthsIso(asOf, 24); // no deadline said: judge it over 24 months, but do not invent a date on the card
         const saved = Math.min(pool, amount);
         const out = await run.tool('reconciler', 'goal_feasibility', { title, target_amount: amount, target_date: date, current_saved: round2(saved), monthly_contribution: round2(capacity) });
@@ -151,16 +166,18 @@ export const huddleWorkflow: WorkflowDef = {
           }
         }
       }
-      const feasibility = feas?.feasibility ?? '';
+      // every card ends in a final state: never a blank that the screen shows as "Checking..." forever
+      const feasibility = risky ? 'not_advised' : feas?.feasibility ?? (amount > 0 ? 'off_track' : 'needs_details');
+      if (!risky && !feas && amount <= 0) notes.push('No amount was mentioned, so there is nothing to check yet. Add one on the Goals page.');
       run.goal({ key: g.title, title: truncate(title, 130), target_amount: round2(amount), target_date: g.target_date, priority: asPriorityInt(g.priority || i + 1), feasibility, evidence_quote: truncate(g.evidence_quote, 280), source: 'huddle' });
-      posted.push({ title, feasibility, target_amount: amount, target_date: g.target_date, ...(feas ? { required_monthly: feas.required_monthly, available_monthly: feas.available_monthly } : {}) });
+      posted.push({ title, feasibility, target_amount: amount, target_date: g.target_date, ...(risky ? { caution: risky.why } : {}), ...(feas ? { required_monthly: feas.required_monthly, available_monthly: feas.available_monthly } : {}) });
       run.emit('reconciler', 'message', `Posted goal card ${i + 1}: ${truncate(title, 80)}${feasibility ? ` (${feasibility.replace('_', ' ')})` : ''}${amount ? `, ${usd(amount)}` : ''}`, { goal: { title, amount, date: g.target_date, priority: priorityWord(g.priority), feasibility }, notes, evidence: g.evidence_quote });
     }
 
     // 5. summary + privacy -------------------------------------------------------------------------------------------
-    const counts = { on_track: 0, stretch: 0, off_track: 0 } as Record<string, number>;
+    const counts = { on_track: 0, stretch: 0, off_track: 0, needs_details: 0, not_advised: 0 } as Record<string, number>;
     for (const p of posted) if (p.feasibility) counts[p.feasibility] = (counts[p.feasibility] ?? 0) + 1;
-    const fallbackSummary = `Found ${posted.length} goal(s): ${counts.on_track} on track, ${counts.stretch} a stretch, ${counts.off_track} off track.${alertsMade.length ? ` The scam guard raised ${alertsMade.length} alert(s).` : ''}`;
+    const fallbackSummary = `Found ${posted.length} goal(s): ${counts.on_track} on track, ${counts.stretch} a stretch, ${counts.off_track} off track${counts.not_advised ? `, ${counts.not_advised} not advised` : ''}${counts.needs_details ? `, ${counts.needs_details} needing an amount` : ''}.${alertsMade.length ? ` The scam guard raised ${alertsMade.length} alert(s).` : ''}`;
     let summary = fallbackSummary;
     try {
       const res = await run.chat('reconciler', {
@@ -171,11 +188,16 @@ export const huddleWorkflow: WorkflowDef = {
         task: 'huddle.summary',
         local: { text: fallbackSummary },
         messages: [
-          { role: 'system', content: 'You write the closing note of a family money conversation (Table Mode) for a non-expert audience, speaking to the family in the second person ("you", "your", never "we" or "our"): 2 short sentences, plain language, mention the biggest gap and one concrete next step. Use ONLY numbers that appear in the data you are given; never invent amounts. No jargon. All data is synthetic.' },
+          { role: 'system', content: 'You write the closing note of a family money conversation (Table Mode) for a non-expert audience, speaking to the family in the second person ("you", "your", never "we" or "our"): 2 short sentences, plain language, mention the biggest gap and one concrete next step. Use ONLY numbers that appear in the data you are given; never invent amounts and never connect two figures the data does not connect. No jargon. All data is synthetic. ' +
+            'A goal marked not_advised (gambling or speculation) is never a plan: never suggest putting money toward it; if it matters, say kindly that you would not back it. Never suggest moving money into crypto, gambling or investments. ' +
+            'If the scam guard flagged something, the next step is to pause and verify before paying anyone, not to move money. needs_details goals just need an amount.' },
           { role: 'user', content: JSON.stringify({ goals: posted, concerns: extracted.concerns.map((c) => c.text), scam: scam ? { risk: scam.risk, linked_total: scam.linked_total } : null }) },
         ],
       }, { thoughtTitle: 'Weighing the goal cards' });
-      if (res.content.trim()) summary = truncate(res.content.trim(), 600);
+      if (res.content.trim()) {
+        const data = { goals: posted, concerns: extracted.concerns.map((c) => c.text), scam: scam ? { risk: scam.risk, linked_total: scam.linked_total } : null };
+        summary = truncate(await groundAnswer(run, { agent: 'reconciler', answer: res.content.trim(), results: [data], question: '', brief: '' }), 600);
+      }
       run.emit('reconciler', 'message', `Summary: ${truncate(summary, 220)}`, { summary }, meta(res));
     } catch {
       /* keep the fallback summary */

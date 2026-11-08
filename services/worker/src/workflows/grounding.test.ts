@@ -17,3 +17,23 @@ describe('unbackedFigures (Ask grounding)', () => {
     expect(unbackedFigures('Paying $5,000 toward the card would clear it.', [accounts], 'what if we put $5,000 on the card?')).toEqual([]);
   });
 });
+
+describe('Table Mode guardrails', () => {
+  it('never scores gambling or "double our crypto" as a plan', async () => {
+    const { riskyGoal } = await import('./huddle.js');
+    expect(riskyGoal("Double crypto through gambling Well, I'm gonna gamble the crypto, we're gonna double it")?.why).toMatch(/Gambling is not a plan/);
+    expect(riskyGoal('Buy $500 in crypto')?.why).toMatch(/speculative/);
+    expect(riskyGoal('Win the lottery')).not.toBeNull();
+    expect(riskyGoal('Second bakery location')).toBeNull();
+    expect(riskyGoal("Sofia's college fund")).toBeNull();
+    expect(riskyGoal('Pay off the Visa by March')).toBeNull();
+  });
+
+  it('the scam guard does not read "wireless" as a wire transfer', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../tools/scam.ts', import.meta.url), 'utf8');
+    const re = eval(src.match(/PAYMENT_MERCHANT = (\/.*\/[a-z]*);/)![1]!) as RegExp;
+    expect(re.test('AT&T family wireless plan')).toBe(false);
+    expect(re.test('Wire transfer to J. Smith')).toBe(true);
+    expect(re.test('Western Union')).toBe(true);
+  });
+});

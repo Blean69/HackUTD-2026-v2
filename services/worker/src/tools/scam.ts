@@ -24,7 +24,7 @@ export const SCAM_RULES: Rule[] = [
   { type: 'stay_on_the_line', label: 'Caller stayed on the line while paying', weight: 1, re: /stay on the line|stayed on the (?:phone|line)|don'?t hang up|coach(?:ed)? (?:me|us|her|him|them)/i },
 ];
 
-const PAYMENT_MERCHANT = /gift\s*card|google\s*play|itunes|apple\s*(gift|card)|steam\s*(card|wallet)|green\s*dot|moneypak|vanilla|western\s*union|moneygram|wire|bitcoin|crypto|coinme|coinflip/i;
+const PAYMENT_MERCHANT = /gift\s*card|google\s*play|itunes|apple\s*(gift|card)|steam\s*(card|wallet)|green\s*dot|moneypak|vanilla|western\s*union|moneygram|\bwire\b|bitcoin|crypto|coinme|coinflip/i; // \bwire\b: "AT&T wireless" is a phone bill, not a wire
 
 export const ScamArgs = z.object({
   text: z.string().optional().describe('What was said or received (call, text, email). Speaker prefixes like "Name: ..." are used for quotes.'),
