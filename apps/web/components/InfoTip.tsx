@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconInfo } from "./icons";
 
 const GAP = 6; // px between the icon and the bubble
@@ -10,7 +11,9 @@ const MAX_W = 288; // px, about 18rem
 /**
  * Info glyph next to card titles. Tap or click toggles an explanation bubble (phones have no hover);
  * hover and keyboard focus also open it on desktop. Escape, an outside tap or scrolling closes it.
- * The bubble is fixed-positioned and clamped to the viewport, so icons at the screen edge stay readable.
+ * The bubble is fixed-positioned and clamped to the viewport, so icons at the screen edge stay readable. It is portaled to <body>:
+ * cards lift on hover with a transform, and a transformed (or overflow-clipped) ancestor would otherwise trap a fixed bubble,
+ * shifting it off the icon and cutting it off at the card edge.
  */
 export function InfoTip({ text, label }: { text: string; label?: string }) {
   const [open, setOpen] = useState(false);
@@ -88,7 +91,7 @@ export function InfoTip({ text, label }: { text: string; label?: string }) {
       >
         <IconInfo size={14} />
       </button>
-      {open ? (
+      {open && typeof document !== "undefined" ? createPortal(
         <div
           ref={bubble}
           id={id}
@@ -97,7 +100,8 @@ export function InfoTip({ text, label }: { text: string; label?: string }) {
           className="pop anim-pop-in fixed z-50 rounded-md px-3 py-2 text-left text-label font-normal normal-case tracking-normal text-ink-2"
         >
           {text}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );

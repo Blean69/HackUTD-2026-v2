@@ -114,7 +114,10 @@ export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { 
   const voters = !compact && votes.length ? [...votes].sort((a, b) => a.voter_name.localeCompare(b.voter_name)) : [];
 
   return (
-    <article className={cx(!bare && "rounded-lg border border-line bg-surface p-3.5")} aria-label={`Proposal: ${p.title}`}>
+    <article className={cx(!bare && "rounded-lg border border-line bg-surface p-3.5", !compact && "@container")} aria-label={`Proposal: ${p.title}`}>
+      {/* A wide card (one open proposal across the page) puts the vote on the left and the affordability check on the right. */}
+      <div className={cx(!compact && "grid gap-x-6 @4xl:grid-cols-2")}>
+      <div className="min-w-0">
       <div className="flex items-start gap-3">
         {!compact ? <IconTile tone={open ? "brand" : "neutral"} size={40}><ProposalIcon title={p.title} size={20} /></IconTile> : null}
         <div className="min-w-0 flex-1">
@@ -156,8 +159,10 @@ export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { 
           ))}
         </p>
       ) : null}
+      </div>
 
-      <div className="mt-3"><Verdict p={p} full={!compact} /></div>
+      <div className="min-w-0">
+      <div className="mt-3 @4xl:mt-0"><Verdict p={p} full={!compact} /></div>
 
       {metrics ? (
         <Disclosure summary="Show the numbers" className="mt-2">
@@ -180,6 +185,8 @@ export function ProposalCard({ proposal: p, votes, eligible, compact, bare }: { 
           <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void close()}>{busy === "close" ? <Spinner size={12} /> : null} Close voting now</Button>
         </div>
       ) : null}
+      </div>
+      </div>
     </article>
   );
 }

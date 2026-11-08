@@ -38,7 +38,7 @@ export function ProposalList({ householdId }: { householdId: string }) {
       ) : (
         <div className="space-y-3">
           {open.length ? (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className={cx("grid gap-3", open.length > 1 && "xl:grid-cols-2")}>
               {open.map((p) => <ProposalCard key={p.id} proposal={p} votes={byProposal.get(p.id) ?? []} eligible={eligible} />)}
             </div>
           ) : (
