@@ -44,7 +44,7 @@ export function normalizeText(s: string): string {
  * Bump when the agents' behavior changes (prompts, tools, guardrails): a replay is only valid for the code that recorded it,
  * so older recordings stop being replayed and the next identical question runs live (and is recorded again).
  */
-export const CACHE_EPOCH = 'e2'; // e2: grounding checks, find_savings, kid tools, Table Mode guardrails (2026-11-08)
+export const CACHE_EPOCH = 'e3'; // e3: advice guard reviews against the tool results (e2: grounding, find_savings, kid tools, Table Mode guardrails)
 
 export function makeCacheKey(workflow: string, templateId: string, normalizedInput: string): string {
   return `${workflow}@${CACHE_EPOCH}:${templateId}:${sha1(normalizedInput).slice(0, 20)}`;
