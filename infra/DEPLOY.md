@@ -31,8 +31,9 @@ cp infra/env.prod.example .env.prod
 WORKER_SECRET="$(openssl rand -hex 32)"       # step 3a: a new strong secret; it goes in .env.prod only, never in source
 sed -i.bak "s/^WORKER_SECRET=.*/WORKER_SECRET=$WORKER_SECRET/" .env.prod && rm .env.prod.bak; unset WORKER_SECRET
 $EDITOR .env.prod                             # paste NVIDIA_API_KEY, TENVOR_*, PLAID_* ... from your local .env
-infra/deploy.sh --publish --seed              # rsync + docker compose up -d --build (first build: 5-10 min), publish the module,
-                                              # set the worker-secret hash from .env.prod, seed
+infra/deploy.sh --publish --seed              # build the module, rsync, publish it + set the worker-secret hash from .env.prod,
+                                              # THEN docker compose up -d --build (first build: 5-10 min), seed. Module first, so a
+                                              # new worker never starts against tables that do not exist yet.
 ```
 No source file is edited for production: the module ships with the public dev hash as its default and `--publish` overrides it
 at runtime (step 3a). Details follow.

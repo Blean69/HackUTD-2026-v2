@@ -155,7 +155,7 @@ compute_worker_hash() {
 
 db_name() { local n; n="$(envval SPACETIME_DB)"; printf '%s' "${n:-keystone}"; }
 
-publish_module() {
+build_module() {
   command -v spacetime >/dev/null 2>&1 || die "--publish needs the spacetime CLI on this machine (it runs \`spacetime build\`); see DEPLOY.md step 3c"
   # A fresh checkout or git worktree has no spacetime/node_modules, and the build needs them.
   if [ ! -d "$ROOT/spacetime/node_modules" ]; then
@@ -166,6 +166,9 @@ publish_module() {
   ( cd "$ROOT" && spacetime build -p spacetime ) 2>&1 | tail -n 3
   [ "${PIPESTATUS[0]}" -eq 0 ] || die "spacetime build failed (see the lines above)"
   [ -f "$ROOT/spacetime/dist/bundle.js" ] || die "spacetime/dist/bundle.js was not produced by the build"
+}
+
+publish_module() {
   log "Publishing $(db_name) from inside the spacetime container (non-breaking: add -c always yourself only for a wipe)"
   rsync -a -e "$RSYNC_SSH" "$ROOT/spacetime/dist/bundle.js" "$TARGET:/tmp/keystone-bundle.js"
   rssh 'bash -s' -- "$REMOTE_DIR" "$(db_name)" <<'REMOTE'
@@ -173,6 +176,7 @@ set -euo pipefail
 cd "$1"
 D=docker; docker info >/dev/null 2>&1 || D="sudo docker"
 DC="infra/dc"; [ "$D" = docker ] || DC="sudo infra/dc"
+$DC up -d spacetime </dev/null   # no-op when it is already running; starts it on a first deploy
 for i in $(seq 1 20); do
   $DC exec -T spacetime spacetime server ping local </dev/null >/dev/null 2>&1 && break
   echo "waiting for the spacetime container ($i/20)"; sleep 3
@@ -230,6 +234,9 @@ if [ "$SET_HASH" = 1 ] && [ "$PUBLISH" = 0 ] && [ "$SEED" = 0 ]; then
   exit 0
 fi
 
+# Build the module before touching the box: a module that does not compile stops the deploy here.
+if [ "$PUBLISH" = 1 ]; then build_module; fi
+
 # ---- ship the code + env ---------------------------------------------------------------------------------------------
 log "Syncing repo to $TARGET:$REMOTE_DIR"
 rsync -az --delete -e "$RSYNC_SSH" \
@@ -241,6 +248,15 @@ rsync -az --delete -e "$RSYNC_SSH" \
 
 log "Uploading $(basename "$ENV_FILE") as $REMOTE_DIR/.env (mode 600)"
 rsync -a --chmod=F600 -e "$RSYNC_SSH" "$ENV_FILE" "$TARGET:$REMOTE_DIR/.env"
+
+# ---- module publish + worker-secret hash, BEFORE the new worker starts ------------------------------------------------
+# A new worker subscribes to the new module's tables; started against the old module, every subscription fails ("no such
+# table") and imports, agents and the phone PIN check all stop. Publishes are non-breaking (new tables and columns only), so
+# the old worker keeps running fine against the new module until it is replaced below.
+if [ "$PUBLISH" = 1 ]; then
+  publish_module
+  set_worker_hash
+fi
 
 # ---- build + start ---------------------------------------------------------------------------------------------------
 log "docker compose up -d --build on the box (first build takes several minutes)"
@@ -261,12 +277,8 @@ $D image prune -f >/dev/null || true
 $D builder prune -f --filter 'until=48h' >/dev/null || true   # keep the 30 GB disk from filling up over many deploys
 REMOTE
 
-# ---- optional module publish + worker-secret hash ----------------------------------------------------------------------
-if [ "$PUBLISH" = 1 ] && [ "$MAINCLOUD" = 1 ]; then
-  die "--publish publishes inside the spacetime container; with --maincloud use \`spacetime publish -s maincloud\` (DEPLOY.md) and then set the hash by hand"
-fi
-if [ "$PUBLISH" = 1 ]; then publish_module; fi
-if [ "$PUBLISH" = 1 ] || [ "$SET_HASH" = 1 ]; then set_worker_hash; fi
+# ---- optional worker-secret hash (with --publish it was already set above) ---------------------------------------------
+if [ "$PUBLISH" = 0 ] && [ "$SET_HASH" = 1 ]; then set_worker_hash; fi
 
 # ---- optional seed ---------------------------------------------------------------------------------------------------
 if [ "$SEED" = 1 ]; then
