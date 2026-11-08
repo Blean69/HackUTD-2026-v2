@@ -19,7 +19,8 @@ services:
       - "80:80"      # ACME HTTP-01 challenge + redirect to HTTPS
       - "443:443"
     environment:
-      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}   # 52-72-164-85.sslip.io or keystone.tenvor.io in prod; "localhost" = Caddy's local CA
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-localhost}   # brianotron.us in prod (52-72-164-85.sslip.io before the domain); "localhost" = Caddy's local CA
+      REDIRECT_HOSTNAMES: ${REDIRECT_HOSTNAMES:-http://redirect.invalid}   # comma-separated hosts that 308 to PUBLIC_HOSTNAME (Caddyfile)
       ADMIN_IPS: ${ADMIN_IPS:-129.110.241.55/32}       # only these client IPs may publish/delete/inspect databases through Caddy
     extra_hosts:
       - "host.docker.internal:host-gateway"   # /voice/* goes to the voice service, which runs on the host network (see `voice` below)
