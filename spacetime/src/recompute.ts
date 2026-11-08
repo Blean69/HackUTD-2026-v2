@@ -41,6 +41,27 @@ export function recomputeHousehold(ctx: Ctx, household_id: string): void {
     if (!keepDays.has(old.id)) ctx.db.forecast_point.id.delete(old.id);
   }
 
+  // --- shared cash numbers (cash_flow, cash_month): the same rules as the savings-rate indicator, for every screen and agent
+  const c = result.cash;
+  const flowRow = {
+    household_id, as_of: result.as_of, window_days: c.window_days, income_monthly: c.income_monthly, expense_monthly: c.expense_monthly,
+    net_monthly: c.net_monthly, savings_rate: c.savings_rate, categories_json: JSON.stringify(c.categories), updated_at: now,
+  };
+  if (ctx.db.cash_flow.household_id.find(household_id)) ctx.db.cash_flow.household_id.update(flowRow);
+  else ctx.db.cash_flow.insert(flowRow);
+  const keepMonths = new Set<string>();
+  for (const m of c.months) {
+    const id = `${household_id}:${m.month}`;
+    keepMonths.add(id);
+    const prev = ctx.db.cash_month.id.find(id);
+    const row = { id, household_id, month: m.month, income: m.income, expenses: m.expenses, net: m.net, partial: m.partial };
+    if (!prev) ctx.db.cash_month.insert(row);
+    else if (prev.income !== m.income || prev.expenses !== m.expenses || prev.partial !== m.partial) ctx.db.cash_month.id.update(row);
+  }
+  for (const old of [...ctx.db.cash_month.household_id.filter(household_id)]) {
+    if (!keepMonths.has(old.id)) ctx.db.cash_month.id.delete(old.id);
+  }
+
   // --- rule alerts: ids start with "rule:"; keep created_at / acknowledgement of findings that persist
   type AlertRow = NonNullable<ReturnType<typeof ctx.db.alert.id.find>>;
   const existing = new Map<string, AlertRow>();

@@ -1,7 +1,7 @@
 import type {
   Account, AdvisorNote, AgentRun, Alert, BankConnection, CoachMessage, Conversation, CreditProfile, CreditScore, CreditScoreHistory, ForecastPoint, Goal,
   HealthIndicator, Household, Huddle, Member, Obligation, Presence, Proposal, Scenario, TraceEvent, Transaction,
-  TranscriptLine, Vote, KidTask, KidJar,
+  TranscriptLine, Vote, KidTask, KidJar, CashFlow, CashMonthRow,
 } from "@/lib/types";
 
 /** One entry per SpacetimeDB table the UI reads. Rows are UI-shaped (see lib/types.ts). */
@@ -32,13 +32,15 @@ export interface TableRows {
   kid_jar: KidJar;
   credit_score: CreditScore;
   credit_score_history: CreditScoreHistory;
+  cash_flow: CashFlow;
+  cash_month: CashMonthRow;
 }
 export type TableName = keyof TableRows;
 
 export const TABLES: TableName[] = [
   "household", "member", "account", "txn", "credit_profile", "obligation", "conversation", "health_indicator",
   "forecast_point", "alert", "goal", "presence", "huddle", "transcript_line", "scenario", "coach_message",
-  "advisor_note", "agent_run", "trace_event", "bank_connection", "proposal", "vote", "credit_score", "credit_score_history", "kid_task", "kid_jar",
+  "advisor_note", "agent_run", "trace_event", "bank_connection", "proposal", "vote", "credit_score", "credit_score_history", "kid_task", "kid_jar", "cash_flow", "cash_month",
 ];
 
 /** Primary key of each table, as a string. */
@@ -69,6 +71,8 @@ const PK: { [K in TableName]: (r: TableRows[K]) => string } = {
   kid_jar: (r) => r.member_id,
   credit_score: (r) => r.id,
   credit_score_history: (r) => r.id,
+  cash_flow: (r) => r.household_id,
+  cash_month: (r) => r.id,
 };
 
 export function keyOf<K extends TableName>(t: K, row: TableRows[K]): string {

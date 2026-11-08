@@ -6,7 +6,7 @@ import { Mascot, Peek, type MascotMood } from "@/components/Mascot";
 import { CountUp } from "@/components/motion";
 import { BENTO, Panel, TONE_TEXT, type Tone } from "@/components/ui";
 import type { RoomFinance } from "@/lib/data/finance-hooks";
-import { cashSummary, categoryLabel, spendingBreakdown } from "@/lib/finance-analytics";
+import { cashSummary, categoryLabel, spendingBreakdown, withSharedSpending } from "@/lib/finance-analytics";
 import { cx, usd } from "@/lib/format";
 
 /** A ring metric: Penny's colour-coded verdict around one number. */
@@ -32,7 +32,7 @@ export function InsightCards({ fin }: { fin: RoomFinance }) {
   const { cash, txns, today, accounts, health } = fin;
   const sum = useMemo(() => cashSummary(cash), [cash]);
   const indicator = (key: string) => health.find((h) => h.key === key)?.value ?? null;
-  const spend = useMemo(() => spendingBreakdown(txns, today, 90, 5), [txns, today]);
+  const spend = useMemo(() => withSharedSpending(spendingBreakdown(txns, today, 90, 5), fin.cashFlow, 5), [txns, today, fin.cashFlow]);
   const liquid = accounts.filter((a) => a.type === "checking" || a.type === "savings").reduce((s, a) => s + a.balance, 0);
   const burn = spend.total / 3;
   const runway = indicator("liquidity_runway") ?? (burn > 0 ? liquid / burn : null);

@@ -5,7 +5,7 @@ import { CashFlowChart, TrendChart } from "@/components/charts/lazy";
 import { CountUp } from "@/components/motion";
 import { BENTO, Delta, Empty, PageHeader, Panel, Skeleton, StatCard, TableScroll } from "@/components/ui";
 import { useRoomFinance } from "@/lib/data/finance-hooks";
-import { cashSummary, categoryLabel, spendingBreakdown } from "@/lib/finance-analytics";
+import { cashSummary, categoryLabel, spendingBreakdown, withSharedSpending } from "@/lib/finance-analytics";
 import { usd } from "@/lib/format";
 
 type Tone = "good" | "watch" | "risk";
@@ -30,8 +30,10 @@ function AnalyticsSkeleton() {
 export function AnalyticsPage({ householdId }: { householdId: string }) {
   const fin = useRoomFinance(householdId);
   const { txns, today, cash, trend, health, nw } = fin;
-  const spend = useMemo(() => spendingBreakdown(txns, today, 90, 8), [txns, today]);
+  const spend = useMemo(() => withSharedSpending(spendingBreakdown(txns, today, 90, 8), fin.cashFlow, 8), [txns, today, fin.cashFlow]);
   const sum = useMemo(() => cashSummary(cash), [cash]);
+  // Monthly net from SpacetimeDB (same figure as the dashboard, the health card and Brian); calendar-month average without it
+  const avgNet = fin.cashFlow ? fin.cashFlow.net_monthly : sum.avgNet;
   const dti = health.find((h) => h.key === "debt_to_income");
   // the household-health indicator (SpacetimeDB): same figure as the dashboard and Brian; card spending counted, own transfers not
   const savingsRate = health.find((h) => h.key === "savings_rate")?.value ?? sum.savingsRate;
@@ -40,7 +42,7 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
   const header = <PageHeader title="Analytics" sub="How the money moved over the last six months." />;
   if (!fin.ready) return <>{header}<AnalyticsSkeleton /></>;
 
-  const netTone: Tone | undefined = sum.avgNet === null ? undefined : sum.avgNet < 0 ? "risk" : "good";
+  const netTone: Tone | undefined = avgNet === null ? undefined : avgNet < 0 ? "risk" : "good";
   const srTone: Tone | undefined = savingsRate === null ? undefined : savingsRate >= 15 ? "good" : savingsRate >= 5 ? "watch" : "risk";
 
   return (
@@ -50,9 +52,9 @@ export function AnalyticsPage({ householdId }: { householdId: string }) {
         <StatCard
           className={BENTO.quarter}
           label="Net cash flow"
-          value={sum.avgNet === null ? "n/a" : <CountUp value={sum.avgNet} format={(n) => usd(n, { sign: true })} />}
+          value={avgNet === null ? "n/a" : <CountUp value={avgNet} format={(n) => usd(n, { sign: true })} />}
           tone={netTone}
-          sub={sum.months ? `a month, ${sum.months}-month average` : "Needs a completed month"}
+          sub={fin.cashFlow ? "a month, last 90 days" : sum.months ? `a month, ${sum.months}-month average` : "Needs a completed month"}
         />
         <StatCard
           className={BENTO.quarter}

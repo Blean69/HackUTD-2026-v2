@@ -335,3 +335,27 @@ Client reducers (hackathon scope: anyone in the room may call them, like voting)
 `delete_kid_task(task_id)`, `set_kid_goal(household_id, member_id, title, target)`, `redeem_kid_goal(member_id)` (needs balance >= target).
 
 The web app tolerates a module published before this section: `lib/data/mock/kids.ts` runs the same rules in the browser store until the tables exist.
+
+## 14. Shared cash numbers (one source for every monthly cash figure)
+
+Every monthly cash figure on screen and in the agents comes from the recompute (`finance.ts` `CashFlowResult`). It uses the
+same rules as the savings-rate and runway indicators:
+
+- **Income:** deposits into checking and savings, excluding refunds.
+- **Spending:** outflows from checking, savings and cards. A card bill payment is skipped when the card's own purchases are
+  present. Transfers between the household's own accounts are skipped, and refunds are netted.
+
+| Table | Columns |
+|---|---|
+| `cash_flow` | household_id pk, as_of, window_days (90 or less), income_monthly, expense_monthly, net_monthly, savings_rate (equals the `savings_rate` indicator), categories_json (`[{category, total}]` spending over the window), updated_at |
+| `cash_month` | id pk (`{household_id}:{YYYY-MM}`), household_id, month, income, expenses, net, partial (the current month, or a first month the data covers only in part) |
+
+Readers:
+
+- Dashboard: the Cash flow tile (`net_monthly`, "last 90 days"), the Savings rate ring and the "Where the money went" donut
+  (`categories_json`, adding up to `expense_monthly` × window).
+- Analytics: Net cash flow, Savings rate, Spending by category, and the monthly charts (`cash_month`, completed months only).
+- Brian's brief and Ask, through the health indicators, which carry the same figures.
+
+Without these rows (mock mode, or an older module), the web falls back to its own derivation. `tick_recompute` backfills any
+household that has no `cash_flow` row yet, so a module upgrade fills them within a minute or two.

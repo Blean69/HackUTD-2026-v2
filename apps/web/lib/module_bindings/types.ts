@@ -102,6 +102,30 @@ export const BankConnection = __t.object("BankConnection", {
 });
 export type BankConnection = __Infer<typeof BankConnection>;
 
+export const CashFlow = __t.object("CashFlow", {
+  householdId: __t.string(),
+  asOf: __t.string(),
+  windowDays: __t.u32(),
+  incomeMonthly: __t.f64(),
+  expenseMonthly: __t.f64(),
+  netMonthly: __t.f64(),
+  savingsRate: __t.f64(),
+  categoriesJson: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type CashFlow = __Infer<typeof CashFlow>;
+
+export const CashMonth = __t.object("CashMonth", {
+  id: __t.string(),
+  householdId: __t.string(),
+  month: __t.string(),
+  income: __t.f64(),
+  expenses: __t.f64(),
+  net: __t.f64(),
+  partial: __t.bool(),
+});
+export type CashMonth = __Infer<typeof CashMonth>;
+
 export const CoachMessage = __t.object("CoachMessage", {
   id: __t.u64(),
   householdId: __t.string(),

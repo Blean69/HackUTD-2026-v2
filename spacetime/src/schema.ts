@@ -148,6 +148,36 @@ const forecast_point = table(
   },
 );
 
+/** One row per household: cash flow under the same rules as the savings-rate indicator (finance.ts CashFlowResult). */
+const cash_flow = table(
+  { name: 'cash_flow', public: true },
+  {
+    household_id: t.string().primaryKey(),
+    as_of: t.string(),
+    window_days: t.u32(),
+    income_monthly: t.f64(),
+    expense_monthly: t.f64(),
+    net_monthly: t.f64(),
+    savings_rate: t.f64(), // % of income
+    categories_json: t.string(), // [{category, total}] spending over the window
+    updated_at: t.timestamp(),
+  },
+);
+
+/** Cash flow by calendar month, same rules. `partial`: the current month, or a first month the data only partly covers. */
+const cash_month = table(
+  { name: 'cash_month', public: true },
+  {
+    id: t.string().primaryKey(), // `${household_id}:${YYYY-MM}`
+    household_id: t.string().index('btree'),
+    month: t.string(),
+    income: t.f64(),
+    expenses: t.f64(),
+    net: t.f64(),
+    partial: t.bool(),
+  },
+);
+
 const alert = table(
   { name: 'alert', public: true },
   {
@@ -553,6 +583,8 @@ const spacetimedb = schema({
   conversation,
   health_indicator,
   forecast_point,
+  cash_flow,
+  cash_month,
   alert,
   credit_score,
   credit_score_history,

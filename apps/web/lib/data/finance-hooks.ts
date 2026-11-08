@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import {
-  HISTORY_MONTHS, HISTORY_WEEKS, healthModel, monthlyCashFlow, netWorthHistory, netWorthTotals, netWorthTrend, recentNetCashFlow, upcomingObligations,
+  HISTORY_MONTHS, HISTORY_WEEKS, cashMonthsFromDb, healthModel, monthlyCashFlow, netWorthHistory, netWorthTotals, netWorthTrend, recentNetCashFlow, upcomingObligations,
 } from "@/lib/finance";
 import type { RoomTable } from "./backend";
 import {
-  useAccounts, useForecast, useHealth, useHousehold, useMembers, useObligations, useRoomTables, useTxns,
+  useAccounts, useCashFlow, useCashMonths, useForecast, useHealth, useHousehold, useMembers, useObligations, useRoomTables, useTxns,
 } from "./hooks";
 
 /** "Now", refreshed on an interval for relative labels ("3 min ago"). Use `useToday` for anything date-based. */
@@ -41,7 +41,7 @@ export function useNetWorthSummary(householdId: string) {
 }
 
 /** Tables the dashboard model reads on top of the room base set. */
-export const FINANCE_TABLES: readonly RoomTable[] = ["txn", "obligation", "forecast_point"];
+export const FINANCE_TABLES: readonly RoomTable[] = ["txn", "obligation", "forecast_point", "cash_flow", "cash_month"];
 
 /**
  * Every derived number the Dashboard needs. Each derivation is its own memo, so a new transaction recomputes the
@@ -56,18 +56,25 @@ export function useRoomFinance(householdId: string) {
   const txns = useTxns(householdId);
   const health = useHealth(householdId);
   const forecast = useForecast(householdId);
+  const cashFlow = useCashFlow(householdId); // SpacetimeDB: the one source for monthly cash figures (null in mock mode)
+  const cashRows = useCashMonths(householdId);
   const today = useToday();
 
   const history = useMemo(() => netWorthHistory(txns, nw.net, today, HISTORY_WEEKS), [txns, nw.net, today]);
   const trend = useMemo(() => netWorthTrend(history, forecast.points, nw.net), [history, forecast.points, nw.net]);
-  const cash = useMemo(() => monthlyCashFlow(txns, accounts, obligations, members, today, HISTORY_MONTHS), [txns, accounts, obligations, members, today]);
-  const flow = useMemo(() => recentNetCashFlow(cash), [cash]);
+  const cash = useMemo(
+    () => (cashRows.length ? cashMonthsFromDb(cashRows, cashFlow, today, HISTORY_MONTHS) : monthlyCashFlow(txns, accounts, obligations, members, today, HISTORY_MONTHS)),
+    [cashRows, cashFlow, txns, accounts, obligations, members, today],
+  );
+  // The headline is the 90-day figure from SpacetimeDB (same as the savings-rate indicator and Brian); no change badge, since
+  // comparing it with calendar months would mix two windows.
+  const flow = useMemo(() => (cashFlow ? { value: Math.round(cashFlow.net_monthly), change: null, basis: 3 } : recentNetCashFlow(cash)), [cashFlow, cash]);
   const hm = useMemo(() => healthModel(health), [health]);
   const upcoming = useMemo(() => upcomingObligations(obligations, today, 8), [obligations, today]);
 
   return useMemo(
-    () => ({ ready, household, members, accounts, obligations, txns, health, forecast, property, nw, history, trend, cash, flow, healthModel: hm, upcoming, today }),
-    [ready, household, members, accounts, obligations, txns, health, forecast, property, nw, history, trend, cash, flow, hm, upcoming, today],
+    () => ({ ready, household, members, accounts, obligations, txns, health, forecast, property, nw, history, trend, cash, flow, cashFlow, healthModel: hm, upcoming, today }),
+    [ready, household, members, accounts, obligations, txns, health, forecast, property, nw, history, trend, cash, flow, cashFlow, hm, upcoming, today],
   );
 }
 export type RoomFinance = ReturnType<typeof useRoomFinance>;

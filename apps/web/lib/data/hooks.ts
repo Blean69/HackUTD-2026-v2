@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { dedupeGoals } from "@/lib/finance";
 import type {
-  AgentRun, Alert, HealthIndicator, KidJar, KidTask, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
+  AgentRun, Alert, CashFlow, CashMonthRow, HealthIndicator, KidJar, KidTask, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
 import type { DataScope, RoomTable } from "./backend";
 import { useConnection } from "./connection";
@@ -89,6 +89,17 @@ export function useConversations(householdId: string) {
 }
 
 const HEALTH_ORDER = ["liquidity_runway", "emergency_fund", "debt_to_income", "credit_utilization", "savings_rate", "net_worth_trend", "forecast_low_point", "credit_score"];
+/** The household's shared cash numbers (register "cash_flow" with useRoomTables), or null in mock mode / against an older module. */
+export function useCashFlow(householdId: string): CashFlow | null {
+  const rows = useRows("cash_flow");
+  return useMemo(() => rows.find((r) => r.household_id === householdId) ?? null, [rows, householdId]);
+}
+/** Cash flow by calendar month (register "cash_month"), oldest first. */
+export function useCashMonths(householdId: string): CashMonthRow[] {
+  const rows = useRows("cash_month");
+  return useMemo(() => rows.filter((r) => r.household_id === householdId).sort((a, b) => a.month.localeCompare(b.month)), [rows, householdId]);
+}
+
 export function useHealth(householdId: string): HealthIndicator[] {
   const rows = useRows("health_indicator");
   return useMemo(

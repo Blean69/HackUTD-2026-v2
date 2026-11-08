@@ -36,6 +36,24 @@ export interface SpendingBreakdown {
   recurringMonthly: number;
 }
 
+/**
+ * The breakdown with its total and categories taken from SpacetimeDB's cash_flow (same rules as the savings-rate indicator:
+ * card purchases counted once, own transfers skipped, refunds netted), so the donut adds up to the monthly spending shown
+ * everywhere else. Merchants and recurring charges stay as derived here. Without the row (mock mode) it is returned unchanged.
+ */
+export function withSharedSpending(
+  spend: SpendingBreakdown, flow: { window_days: number; categories: { category: string; total: number }[] } | null, top = 8,
+): SpendingBreakdown {
+  if (!flow || !flow.categories.length) return spend;
+  const total = flow.categories.reduce((s, c) => s + c.total, 0);
+  return {
+    ...spend,
+    days: flow.window_days,
+    total,
+    categories: flow.categories.slice(0, top).map((c) => ({ category: c.category, value: c.total, share: total ? (c.total / total) * 100 : 0 })),
+  };
+}
+
 /** Outflows over the last `days` by category and merchant, plus the recurring charges among them. */
 export function spendingBreakdown(txns: readonly Transaction[], today: Date, days = 90, top = 8): SpendingBreakdown {
   const from = isoDay(new Date(today.getTime() - days * DAY));

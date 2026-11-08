@@ -105,6 +105,8 @@ import AgentRunRow from "./agent_run_table";
 import AlertRow from "./alert_table";
 import BankAccountOptionRow from "./bank_account_option_table";
 import BankConnectionRow from "./bank_connection_table";
+import CashFlowRow from "./cash_flow_table";
+import CashMonthRow from "./cash_month_table";
 import CoachMessageRow from "./coach_message_table";
 import ConversationRow from "./conversation_table";
 import CreditProfileRow from "./credit_profile_table";
@@ -242,6 +244,31 @@ const tablesSchema = __schema({
       { name: 'bank_connection_item_id_key', constraint: 'unique', columns: ['itemId'] },
     ],
   }, BankConnectionRow),
+  cashFlow: __table({
+    name: 'cash_flow',
+    indexes: [
+      { accessor: 'household_id', name: 'cash_flow_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+    ],
+    constraints: [
+      { name: 'cash_flow_household_id_key', constraint: 'unique', columns: ['householdId'] },
+    ],
+  }, CashFlowRow),
+  cashMonth: __table({
+    name: 'cash_month',
+    indexes: [
+      { accessor: 'household_id', name: 'cash_month_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'cash_month_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'cash_month_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CashMonthRow),
   coachMessage: __table({
     name: 'coach_message',
     indexes: [
@@ -672,6 +699,10 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "bank_account_option": Omit<typeof tablesSchema.schemaType.tables["bankAccountOption"], "accessorName"> & { readonly accessorName: "bank_account_option" };
     /** @deprecated Use `bankConnection` instead. This alias will be removed in the next major version. */
     readonly "bank_connection": Omit<typeof tablesSchema.schemaType.tables["bankConnection"], "accessorName"> & { readonly accessorName: "bank_connection" };
+    /** @deprecated Use `cashFlow` instead. This alias will be removed in the next major version. */
+    readonly "cash_flow": Omit<typeof tablesSchema.schemaType.tables["cashFlow"], "accessorName"> & { readonly accessorName: "cash_flow" };
+    /** @deprecated Use `cashMonth` instead. This alias will be removed in the next major version. */
+    readonly "cash_month": Omit<typeof tablesSchema.schemaType.tables["cashMonth"], "accessorName"> & { readonly accessorName: "cash_month" };
     /** @deprecated Use `coachMessage` instead. This alias will be removed in the next major version. */
     readonly "coach_message": Omit<typeof tablesSchema.schemaType.tables["coachMessage"], "accessorName"> & { readonly accessorName: "coach_message" };
     /** @deprecated Use `creditProfile` instead. This alias will be removed in the next major version. */
@@ -723,6 +754,8 @@ const tableAccessorAliases = {
   "agent_run": "agentRun",
   "bank_account_option": "bankAccountOption",
   "bank_connection": "bankConnection",
+  "cash_flow": "cashFlow",
+  "cash_month": "cashMonth",
   "coach_message": "coachMessage",
   "credit_profile": "creditProfile",
   "credit_score": "creditScore",
@@ -767,6 +800,10 @@ export type DbView = __DbViewBase & {
   readonly "bank_account_option": __DbViewBase["bankAccountOption"];
   /** @deprecated Use `bankConnection` instead. This alias will be removed in the next major version. */
   readonly "bank_connection": __DbViewBase["bankConnection"];
+  /** @deprecated Use `cashFlow` instead. This alias will be removed in the next major version. */
+  readonly "cash_flow": __DbViewBase["cashFlow"];
+  /** @deprecated Use `cashMonth` instead. This alias will be removed in the next major version. */
+  readonly "cash_month": __DbViewBase["cashMonth"];
   /** @deprecated Use `coachMessage` instead. This alias will be removed in the next major version. */
   readonly "coach_message": __DbViewBase["coachMessage"];
   /** @deprecated Use `creditProfile` instead. This alias will be removed in the next major version. */
@@ -809,6 +846,10 @@ export type Tables = __TablesBase & {
   readonly "bank_account_option": __TablesBase["bankAccountOption"];
   /** @deprecated Use `bankConnection` instead. This alias will be removed in the next major version. */
   readonly "bank_connection": __TablesBase["bankConnection"];
+  /** @deprecated Use `cashFlow` instead. This alias will be removed in the next major version. */
+  readonly "cash_flow": __TablesBase["cashFlow"];
+  /** @deprecated Use `cashMonth` instead. This alias will be removed in the next major version. */
+  readonly "cash_month": __TablesBase["cashMonth"];
   /** @deprecated Use `coachMessage` instead. This alias will be removed in the next major version. */
   readonly "coach_message": __TablesBase["coachMessage"];
   /** @deprecated Use `creditProfile` instead. This alias will be removed in the next major version. */

@@ -256,3 +256,17 @@ test('net worth counts home and vehicle value and subtracts debts (positive bala
   assert.match(nw(withAssets).explanation, /including \$320,000 of home and vehicle value/);
   assert.equal(nw(base).value, nw(withAssets).value); // the 90-day change comes from cash flow, not appraisals
 });
+
+test('the shared cash numbers (cash_flow / cash_month) agree with the savings-rate indicator', () => {
+  const a = analyzeHousehold(baseHousehold(), TODAY);
+  const sr = a.indicators.find((i) => i.key === 'savings_rate')!;
+  assert.equal(a.cash.savings_rate, sr.value); // the dashboard ring, Analytics and Brian all read this one number
+  assert.ok(Math.abs(a.cash.net_monthly - (a.cash.income_monthly - a.cash.expense_monthly)) < 0.02);
+  const spentInWindow = a.cash.categories.reduce((s, c) => s + c.total, 0);
+  assert.ok(Math.abs(spentInWindow - (a.cash.expense_monthly * a.cash.window_days) / 30.4375) < 1, 'categories add up to the window spending');
+  assert.ok(a.cash.months.length >= 3);
+  const last = a.cash.months[a.cash.months.length - 1]!;
+  assert.equal(last.month, TODAY.slice(0, 7));
+  assert.equal(last.partial, true); // the current month is never shown as a full month
+  for (const m of a.cash.months) assert.ok(Math.abs(m.net - (m.income - m.expenses)) < 0.02);
+});

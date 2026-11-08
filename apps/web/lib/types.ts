@@ -439,3 +439,28 @@ export interface KidJar {
   goal_target: number;
   updated_at: string;
 }
+
+/** Cash flow under the same rules as the savings-rate indicator, computed in SpacetimeDB (`cash_flow`): the one source for
+ *  every monthly cash figure on screen and in the agents. */
+export interface CashFlow {
+  household_id: string;
+  as_of: string;
+  window_days: number;
+  income_monthly: number;
+  expense_monthly: number;
+  net_monthly: number;
+  savings_rate: number;
+  /** Spending over the window by category, largest first. */
+  categories: { category: string; total: number }[];
+  updated_at: string;
+}
+/** One calendar month of the same cash flow (`cash_month`); `partial` = the current month or a partly covered first month. */
+export interface CashMonthRow {
+  id: string;
+  household_id: string;
+  month: string;
+  income: number;
+  expenses: number;
+  net: number;
+  partial: boolean;
+}

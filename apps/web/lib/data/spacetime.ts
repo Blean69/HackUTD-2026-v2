@@ -73,6 +73,8 @@ const VOTING_TABLES = ["proposal", "vote"];
 const CREDIT_TABLES = ["credit_score", "credit_score_history"];
 /** Kids and teens (section 12). Same story: a module published before it has no such tables. */
 const KID_TABLES = ["kid_task", "kid_jar"];
+/** Shared cash numbers. A module published before them has no such tables: the UI then derives cash flow itself. */
+const CASH_TABLES = ["cash_flow", "cash_month"];
 
 /** One on-demand room table; `trace_event@<run_id>` narrows the steps to a single run. */
 function roomTableQuery(householdId: string, table: string): string {
@@ -122,6 +124,11 @@ function supportsKids(conn: DbConnection): boolean {
   const db = conn.db as unknown as Record<string, unknown>;
   return !!db.kidTask && !!db.kidJar;
 }
+/** True when these bindings know the shared cash tables (the generated accessors are camelCase). */
+function supportsCash(conn: DbConnection): boolean {
+  const db = conn.db as unknown as Record<string, unknown>;
+  return !!db.cashFlow && !!db.cashMonth;
+}
 /** Whether the live connection reads the module's credit tables (false in mock mode or against an older module). */
 export const liveCreditTables = (): boolean => !!liveConn && supportsCredit(liveConn);
 
@@ -167,6 +174,11 @@ function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () 
     const any = db as unknown as Record<string, unknown>;
     wire(any.kidTask, "kid_task", M.mapKidTask);
     wire(any.kidJar, "kid_jar", M.mapKidJar);
+  }
+  if (supportsCash(conn)) {
+    const any = db as unknown as Record<string, unknown>;
+    wire(any.cashFlow, "cash_flow", M.mapCashFlow);
+    wire(any.cashMonth, "cash_month", M.mapCashMonth);
   }
   if (supportsCredit(conn)) {
     const any = db as unknown as Record<string, unknown>;
@@ -310,6 +322,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
   const voting = supportsVoting(conn);
   const credit = supportsCredit(conn);
   const kids = supportsKids(conn);
+  const cash = supportsCash(conn);
   const localKids = kids ? null : (await import("./mock/kids")).createLocalKidActions(store);
   // The stand-in is only loaded for a module without the voting tables, so the normal path does not ship it.
   let local: ReturnType<(typeof import("./mock/proposals"))["createLocalProposalActions"]> | null = null;
@@ -449,7 +462,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       },
       subscribeRoomTables: (householdId, tables, onApplied) => {
         const id = safeId(householdId);
-        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)) && (kids || !KID_TABLES.includes(t)));
+        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)) && (kids || !KID_TABLES.includes(t)) && (cash || !CASH_TABLES.includes(t)));
         if (!wanted.length) {
           queueMicrotask(onApplied);
           return () => undefined;

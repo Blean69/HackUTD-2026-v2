@@ -35,7 +35,7 @@ export function KpiTiles({ fin, householdId }: { fin: RoomFinance; householdId: 
         label="Cash flow"
         value={<CountUp value={flow.value} format={(n) => usd(n, { sign: true })} />}
         tone={flow.value < 0 ? "risk" : "good"}
-        sub={`a month${flow.basis > 1 ? `, ${flow.basis}-mo avg` : ""}`}
+        sub={fin.cashFlow ? "a month, last 90 days" : `a month${flow.basis > 1 ? `, ${flow.basis}-mo avg` : ""}`}
       />
       <StatCard
         className={T}

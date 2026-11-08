@@ -14,6 +14,8 @@ export type RoomTable =
   | "credit_score" | "credit_score_history"
   /** Kids and teens (contracts.md section 12). */
   | "kid_task" | "kid_jar"
+  /** Shared cash numbers (cash_flow, cash_month): same rules as the savings-rate indicator. */
+  | "cash_flow" | "cash_month"
   /** The steps of one agent run only: `trace_event@<run_id>`. Cheaper than the whole household's trace. */
   | `trace_event@${string}`;
 

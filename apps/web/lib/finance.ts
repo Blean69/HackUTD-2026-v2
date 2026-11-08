@@ -191,6 +191,34 @@ export function monthlyCashFlow(
   return out;
 }
 
+/**
+ * The same monthly series from the SpacetimeDB rows (cash_month, same rules as the savings-rate indicator): the completed
+ * months before the current one, then the current and next months projected at the household's 90-day run rate (cash_flow).
+ */
+export function cashMonthsFromDb(
+  rows: readonly { month: string; income: number; expenses: number; net: number; partial: boolean }[],
+  flow: { income_monthly: number; expense_monthly: number } | null, today: Date, pastMonths: number, futureMonths = 3,
+): CashMonth[] {
+  const cur = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+  const byKey = new Map(rows.map((r) => [r.month, r]));
+  const out: CashMonth[] = [];
+  for (let i = pastMonths; i >= 1; i--) {
+    const d = new Date(cur.getFullYear(), cur.getMonth() - i, 1, 12);
+    const r = byKey.get(monthKey(d));
+    if (!r || r.partial) continue;
+    out.push({ key: r.month, label: MONTH_FMT.format(d), income: Math.round(r.income), expenses: Math.round(r.expenses), net: Math.round(r.income) - Math.round(r.expenses), forecast: false });
+  }
+  if (flow) {
+    for (let i = 0; i < futureMonths; i++) {
+      const d = new Date(cur.getFullYear(), cur.getMonth() + i, 1, 12);
+      const inc = Math.round(flow.income_monthly);
+      const exp = Math.round(flow.expense_monthly);
+      out.push({ key: monthKey(d), label: MONTH_FMT.format(d), income: inc, expenses: exp, net: inc - exp, forecast: true });
+    }
+  }
+  return out;
+}
+
 /** Average net cash flow over the last up-to-3 completed months (steadier than one lumpy month), and the dollar change vs the 3 before. */
 export function recentNetCashFlow(months: readonly CashMonth[]): { value: number; change: number | null; basis: number } {
   const actual = months.filter((m) => !m.forecast);

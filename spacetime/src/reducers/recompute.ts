@@ -10,7 +10,7 @@ const MAX_PER_TICK = 20;
 /**
  * Fired by the `recompute_tick` schedule row. Scheduled reducers are private in SpacetimeDB 2.x, so clients cannot
  * call this directly. It recomputes (a) households flagged dirty by seed/import reducers and (b) households whose
- * indicators were last computed on a previous day, at most MAX_PER_TICK per run. It also closes family-voting proposals
+ * indicators were last computed on a previous day or that have no cash_flow row yet (a module upgrade), at most MAX_PER_TICK per run. It also closes family-voting proposals
  * whose deadline has passed (`cast_vote` rejects late votes either way; the status flip is what the UI shows).
  */
 export const tick_recompute = spacetimedb.reducer(
@@ -27,7 +27,9 @@ export const tick_recompute = spacetimedb.reducer(
     for (const hh of ctx.db.household.iter()) {
       if (seen.has(hh.id)) continue;
       const marker = ctx.db.health_indicator.id.find(`${hh.id}:liquidity_runway`);
-      if (!marker || isoDay(marker.updated_at) !== today) { seen.add(hh.id); todo.push(hh.id); }
+      // no cash_flow row yet: the module was upgraded since this household's last recompute (self-healing backfill)
+      const stale = !marker || isoDay(marker.updated_at) !== today || !ctx.db.cash_flow.household_id.find(hh.id);
+      if (stale) { seen.add(hh.id); todo.push(hh.id); }
     }
     todo.sort();
     for (const id of todo.slice(0, MAX_PER_TICK)) {

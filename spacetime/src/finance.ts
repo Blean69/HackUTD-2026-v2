@@ -89,11 +89,26 @@ export interface RuleAlert {
   detail: string;
   related_ids: string[];
 }
+/**
+ * Cash flow under the SAME rules as the savings-rate and runway indicators (income into checking/savings; spending from
+ * checking, savings and cards, card bill payments skipped when the card's own purchases are present, own transfers skipped,
+ * refunds netted). Stored in `cash_flow` / `cash_month` so every screen and agent shows the same numbers.
+ */
+export interface CashFlowResult {
+  window_days: number;
+  income_monthly: number;
+  expense_monthly: number;
+  net_monthly: number;
+  savings_rate: number; // % of income, identical to the savings_rate indicator
+  categories: { category: string; total: number }[]; // spending over the window, largest first
+  months: { month: string; income: number; expenses: number; net: number; partial: boolean }[];
+}
 export interface Analysis {
   as_of: string;
   indicators: Indicator[];
   forecast: ForecastPoint[];
   alerts: RuleAlert[];
+  cash: CashFlowResult;
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -463,6 +478,7 @@ interface CleanTxn {
   day: number;
   amount: number;
   merchant: string;
+  category: string;
   norm: string;
   is_recurring: boolean;
   transferLike: boolean;
@@ -495,6 +511,7 @@ function classify(t: FinTxn, acctType: string, day: number): CleanTxn {
     day,
     amount: t.amount,
     merchant: t.merchant,
+    category: t.category || 'other',
     norm: normMerchant(t.merchant),
     is_recurring: t.is_recurring,
     transferLike: isTransferLike(t),
@@ -669,6 +686,43 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
   const monthlyExpenses = observedExpenseMonthly > 0 ? observedExpenseMonthly : obligationsMonthly;
   const observedIncomeMonthly = incomeTotal / months;
   const statedIncomeMonthly = input.members.reduce((s, m) => s + (m.income_annual > 0 ? m.income_annual : 0), 0) / 12;
+
+  // --- shared cash numbers (cash_flow / cash_month tables): the window figures above, by category, and by calendar month
+  const cashFlow: CashFlowResult = (() => {
+    const byCat = new Map<string, number>();
+    for (const t of inWin) {
+      if (isExpenseOut(t)) byCat.set(t.category, (byCat.get(t.category) ?? 0) - t.amount);
+      else if (isRefundIn(t)) byCat.set(t.category, (byCat.get(t.category) ?? 0) - t.amount);
+    }
+    const categories = [...byCat.entries()].filter(([, v]) => v > 0.005).sort((a, b) => b[1] - a[1]).map(([category, total]) => ({ category, total: round2(total) }));
+    const monthOf = (day: number): string => { const x = ymd(day); return `${x.y}-${String(x.m).padStart(2, '0')}`; };
+    const byMonth = new Map<string, { income: number; expenses: number }>();
+    for (const t of clean) {
+      const k = monthOf(t.day);
+      const m = byMonth.get(k) ?? { income: 0, expenses: 0 };
+      if (isIncome(t)) m.income += t.amount;
+      else if (isExpenseOut(t)) m.expenses += -t.amount;
+      else if (isRefundIn(t)) m.expenses -= t.amount;
+      else continue;
+      byMonth.set(k, m);
+    }
+    const first = clean.length ? clean[0]!.day : asOf;
+    const firstPartial = ymd(first).d > 3;
+    const months = [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([month, m]) => ({
+      month, income: round2(m.income), expenses: round2(Math.max(0, m.expenses)), net: round2(m.income - Math.max(0, m.expenses)),
+      partial: month === monthOf(asOf) || (firstPartial && month === monthOf(first)),
+    }));
+    const incomeM = observedIncomeMonthly > 0 ? observedIncomeMonthly : statedIncomeMonthly;
+    return {
+      window_days: Math.round(spanDays),
+      income_monthly: round2(incomeM),
+      expense_monthly: round2(observedExpenseMonthly),
+      net_monthly: round2(incomeM - observedExpenseMonthly),
+      savings_rate: incomeM > 0 ? round1(((incomeM - observedExpenseMonthly) / incomeM) * 100) : 0,
+      categories,
+      months,
+    };
+  })();
 
   // --- balances
   const liquid = accounts.filter((a) => LIQUID.has(a.type)).reduce((s, a) => s + a.balance, 0);
@@ -925,5 +979,5 @@ export function analyzeHousehold(input: HouseholdInput, today: string): Analysis
     });
   }
 
-  return { as_of: formatDay(asOf), indicators, forecast, alerts };
+  return { as_of: formatDay(asOf), indicators, forecast, alerts, cash: cashFlow };
 }

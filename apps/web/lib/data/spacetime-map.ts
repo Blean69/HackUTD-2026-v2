@@ -8,7 +8,7 @@ import type {
   Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, CreditProfile, CreditScore, CreditScoreHistory,
   Feasibility, ForecastPoint, Goal, GoalPriority, HealthIndicator, Household, Huddle, Member, Obligation, Presence, PresenceRole,
   Proposal, ProposalAnalysis, ProposalDetails, ProposalVerdict, Provider, Scenario, ScenarioResult, TraceEvent, TraceType,
-  Transaction, TranscriptLine, Vote, VoteChoice, Workflow, KidTask, KidJar,
+  Transaction, TranscriptLine, Vote, VoteChoice, Workflow, KidTask, KidJar, CashFlow, CashMonthRow,
 } from "@/lib/types";
 
 interface TimestampLike {
@@ -174,6 +174,23 @@ export const mapKidJar = (r: B.KidJar): KidJar => ({
 export interface CreditScoreRow {
   id: string; householdId: string; memberId: string; score: number; band: string; factorsJson: string; updatedAt: TimestampLike;
 }
+export interface CashFlowTableRow {
+  householdId: string; asOf: string; windowDays: number; incomeMonthly: number; expenseMonthly: number; netMonthly: number;
+  savingsRate: number; categoriesJson: string; updatedAt?: TimestampLike;
+}
+export interface CashMonthTableRow {
+  id: string; householdId: string; month: string; income: number; expenses: number; net: number; partial: boolean;
+}
+export const mapCashFlow = (r: CashFlowTableRow): CashFlow => ({
+  household_id: r.householdId, as_of: r.asOf, window_days: Number(r.windowDays), income_monthly: r.incomeMonthly,
+  expense_monthly: r.expenseMonthly, net_monthly: r.netMonthly, savings_rate: r.savingsRate,
+  categories: json<{ category: string; total: number }[]>(r.categoriesJson, []).filter((c) => c && typeof c.total === "number"),
+  updated_at: r.updatedAt ? iso(r.updatedAt) : new Date().toISOString(),
+});
+export const mapCashMonth = (r: CashMonthTableRow): CashMonthRow => ({
+  id: r.id, household_id: r.householdId, month: r.month, income: r.income, expenses: r.expenses, net: r.net, partial: !!r.partial,
+});
+
 export interface CreditScoreHistoryRow {
   id: string; householdId: string; memberId: string; date: string; score: number;
 }
