@@ -319,3 +319,19 @@ As built (voice + worker agent, 2026-11-08):
 ## 11. Product scope change
 The Advisor Console is removed: the product is entirely end-user facing. Advisor UI, routes and copy are gone; the
 `advisor_note` table and reducer stay in the module (removing a table is a breaking change) but nothing uses them.
+
+## 12. Kids and teens (chores, allowance jar; Teen planner is client-only)
+
+Page `/room/[id]/kids`. Kids (age 12 and under) get a jar and chores; 13 and up also get Teen mode (student-loan payoff, 50/30/20 first budget, credit checklist), which are pure calculators and store nothing.
+
+| Table (public) | Key | Columns |
+|---|---|---|
+| `kid_task` | `id` | `household_id`, `member_id`, `title`, `reward` (USD), `status` (`open` -> `done` -> `approved`), `created_by_name`, `created_at`, `updated_at` |
+| `kid_jar` | `member_id` | `household_id`, `balance`, `earned_total`, `goal_title`, `goal_target` (0 = none), `updated_at` |
+
+Client reducers (hackathon scope: anyone in the room may call them, like voting):
+`add_kid_task(household_id, member_id, title, reward, author_name)`, `complete_kid_task(task_id)` (open -> done),
+`approve_kid_task(task_id)` (done -> approved, pays `reward` into the jar exactly once), `reopen_kid_task(task_id)` (done -> open),
+`delete_kid_task(task_id)`, `set_kid_goal(household_id, member_id, title, target)`, `redeem_kid_goal(member_id)` (needs balance >= target).
+
+The web app tolerates a module published before this section: `lib/data/mock/kids.ts` runs the same rules in the browser store until the tables exist.

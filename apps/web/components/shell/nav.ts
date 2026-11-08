@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { IconActivity, IconAnalytics, IconDashboard, IconGauge, IconPicture, IconTable, IconTarget, IconUsers, IconWhatIf } from "@/components/icons";
+import { IconActivity, IconAnalytics, IconCap, IconDashboard, IconGauge, IconPicture, IconTable, IconTarget, IconUsers, IconWhatIf } from "@/components/icons";
 
 export interface NavItem {
   key: string;
@@ -23,13 +23,14 @@ export const NAV: NavItem[] = [
   { key: "table", label: "Table Mode", Icon: IconTable, href: room("/table"), match: under("/table"), live: true },
   { key: "what-if", label: "What-If Studio", Icon: IconWhatIf, href: room("/what-if"), match: under("/what-if") },
   { key: "goals", label: "Goals", Icon: IconTarget, href: room("/goals"), match: under("/goals") },
+  { key: "kids", label: "Kids & Teens", Icon: IconCap, href: room("/kids"), match: under("/kids") },
   { key: "agents", label: "Agent Trail", Icon: IconActivity, href: () => "/agents", match: (p) => p.startsWith("/agents") },
 ];
 
 /** Sidebar and phone drawer: three short groups instead of one long list. */
 export const NAV_GROUPS: { label?: string; keys: string[] }[] = [
   { keys: ["dashboard", "picture", "analytics", "credit", "household"] },
-  { label: "Plan together", keys: ["table", "what-if", "goals"] },
+  { label: "Plan together", keys: ["table", "what-if", "goals", "kids"] },
   { label: "Under the hood", keys: ["agents"] },
 ];
 

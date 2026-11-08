@@ -235,6 +235,30 @@ export const Huddle = __t.object("Huddle", {
 });
 export type Huddle = __Infer<typeof Huddle>;
 
+export const KidJar = __t.object("KidJar", {
+  memberId: __t.string(),
+  householdId: __t.string(),
+  balance: __t.f64(),
+  earnedTotal: __t.f64(),
+  goalTitle: __t.string(),
+  goalTarget: __t.f64(),
+  updatedAt: __t.timestamp(),
+});
+export type KidJar = __Infer<typeof KidJar>;
+
+export const KidTask = __t.object("KidTask", {
+  id: __t.string(),
+  householdId: __t.string(),
+  memberId: __t.string(),
+  title: __t.string(),
+  reward: __t.f64(),
+  status: __t.string(),
+  createdByName: __t.string(),
+  createdAt: __t.timestamp(),
+  updatedAt: __t.timestamp(),
+});
+export type KidTask = __Infer<typeof KidTask>;
+
 export const Member = __t.object("Member", {
   id: __t.string(),
   householdId: __t.string(),

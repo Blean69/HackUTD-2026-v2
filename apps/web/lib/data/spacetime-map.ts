@@ -8,7 +8,7 @@ import type {
   Account, AdvisorNote, AgentRun, Alert, AlertKind, AlertSeverity, BankConnection, CoachMessage, Conversation, CreditProfile, CreditScore, CreditScoreHistory,
   Feasibility, ForecastPoint, Goal, GoalPriority, HealthIndicator, Household, Huddle, Member, Obligation, Presence, PresenceRole,
   Proposal, ProposalAnalysis, ProposalDetails, ProposalVerdict, Provider, Scenario, ScenarioResult, TraceEvent, TraceType,
-  Transaction, TranscriptLine, Vote, VoteChoice, Workflow,
+  Transaction, TranscriptLine, Vote, VoteChoice, Workflow, KidTask, KidJar,
 } from "@/lib/types";
 
 interface TimestampLike {
@@ -153,6 +153,19 @@ export const mapProposal = (r: B.Proposal): Proposal => ({
 export const mapVote = (r: B.Vote): Vote => ({
   id: r.id, proposal_id: r.proposalId, household_id: r.householdId, voter_key: r.voterKey, voter_name: r.voterName,
   choice: (["yes", "no", "abstain"].includes(r.choice) ? r.choice : "abstain") as VoteChoice, updated_at: iso(r.updatedAt),
+});
+
+// ---------------------------------------------------------------- kids and teens (contracts.md section 12)
+
+export const mapKidTask = (r: B.KidTask): KidTask => ({
+  id: r.id, household_id: r.householdId, member_id: r.memberId, title: r.title, reward: Number(r.reward),
+  status: (["open", "done", "approved"].includes(r.status) ? r.status : "open") as KidTask["status"],
+  created_by_name: r.createdByName, created_at: iso(r.createdAt), updated_at: iso(r.updatedAt),
+});
+
+export const mapKidJar = (r: B.KidJar): KidJar => ({
+  member_id: r.memberId, household_id: r.householdId, balance: Number(r.balance), earned_total: Number(r.earnedTotal),
+  goal_title: r.goalTitle, goal_target: Number(r.goalTarget), updated_at: iso(r.updatedAt),
 });
 
 // ---------------------------------------------------------------- credit monitoring (contracts.md section 9)

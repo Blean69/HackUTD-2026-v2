@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import AckAlertReducer from "./ack_alert_reducer";
+import AddKidTaskReducer from "./add_kid_task_reducer";
 import AdminSetWorkerSecretHashReducer from "./admin_set_worker_secret_hash_reducer";
 import AgentCoachReplyReducer from "./agent_coach_reply_reducer";
 import AgentCreateAlertReducer from "./agent_create_alert_reducer";
@@ -49,15 +50,18 @@ import AgentUpsertAccountsReducer from "./agent_upsert_accounts_reducer";
 import AgentUpsertGoalReducer from "./agent_upsert_goal_reducer";
 import AgentUpsertTxnsReducer from "./agent_upsert_txns_reducer";
 import AppendTranscriptReducer from "./append_transcript_reducer";
+import ApproveKidTaskReducer from "./approve_kid_task_reducer";
 import AskCoachReducer from "./ask_coach_reducer";
 import BackfillCreditHistoryReducer from "./backfill_credit_history_reducer";
 import CastVoteReducer from "./cast_vote_reducer";
 import ClaimJobReducer from "./claim_job_reducer";
 import ClearPhonePinReducer from "./clear_phone_pin_reducer";
 import CloseProposalReducer from "./close_proposal_reducer";
+import CompleteKidTaskReducer from "./complete_kid_task_reducer";
 import CreateProposalReducer from "./create_proposal_reducer";
 import CreateSandboxReducer from "./create_sandbox_reducer";
 import DeleteGoalReducer from "./delete_goal_reducer";
+import DeleteKidTaskReducer from "./delete_kid_task_reducer";
 import DeleteSandboxReducer from "./delete_sandbox_reducer";
 import EmitTraceReducer from "./emit_trace_reducer";
 import EndHuddleReducer from "./end_huddle_reducer";
@@ -67,7 +71,9 @@ import JoinRoomReducer from "./join_room_reducer";
 import PostAdvisorNoteReducer from "./post_advisor_note_reducer";
 import PurgeTranscriptReducer from "./purge_transcript_reducer";
 import RecomputeHouseholdReducer from "./recompute_household_reducer";
+import RedeemKidGoalReducer from "./redeem_kid_goal_reducer";
 import RegisterWorkerReducer from "./register_worker_reducer";
+import ReopenKidTaskReducer from "./reopen_kid_task_reducer";
 import RequestBankSyncReducer from "./request_bank_sync_reducer";
 import RequestSimulationReducer from "./request_simulation_reducer";
 import SaveOnboardingAnswersReducer from "./save_onboarding_answers_reducer";
@@ -82,6 +88,7 @@ import SeedTxnsReducer from "./seed_txns_reducer";
 import SeedVotesReducer from "./seed_votes_reducer";
 import SelectBankAccountsReducer from "./select_bank_accounts_reducer";
 import SetHuddleStatusReducer from "./set_huddle_status_reducer";
+import SetKidGoalReducer from "./set_kid_goal_reducer";
 import SetPhonePinReducer from "./set_phone_pin_reducer";
 import StartHuddleReducer from "./start_huddle_reducer";
 import StartOnboardingReducer from "./start_onboarding_reducer";
@@ -109,6 +116,8 @@ import HealthIndicatorRow from "./health_indicator_table";
 import HouseholdRow from "./household_table";
 import HouseholdProfileRow from "./household_profile_table";
 import HuddleRow from "./huddle_table";
+import KidJarRow from "./kid_jar_table";
+import KidTaskRow from "./kid_task_table";
 import MemberRow from "./member_table";
 import ObligationRow from "./obligation_table";
 import PhoneAccessStatusRow from "./phone_access_status_table";
@@ -387,6 +396,37 @@ const tablesSchema = __schema({
       { name: 'huddle_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, HuddleRow),
+  kidJar: __table({
+    name: 'kid_jar',
+    indexes: [
+      { accessor: 'household_id', name: 'kid_jar_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'member_id', name: 'kid_jar_member_id_idx_btree', algorithm: 'btree', columns: [
+        'memberId',
+      ] },
+    ],
+    constraints: [
+      { name: 'kid_jar_member_id_key', constraint: 'unique', columns: ['memberId'] },
+    ],
+  }, KidJarRow),
+  kidTask: __table({
+    name: 'kid_task',
+    indexes: [
+      { accessor: 'household_id', name: 'kid_task_household_id_idx_btree', algorithm: 'btree', columns: [
+        'householdId',
+      ] },
+      { accessor: 'id', name: 'kid_task_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'member_id', name: 'kid_task_member_id_idx_btree', algorithm: 'btree', columns: [
+        'memberId',
+      ] },
+    ],
+    constraints: [
+      { name: 'kid_task_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, KidTaskRow),
   member: __table({
     name: 'member',
     indexes: [
@@ -555,6 +595,7 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
+  __reducerSchema("add_kid_task", AddKidTaskReducer),
   __reducerSchema("admin_set_worker_secret_hash", AdminSetWorkerSecretHashReducer),
   __reducerSchema("agent_coach_reply", AgentCoachReplyReducer),
   __reducerSchema("agent_create_alert", AgentCreateAlertReducer),
@@ -569,15 +610,18 @@ const reducersSchema = __reducers(
   __reducerSchema("agent_upsert_goal", AgentUpsertGoalReducer),
   __reducerSchema("agent_upsert_txns", AgentUpsertTxnsReducer),
   __reducerSchema("append_transcript", AppendTranscriptReducer),
+  __reducerSchema("approve_kid_task", ApproveKidTaskReducer),
   __reducerSchema("ask_coach", AskCoachReducer),
   __reducerSchema("backfill_credit_history", BackfillCreditHistoryReducer),
   __reducerSchema("cast_vote", CastVoteReducer),
   __reducerSchema("claim_job", ClaimJobReducer),
   __reducerSchema("clear_phone_pin", ClearPhonePinReducer),
   __reducerSchema("close_proposal", CloseProposalReducer),
+  __reducerSchema("complete_kid_task", CompleteKidTaskReducer),
   __reducerSchema("create_proposal", CreateProposalReducer),
   __reducerSchema("create_sandbox", CreateSandboxReducer),
   __reducerSchema("delete_goal", DeleteGoalReducer),
+  __reducerSchema("delete_kid_task", DeleteKidTaskReducer),
   __reducerSchema("delete_sandbox", DeleteSandboxReducer),
   __reducerSchema("emit_trace", EmitTraceReducer),
   __reducerSchema("end_huddle", EndHuddleReducer),
@@ -587,7 +631,9 @@ const reducersSchema = __reducers(
   __reducerSchema("post_advisor_note", PostAdvisorNoteReducer),
   __reducerSchema("purge_transcript", PurgeTranscriptReducer),
   __reducerSchema("recompute_household", RecomputeHouseholdReducer),
+  __reducerSchema("redeem_kid_goal", RedeemKidGoalReducer),
   __reducerSchema("register_worker", RegisterWorkerReducer),
+  __reducerSchema("reopen_kid_task", ReopenKidTaskReducer),
   __reducerSchema("request_bank_sync", RequestBankSyncReducer),
   __reducerSchema("request_simulation", RequestSimulationReducer),
   __reducerSchema("save_onboarding_answers", SaveOnboardingAnswersReducer),
@@ -602,6 +648,7 @@ const reducersSchema = __reducers(
   __reducerSchema("seed_votes", SeedVotesReducer),
   __reducerSchema("select_bank_accounts", SelectBankAccountsReducer),
   __reducerSchema("set_huddle_status", SetHuddleStatusReducer),
+  __reducerSchema("set_kid_goal", SetKidGoalReducer),
   __reducerSchema("set_phone_pin", SetPhonePinReducer),
   __reducerSchema("start_huddle", StartHuddleReducer),
   __reducerSchema("start_onboarding", StartOnboardingReducer),
@@ -639,6 +686,10 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "health_indicator": Omit<typeof tablesSchema.schemaType.tables["healthIndicator"], "accessorName"> & { readonly accessorName: "health_indicator" };
     /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
     readonly "household_profile": Omit<typeof tablesSchema.schemaType.tables["householdProfile"], "accessorName"> & { readonly accessorName: "household_profile" };
+    /** @deprecated Use `kidJar` instead. This alias will be removed in the next major version. */
+    readonly "kid_jar": Omit<typeof tablesSchema.schemaType.tables["kidJar"], "accessorName"> & { readonly accessorName: "kid_jar" };
+    /** @deprecated Use `kidTask` instead. This alias will be removed in the next major version. */
+    readonly "kid_task": Omit<typeof tablesSchema.schemaType.tables["kidTask"], "accessorName"> & { readonly accessorName: "kid_task" };
     /** @deprecated Use `phoneAccessStatus` instead. This alias will be removed in the next major version. */
     readonly "phone_access_status": Omit<typeof tablesSchema.schemaType.tables["phoneAccessStatus"], "accessorName"> & { readonly accessorName: "phone_access_status" };
     /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
@@ -679,6 +730,8 @@ const tableAccessorAliases = {
   "forecast_point": "forecastPoint",
   "health_indicator": "healthIndicator",
   "household_profile": "householdProfile",
+  "kid_jar": "kidJar",
+  "kid_task": "kidTask",
   "phone_access_status": "phoneAccessStatus",
   "trace_event": "traceEvent",
   "transcript_line": "transcriptLine",
@@ -728,6 +781,10 @@ export type DbView = __DbViewBase & {
   readonly "health_indicator": __DbViewBase["healthIndicator"];
   /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
   readonly "household_profile": __DbViewBase["householdProfile"];
+  /** @deprecated Use `kidJar` instead. This alias will be removed in the next major version. */
+  readonly "kid_jar": __DbViewBase["kidJar"];
+  /** @deprecated Use `kidTask` instead. This alias will be removed in the next major version. */
+  readonly "kid_task": __DbViewBase["kidTask"];
   /** @deprecated Use `phoneAccessStatus` instead. This alias will be removed in the next major version. */
   readonly "phone_access_status": __DbViewBase["phoneAccessStatus"];
   /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */
@@ -766,6 +823,10 @@ export type Tables = __TablesBase & {
   readonly "health_indicator": __TablesBase["healthIndicator"];
   /** @deprecated Use `householdProfile` instead. This alias will be removed in the next major version. */
   readonly "household_profile": __TablesBase["householdProfile"];
+  /** @deprecated Use `kidJar` instead. This alias will be removed in the next major version. */
+  readonly "kid_jar": __TablesBase["kidJar"];
+  /** @deprecated Use `kidTask` instead. This alias will be removed in the next major version. */
+  readonly "kid_task": __TablesBase["kidTask"];
   /** @deprecated Use `phoneAccessStatus` instead. This alias will be removed in the next major version. */
   readonly "phone_access_status": __TablesBase["phoneAccessStatus"];
   /** @deprecated Use `traceEvent` instead. This alias will be removed in the next major version. */

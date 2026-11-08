@@ -413,3 +413,29 @@ export const WORKFLOW_LABEL: Record<Workflow, string> = {
   onboarding_insights: "Onboarding insights",
   phone: "Voice call",
 };
+
+// ---------------------------------------------------------------- kids and teens (contracts.md section 12)
+
+export type KidTaskStatus = "open" | "done" | "approved";
+export interface KidTask {
+  id: string;
+  household_id: string;
+  member_id: string;
+  title: string;
+  /** USD paid into the jar when a parent approves. */
+  reward: number;
+  status: KidTaskStatus;
+  created_by_name: string;
+  created_at: string;
+  updated_at: string;
+}
+/** One kid's savings jar and what they are saving for (goal_target 0 = none). */
+export interface KidJar {
+  member_id: string;
+  household_id: string;
+  balance: number;
+  earned_total: number;
+  goal_title: string;
+  goal_target: number;
+  updated_at: string;
+}

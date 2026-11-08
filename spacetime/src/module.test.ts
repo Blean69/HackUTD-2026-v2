@@ -1072,3 +1072,26 @@ describe('onboarding', () => {
     expect([...test.db.forecast_point.household_id.filter(hh.id)]).toHaveLength(90);
   });
 });
+
+describe('kids: chores and the savings jar', () => {
+  it('pays a chore once, only after the kid finished and a parent approved, then redeems the goal', () => {
+    const test = seeded();
+    const call = <A extends object>(fn: (ctx: never, a: A) => void, a: A) => test.withReducerTx(alice, (ctx) => fn(ctx as never, a));
+    call(m.add_kid_task, { household_id: 'hh_demo', member_id: 'mem_b', title: 'Dishes', reward: 3, author_name: 'Ana' });
+    const task = [...test.db.kid_task.household_id.filter('hh_demo')][0]!;
+    expect(task.status).toBe('open');
+    call(m.approve_kid_task, { task_id: task.id }); // not finished yet: no pay
+    expect(test.db.kid_jar.member_id.find('mem_b')).toBeFalsy();
+    call(m.complete_kid_task, { task_id: task.id });
+    call(m.approve_kid_task, { task_id: task.id });
+    call(m.approve_kid_task, { task_id: task.id }); // double tap: still paid once
+    expect(test.db.kid_jar.member_id.find('mem_b')!.balance).toBe(3);
+    expect(() => call(m.add_kid_task, { household_id: 'hh_demo', member_id: 'mem_nope', title: 'x', reward: 1, author_name: '' })).toThrow();
+    call(m.set_kid_goal, { household_id: 'hh_demo', member_id: 'mem_b', title: 'Lego set', target: 5 });
+    expect(() => call(m.redeem_kid_goal, { member_id: 'mem_b' })).toThrow('not enough saved yet');
+    call(m.set_kid_goal, { household_id: 'hh_demo', member_id: 'mem_b', title: 'Lego set', target: 2 });
+    call(m.redeem_kid_goal, { member_id: 'mem_b' });
+    const jar = test.db.kid_jar.member_id.find('mem_b')!;
+    expect([jar.balance, jar.goal_target]).toEqual([1, 0]);
+  });
+});

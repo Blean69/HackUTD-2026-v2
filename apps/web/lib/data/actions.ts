@@ -48,3 +48,25 @@ export async function castVote(proposalId: string, choice: VoteChoice, voterName
 export async function closeProposal(proposalId: string) {
   return (await ensureBackend()).actions.closeProposal(proposalId);
 }
+
+export async function addKidTask(input: { householdId: string; memberId: string; title: string; reward: number; authorName: string }) {
+  return (await ensureBackend()).actions.addKidTask(input);
+}
+export async function completeKidTask(taskId: string) {
+  return (await ensureBackend()).actions.completeKidTask(taskId);
+}
+export async function approveKidTask(taskId: string) {
+  return (await ensureBackend()).actions.approveKidTask(taskId);
+}
+export async function reopenKidTask(taskId: string) {
+  return (await ensureBackend()).actions.reopenKidTask(taskId);
+}
+export async function deleteKidTask(taskId: string) {
+  return (await ensureBackend()).actions.deleteKidTask(taskId);
+}
+export async function setKidGoal(householdId: string, memberId: string, title: string, target: number) {
+  return (await ensureBackend()).actions.setKidGoal(householdId, memberId, title, target);
+}
+export async function redeemKidGoal(memberId: string) {
+  return (await ensureBackend()).actions.redeemKidGoal(memberId);
+}

@@ -318,6 +318,37 @@ const vote = table(
   },
 );
 
+// --- Kids and teens (docs/contracts.md section 12): chores that earn allowance into a savings jar ------------------
+
+const kid_task = table(
+  { name: 'kid_task', public: true },
+  {
+    id: t.string().primaryKey(),
+    household_id: t.string().index('btree'),
+    member_id: t.string().index('btree'),
+    title: t.string(),
+    reward: t.f64(), // USD credited to the jar when a parent approves
+    status: t.string(), // open | done (kid says finished) | approved (parent confirmed, reward paid)
+    created_by_name: t.string(),
+    created_at: t.timestamp(),
+    updated_at: t.timestamp(),
+  },
+);
+
+/** One row per kid: the savings jar and its goal. */
+const kid_jar = table(
+  { name: 'kid_jar', public: true },
+  {
+    member_id: t.string().primaryKey(),
+    household_id: t.string().index('btree'),
+    balance: t.f64(),
+    earned_total: t.f64(),
+    goal_title: t.string(),
+    goal_target: t.f64(), // 0 = no goal set
+    updated_at: t.timestamp(),
+  },
+);
+
 // --- Plaid Sandbox (docs/contracts.md section 5) ------------------------------------------------------------------
 
 /** What the UI shows about a linked bank. Safe for clients: no tokens. */
@@ -534,6 +565,8 @@ const spacetimedb = schema({
   advisor_note,
   proposal,
   vote,
+  kid_task,
+  kid_jar,
   agent_job,
   agent_run,
   trace_event,

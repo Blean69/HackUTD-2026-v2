@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { dedupeGoals } from "@/lib/finance";
 import type {
-  AgentRun, Alert, HealthIndicator, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
+  AgentRun, Alert, HealthIndicator, KidJar, KidTask, Presence, Proposal, TraceEvent, Vote, VoteChoice, Workflow,
 } from "@/lib/types";
 import type { DataScope, RoomTable } from "./backend";
 import { useConnection } from "./connection";
@@ -178,6 +178,19 @@ export function tallyVotes(votes: readonly Vote[]): VoteTally {
 export function useMyVote(votes: readonly Vote[]): VoteChoice | undefined {
   const { identity } = useConnection();
   return useMemo(() => votes.find((v) => v.voter_key === identity)?.choice, [votes, identity]);
+}
+
+// ------------------------------------------------------------------ kids and teens
+
+/** Chores for the household (register `useRoomTables(id, ["kid_task", "kid_jar"])` on the page), newest first. */
+export function useKidTasks(householdId: string): KidTask[] {
+  const rows = useRows("kid_task");
+  return useMemo(() => rows.filter((k) => k.household_id === householdId).sort((a, b) => b.created_at.localeCompare(a.created_at)), [rows, householdId]);
+}
+/** Savings jars by member id. */
+export function useKidJars(householdId: string): Map<string, KidJar> {
+  const rows = useRows("kid_jar");
+  return useMemo(() => new Map(rows.filter((j) => j.household_id === householdId).map((j) => [j.member_id, j])), [rows, householdId]);
 }
 
 // ------------------------------------------------------------------ multiplayer

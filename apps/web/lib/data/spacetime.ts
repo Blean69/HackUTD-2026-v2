@@ -71,6 +71,8 @@ const ONBOARDING_EXTRA_TABLES = ["goal", "bank_connection", "trace_event"];
 const VOTING_TABLES = ["proposal", "vote"];
 /** Credit monitoring (section 9). Until the module and bindings have them, the UI derives the score itself. */
 const CREDIT_TABLES = ["credit_score", "credit_score_history"];
+/** Kids and teens (section 12). Same story: a module published before it has no such tables. */
+const KID_TABLES = ["kid_task", "kid_jar"];
 
 /** One on-demand room table; `trace_event@<run_id>` narrows the steps to a single run. */
 function roomTableQuery(householdId: string, table: string): string {
@@ -115,6 +117,11 @@ function supportsCredit(conn: DbConnection): boolean {
   const db = conn.db as unknown as Record<string, unknown>;
   return !!db.creditScore && !!db.creditScoreHistory;
 }
+/** True when the module this browser is connected to has the kid tables (the generated accessors are camelCase). */
+function supportsKids(conn: DbConnection): boolean {
+  const db = conn.db as unknown as Record<string, unknown>;
+  return !!db.kidTask && !!db.kidJar;
+}
 /** Whether the live connection reads the module's credit tables (false in mock mode or against an older module). */
 export const liveCreditTables = (): boolean => !!liveConn && supportsCredit(liveConn);
 
@@ -155,6 +162,11 @@ function wireTables(conn: DbConnection, store: DataStore, onOwnPresenceGone: () 
   if (supportsVoting(conn)) {
     wire(db.proposal, "proposal", M.mapProposal);
     wire(db.vote, "vote", M.mapVote);
+  }
+  if (supportsKids(conn)) {
+    const any = db as unknown as Record<string, unknown>;
+    wire(any.kidTask, "kid_task", M.mapKidTask);
+    wire(any.kidJar, "kid_jar", M.mapKidJar);
   }
   if (supportsCredit(conn)) {
     const any = db as unknown as Record<string, unknown>;
@@ -297,6 +309,8 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
   // votes, a deterministic quick check instead of the agent) so the card still works against an older module.
   const voting = supportsVoting(conn);
   const credit = supportsCredit(conn);
+  const kids = supportsKids(conn);
+  const localKids = kids ? null : (await import("./mock/kids")).createLocalKidActions(store);
   // The stand-in is only loaded for a module without the voting tables, so the normal path does not ship it.
   let local: ReturnType<(typeof import("./mock/proposals"))["createLocalProposalActions"]> | null = null;
   if (!voting) {
@@ -411,6 +425,17 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       if (local) return local.closeProposal(proposalId);
       await r.closeProposal({ proposalId });
     },
+
+    addKidTask: async ({ householdId, memberId, title, reward, authorName }) => {
+      if (localKids) return localKids.addKidTask({ householdId, memberId, title, reward, authorName });
+      await r.addKidTask({ householdId, memberId, title, reward, authorName });
+    },
+    completeKidTask: async (taskId) => (localKids ? localKids.completeKidTask(taskId) : void (await r.completeKidTask({ taskId }))),
+    approveKidTask: async (taskId) => (localKids ? localKids.approveKidTask(taskId) : void (await r.approveKidTask({ taskId }))),
+    reopenKidTask: async (taskId) => (localKids ? localKids.reopenKidTask(taskId) : void (await r.reopenKidTask({ taskId }))),
+    deleteKidTask: async (taskId) => (localKids ? localKids.deleteKidTask(taskId) : void (await r.deleteKidTask({ taskId }))),
+    setKidGoal: async (householdId, memberId, title, target) => (localKids ? localKids.setKidGoal(householdId, memberId, title, target) : void (await r.setKidGoal({ householdId, memberId, title, target }))),
+    redeemKidGoal: async (memberId) => (localKids ? localKids.redeemKidGoal(memberId) : void (await r.redeemKidGoal({ memberId }))),
   };
 
   return {
@@ -424,7 +449,7 @@ export async function connectSpacetime(store: DataStore): Promise<{ backend: Bac
       },
       subscribeRoomTables: (householdId, tables, onApplied) => {
         const id = safeId(householdId);
-        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)));
+        const wanted = tables.filter((t) => (voting || !VOTING_TABLES.includes(t)) && (credit || !CREDIT_TABLES.includes(t)) && (kids || !KID_TABLES.includes(t)));
         if (!wanted.length) {
           queueMicrotask(onApplied);
           return () => undefined;

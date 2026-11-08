@@ -12,6 +12,8 @@ export type RoomTable =
   | "conversation" | "transcript_line" | "scenario" | "coach_message" | "trace_event" | "proposal" | "vote"
   /** Synthetic credit monitoring (contracts.md section 9); skipped quietly when the published module predates it. */
   | "credit_score" | "credit_score_history"
+  /** Kids and teens (contracts.md section 12). */
+  | "kid_task" | "kid_jar"
   /** The steps of one agent run only: `trace_event@<run_id>`. Cheaper than the whole household's trace. */
   | `trace_event@${string}`;
 
@@ -50,6 +52,20 @@ export interface Actions {
   castVote(proposalId: string, choice: VoteChoice, voterName: string): Promise<void>;
   /** `close_proposal` */
   closeProposal(proposalId: string): Promise<void>;
+  /** `add_kid_task` — a chore for one kid. */
+  addKidTask(input: { householdId: string; memberId: string; title: string; reward: number; authorName: string }): Promise<void>;
+  /** `complete_kid_task` — the kid says it is done (open -> done). */
+  completeKidTask(taskId: string): Promise<void>;
+  /** `approve_kid_task` — a parent confirms (done -> approved) and the reward lands in the jar, once. */
+  approveKidTask(taskId: string): Promise<void>;
+  /** `reopen_kid_task` — not done yet (done -> open). */
+  reopenKidTask(taskId: string): Promise<void>;
+  /** `delete_kid_task` */
+  deleteKidTask(taskId: string): Promise<void>;
+  /** `set_kid_goal` — target 0 clears the goal. */
+  setKidGoal(householdId: string, memberId: string, title: string, target: number): Promise<void>;
+  /** `redeem_kid_goal` — spend the jar on the goal once it is covered. */
+  redeemKidGoal(memberId: string): Promise<void>;
 }
 
 export interface Backend {

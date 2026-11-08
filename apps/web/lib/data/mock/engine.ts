@@ -12,6 +12,7 @@ import type {
   Alert, Goal, Huddle, Presence, PresenceRole, Proposal, TraceEvent, TranscriptLine, Workflow,
 } from "@/lib/types";
 import { computeForecast, computeHealth, type MathCtx } from "./math";
+import { createLocalKidActions } from "./kids";
 import { createLocalProposalActions, seedProposals } from "./proposals";
 import { buildSeed, type SeedHousehold } from "./seed";
 import { buildTxns } from "./txns";
@@ -373,6 +374,7 @@ class MockEngine {
     createProposal: (input) => this.proposals().createProposal(input),
     castVote: (proposalId, choice, voterName) => this.proposals().castVote(proposalId, choice, voterName),
     closeProposal: (proposalId) => this.proposals().closeProposal(proposalId),
+    ...createLocalKidActions(this.store),
 
     requestBankSync: async (hid) => {
       const conns = this.store.rows("bank_connection").filter((b) => b.household_id === hid);
