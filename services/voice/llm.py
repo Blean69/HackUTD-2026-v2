@@ -575,6 +575,21 @@ class LightningLLMService(NvidiaLLMService):
             logger.info("LLM warm-up: " + ", ".join(f"{k} {round(v * 1000)} ms" for k, v in took.items()))
         return took
 
+    async def keep_warm(self, every: float = 3.0) -> None:
+        """Runs for the whole call (cancel it at the end): a models call to the provider that would answer next, every `every` seconds.
+        vLLM and httpx both drop a connection after 5 s idle, and people talk for longer than that, so without this nearly every turn
+        opened a new connection. Over the SSH tunnel to the Brev GPU in Helsinki that costs about 200 ms before the request is even sent
+        (measured: first token 146 ms on a kept-alive connection, 341 ms on a new one). Never raises."""
+        while True:
+            await asyncio.sleep(every)
+            prov = self.providers[self._ordered()[0]]
+            try:
+                await asyncio.wait_for(self._clients[prov.key].models.list(), timeout=max(every, 1.0))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug(f"LLM keep-warm: {prov.key} ping failed ({type(e).__name__})")
+
     def drain_served(self) -> list[dict]:
         out, self.served = self.served, []
         return out

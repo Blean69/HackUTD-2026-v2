@@ -89,7 +89,7 @@ def test_brief_is_humanized_before_the_model_reads_it():
 
 
 def test_prompt_size_stays_modest():
-    assert len(prompt().split()) < 1000  # a 3B-active model follows a short prompt better
+    assert len(prompt().split()) < 1100  # a 3B-active model follows a short prompt better (raised from 1000 for the humor examples)
 
 
 def test_disclosure_is_brief_natural_and_complete():

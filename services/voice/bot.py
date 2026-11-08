@@ -235,6 +235,7 @@ class VoiceCall:
         self._rtvi: RTVIProcessor | None = None
         self._watchdog: asyncio.Task | None = None
         self._lag_task: asyncio.Task | None = None
+        self._keepwarm_task: asyncio.Task | None = None
         self._reply_watchdog: asyncio.Task | None = None
         self._ack = AckPlayer(on_speech=self._on_real_speech)
         self._ack_picker = acks.AckPicker()
@@ -384,6 +385,8 @@ class VoiceCall:
             self.reporter.start()
             if s.llm_warm:
                 asyncio.create_task(self.llm.warm(), name="llm-prewarm")  # TLS to every provider while the disclosure plays; never blocks it
+                if s.llm_keepwarm_secs > 0:
+                    self._keepwarm_task = asyncio.create_task(self.llm.keep_warm(s.llm_keepwarm_secs), name="llm-keepwarm")
             if callback:
                 await self.worker.queue_frame(TTSSpeakFrame(prompts.CALLBACK_OPENING, append_to_context=True))
                 asyncio.create_task(self._activate_callback(), name="activate-callback")
@@ -424,7 +427,7 @@ class VoiceCall:
         return self.end_reason
 
     async def _finish(self) -> None:
-        for t in (self._watchdog, self._lag_task, self._reply_watchdog):
+        for t in (self._watchdog, self._lag_task, self._reply_watchdog, self._keepwarm_task):
             if t:
                 t.cancel()
         await self.reporter.stop()

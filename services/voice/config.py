@@ -120,6 +120,7 @@ class Settings:
     llm_cooldown_secs: float = 30.0  # a provider that stalled or errored is tried last for this long, so one outage costs one slow turn
     llm_hedge_until: str = "sentence"  # what a request must deliver to win the race: "sentence" (first speakable unit) | "token" (first chunk)
     llm_warm: bool = True  # warm the LLM connections (and the prompt cache) in the background when a call connects
+    llm_keepwarm_secs: float = 3.0  # during a call, ping the next provider this often so its connection never idles out (5 s); 0 = off
     brev_base_url: str = ""  # BREV_BASE_URL / BREV_API_KEY / BREV_NEMOTRON_MODEL: our own Nemotron on a Brev GPU; empty = provider skipped
     brev_api_key: str = ""
     brev_model: str = ""
@@ -235,6 +236,7 @@ def load_settings() -> Settings:
         llm_cooldown_secs=max(0.0, _f("VOICE_LLM_COOLDOWN_SECS", 30.0)),
         llm_hedge_until="token" if _s("VOICE_LLM_HEDGE_UNTIL", "sentence").lower() == "token" else "sentence",
         llm_warm=_s("VOICE_LLM_WARM", "1") != "0",
+        llm_keepwarm_secs=max(0.0, _f("VOICE_LLM_KEEPWARM_SECS", 3.0)),
         brev_base_url=_s("BREV_BASE_URL").rstrip("/"),
         brev_api_key=_s("BREV_API_KEY"),
         brev_model=_s("BREV_NEMOTRON_MODEL"),

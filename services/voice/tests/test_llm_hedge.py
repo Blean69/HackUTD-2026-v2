@@ -511,3 +511,16 @@ async def test_brev_answering_is_reported_as_the_real_model():
     info = svc.drain_served()[0]
     assert info["provider"] == "brev" and info["label"] == "brev" and info["model"] == "nemotron-3.5-lightning (Brev L40S)"
     assert clients["brev"].calls[0]["model"] == "nemotron"  # the wire still says what vLLM serves it as
+
+
+async def test_keep_warm_pings_the_provider_that_would_answer_next_until_cancelled():
+    svc, clients, _ = make([B, A], {})
+    task = asyncio.create_task(svc.keep_warm(0.02))
+    await asyncio.sleep(0.11)
+    assert clients[B.key].models_calls >= 3 and clients[A.key].models_calls == 0
+    svc._cool(B, "test")  # Brev stalled: the next turn goes to the hosted endpoint, so that is the connection to keep open
+    await asyncio.sleep(0.07)
+    assert clients[A.key].models_calls >= 2
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
