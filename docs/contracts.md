@@ -206,3 +206,16 @@ synthetic data only; the first thing spoken is a disclosure that it is an AI ass
 - **Trace of a call:** `run_started` "Voice call connected (Rivera family)" -> `plan` -> briefing `tool_call`/`tool_result` ->
   per turn `message` "Heard: ..." (model `nemotron-asr-streaming`) and "Said: ..." (Lightning; data has LLM first-token, TTS first-audio and voice-to-voice ms)
   with `tool_call`/`tool_result` between them -> `final` (turns, tool calls, p50/p95 voice-to-voice).
+
+## 7b. Sandbox bank profiles (PNC dataset → Plaid Sandbox custom users)
+
+The demo bank offers several realistic customers built from PNC's HackUTD 2026 dataset, each a Plaid Sandbox custom user
+(`data/plaid/profiles/<profile_id>.json`, plus `data/plaid/profiles/index.json`). The user picks which customer to connect,
+then which of that customer's accounts to include (existing `bank_account_option` step).
+
+| Method | Path | Returns / does |
+|---|---|---|
+| GET | `/plaid/sandbox_profiles` | `[{profile_id, display_name, summary, accounts: [{name, type, subtype, mask, balance}], txn_count}]` (no secrets) |
+| POST | `/plaid/sandbox_connect` | `{household_id, profile_id?, select: true}` → creates the item from that profile's custom-user JSON (default: the existing family profile), writes account options, status `selecting` |
+
+The Plaid Link path (real sandbox UI) stays available as a secondary option.
