@@ -232,7 +232,7 @@ class SignalWireDialer:
 
     @classmethod
     def from_settings(cls, s: Settings, **kw: Any) -> "SignalWireDialer":
-        return cls(s.signalwire_space_url, s.signalwire_project_id, s.signalwire_api_token, s.signalwire_number, **kw)
+        return cls(s.signalwire_space_url, s.signalwire_project_id, s.signalwire_api_token, s.signalwire_callback_from or s.signalwire_number, **kw)
 
     @property
     def configured(self) -> bool:
@@ -335,7 +335,7 @@ class CallbackManager:
     def remember(self, call_sid: str, number: str) -> bool:
         """Called from the inbound webhook with `From`. Held until the call ends (or NUMBER_TTL_SECS), then dropped. Anything that is not a
         dialable E.164 number (withheld, "anonymous", short codes) or is our own number is ignored."""
-        if not self.enabled or not call_sid or not E164.match(number or "") or number == self.s.signalwire_number:
+        if not self.enabled or not call_sid or not E164.match(number or "") or number in (self.s.signalwire_number, self.s.signalwire_callback_from):
             return False
         self._sweep_numbers()
         self.forget(call_sid)

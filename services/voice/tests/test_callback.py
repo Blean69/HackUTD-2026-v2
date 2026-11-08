@@ -2,6 +2,7 @@
 unlocked-only rules, and that no phone number ever reaches a log line. No real call is placed: HTTP goes to mocks only."""
 import asyncio
 import base64
+import dataclasses
 import json
 import random
 import re
@@ -469,3 +470,13 @@ async def test_manager_to_dialer_to_mock_signalwire_end_to_end():
     token = parse_qs(urlsplit(f["Url"]).query)["cb"][0]
     got = m.store.answer(token)  # the very token that went to SignalWire opens the plan
     assert got and got[0].household_id == "hh_rivera" and got[0].first_name == "Marisol" and got[0].caller_hash == callback.caller_hash("pepper", NUMBER)
+
+
+def test_callback_from_number_overrides_the_caller_id_and_is_never_remembered_as_a_caller():
+    """SIGNALWIRE_CALLBACK_FROM: callbacks dial from another number in the space (the main line stays the inbound number)."""
+    alt = "+19455550100"
+    s2 = dataclasses.replace(S, signalwire_callback_from=alt)
+    assert SignalWireDialer.from_settings(s2).from_number == alt
+    assert SignalWireDialer.from_settings(S).from_number == OUR  # unset: the main number, as before
+    m = CallbackManager(s2, dialer=SignalWireDialer.from_settings(s2), worker=FakeWorker(), now=Clock(), sleep=FakeSleep(Clock()), rng=random.Random(1))
+    assert m.remember("CAself", alt) is False and m.remember("CAself2", OUR) is False

@@ -153,6 +153,7 @@ class Settings:
     # the media socket is still protected by the short-lived stream token
     signature_token: str = ""
     signalwire_number: str = ""
+    signalwire_callback_from: str = ""  # SIGNALWIRE_CALLBACK_FROM: caller ID for callbacks (another number in the space); empty = SIGNALWIRE_PHONE_NUMBER
     # callback after a phone call (docs/contracts.md section 10): Brian rings the same number back with a critical alert. Needs the four
     # SIGNALWIRE_* values below plus VOICE_SHARED_SECRET (it signs the callback tokens); anything missing = the feature stays off.
     signalwire_space_url: str = ""  # SIGNALWIRE_SPACE_URL, e.g. yourspace.signalwire.com
@@ -253,6 +254,7 @@ def load_settings() -> Settings:
         known_caller_hashes=_list("KNOWN_CALLER_HASHES"),
         signature_token=_s("SIGNALWIRE_SIGNING_KEY") or _s("TWILIO_AUTH_TOKEN"),
         signalwire_number=_s("SIGNALWIRE_PHONE_NUMBER"),
+        signalwire_callback_from=_s("SIGNALWIRE_CALLBACK_FROM"),
         signalwire_space_url=_s("SIGNALWIRE_SPACE_URL"),
         signalwire_project_id=_s("SIGNALWIRE_PROJECT_ID"),
         signalwire_api_token=_s("SIGNALWIRE_API_TOKEN"),
