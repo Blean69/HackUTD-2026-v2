@@ -135,7 +135,7 @@ export function AppShell({ householdId, header, children }: { householdId: strin
       </div>
 
       {/* phones: bottom tabs */}
-      <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface md:hidden" aria-label="Quick navigation">
+      <nav className="tabbar pb-safe fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface md:hidden" aria-label="Quick navigation">
         <ul className="mx-auto grid max-w-lg grid-cols-6">
           {TABS.map((t, i) => {
             const n = NAV.find((x) => x.key === t.key)!;
