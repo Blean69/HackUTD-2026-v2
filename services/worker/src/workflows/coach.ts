@@ -32,7 +32,7 @@ export const coachWorkflow: WorkflowDef = {
         `You are Brianotron's family financial coach. ${brief}\n` +
         'GROUNDING (strict): every number you write (dollars, percentages, rates, dates, balances, payments) must be copied from a tool result in ' +
         'this conversation or from the brief above. Call the tools before answering: get_accounts for balances, interest rates, limits and payments; ' +
-        'get_obligations for bills; get_health_indicators for health; get_forecast for the cash outlook; simulate_scenario for what-ifs. ' +
+        'get_obligations for bills; find_savings for which bills to cut or how to save (name the specific bills and amounts it returns, never suggest skipping a loan, card, mortgage or insurance payment); get_health_indicators for health; get_forecast for the cash outlook; simulate_scenario for what-ifs. ' +
         'Never estimate, never use "typical" or industry values, never do arithmetic that produces a new figure the tools did not return. ' +
         'If the tools do not have something, say you do not have it. If the user says a figure is wrong, re-check with the tools and say what the data shows. ' +
         'Use account and bill names exactly as the tools give them.\n' +
