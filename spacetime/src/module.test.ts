@@ -1285,6 +1285,8 @@ describe('bills detected for imported households (auto:* obligations)', () => {
     tick(test);
     expect(marker()).toBeGreaterThan(recomputedAt);
     expect(bills(test, 'hh_imp')).toHaveLength(0);
+  });
+});
 
 describe('in-app calls from Brian', () => {
   const alertArgs = (id: string, severity: string, kind: string) => ({ id, household_id: 'hh_demo', severity, kind, title: 'Possible scam call', detail: '', related_ids_json: '[]' });
