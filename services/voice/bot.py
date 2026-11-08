@@ -41,6 +41,7 @@ import prompts
 from barge import BargeControl, EchoAwareStart, PttAwareStop, PttAwareTimeout
 from config import Settings
 from llm import build_llm, sanitize_messages
+from leak_guard import LeakGuard
 from pacing import SentenceCap
 from pin_gate import PinGate, PinOutcome
 from reporter import TraceReporter
@@ -120,9 +121,11 @@ class LLMTap(FrameProcessor):
     the token usage of the last completion, and enforces the spoken-turn cap (SentenceCap: once a turn has said enough, the current
     sentence is allowed to finish and the rest of the reply is dropped before it reaches the voice)."""
 
-    def __init__(self, max_words: int = 32, on_empty: Any = None, **kw: Any):
+    def __init__(self, max_words: int = 32, on_empty: Any = None, guard: LeakGuard | None = None, **kw: Any):
         super().__init__(**kw)
         self.cap = SentenceCap(max_words=max_words)
+        self.guard = guard if guard is not None else LeakGuard()  # every sentence is checked before it is spoken (leak_guard.py)
+        self.leaks = 0
         self.on_empty = on_empty  # async callable: a reply finished with nothing for the caller to hear (see process_frame)
         self._saw_call = False
         self._interrupted = False
@@ -144,17 +147,18 @@ class LLMTap(FrameProcessor):
             self.spoke = False
             self._saw_call = self._interrupted = self._line = False
             self.cap.reset()
+            self.guard.reset()
         elif isinstance(frame, LLMTextFrame):
-            if not self.cap.allow(frame.text):
-                if self.cap.closed and self.cap.words and not getattr(self, "_logged_cap", False):
-                    self._logged_cap = True
-                    self.capped_turns += 1
-                    logger.info(f"turn cap: dropped the rest of a long reply after {self.cap.words} words")
-                return
-            if frame.text.strip():
-                self.spoke = True
+            await self._speakable(self.guard.feed(frame.text), direction)
+            return  # whole checked sentences are pushed by _speakable; the raw token never goes on
         elif isinstance(frame, LLMFullResponseEndFrame):
+            await self._speakable(self.guard.flush(), direction)
             self._logged_cap = False
+            if self.guard.tripped:
+                self._line = True  # the polite refusal below is this turn's answer
+                await self.push_frame(frame, direction)
+                await self._leaked()
+                return
             if self.on_empty and not (self.spoke or self._saw_call or self._interrupted or self._line):
                 await self.push_frame(frame, direction)
                 await self.on_empty()  # empty, malformed or truncated reply: nothing was said and no tool is running
@@ -166,6 +170,24 @@ class LLMTap(FrameProcessor):
                     self.tokens_in, self.tokens_out = int(usage.prompt_tokens or 0), int(usage.completion_tokens or 0)
         await self.push_frame(frame, direction)
 
+
+    async def _speakable(self, pieces: list[str], direction: FrameDirection) -> None:
+        """Push checked sentences on to the voice, applying the spoken-turn cap."""
+        for piece in pieces:
+            if not self.cap.allow(piece):
+                if self.cap.closed and self.cap.words and not getattr(self, "_logged_cap", False):
+                    self._logged_cap = True
+                    self.capped_turns += 1
+                    logger.info(f"turn cap: dropped the rest of a long reply after {self.cap.words} words")
+                continue
+            if piece.strip():
+                self.spoke = True
+            await self.push_frame(LLMTextFrame(piece), direction)
+
+    async def _leaked(self) -> None:
+        self.leaks += 1
+        logger.warning(f"leak guard blocked a reply ({self.guard.reason}); caller hears the polite refusal instead")
+        await self.say(prompts.LEAK_LINE)
 
     async def say(self, text: str) -> None:
         """Speak a fixed line from HERE (after the LLM), so it is not queued behind a request that is still in flight."""
@@ -607,6 +629,7 @@ class VoiceCall:
         self.context.messages[0]["content"] = prompts.system_prompt(
             family=self.family, first_name=resp.get("first_name", ""), brief=resp.get("brief", []), today=resp.get("as_of", ""), channel="phone" if init.kind == "phone" else "web", callback_notes=callback_notes, may_ring_back=init.may_ring_back
         )
+        self._tap.guard.set_prompt(self.context.messages[0]["content"])  # what must never be read back to a caller
         self.context.set_tools(to_tools_schema(specs))
         for sp in specs:
             self.llm.register_function(sp["name"], self._on_tool)

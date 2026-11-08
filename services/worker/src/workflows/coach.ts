@@ -46,7 +46,7 @@ export const coachWorkflow: WorkflowDef = {
     });
     let answer = await groundAnswer(run, { agent: 'coach', answer: res.answer, results: res.results, question, brief });
     // the reviewer sees the same tool results the answer was built from, or it calls real bill amounts "not in FACTS"
-    answer = await adviceGuard(run, { agent: 'coach', kind: 'answer', text: answer, question, sources: res.results, fallback: SAFE_REPLY });
+    answer = await adviceGuard(run, { agent: 'coach', kind: 'answer', text: answer, question, sources: [...res.results, brief], fallback: SAFE_REPLY });
     run.coachReply(answer);
     return { answer, steps: res.steps, tools_used: res.toolsUsed };
   },

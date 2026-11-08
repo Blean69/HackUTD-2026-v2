@@ -45,6 +45,23 @@ function indicatorValue(i: Record<string, any>): number {
   return one(i.value);
 }
 
+/**
+ * Free text in a tool result (account nicknames, bill and merchant names, goal titles, a caller's own words echoed by the scam check) can
+ * come from outside the house: a bank feed, an import, a prank. Before the voice model reads it, control characters and links are removed
+ * and anything that reads like an instruction to the model is replaced, so data cannot give orders. The full result still goes to the trace.
+ */
+const INJECTION = /\b(?:ignore|disregard|forget|override|bypass)\b[^.\n]{0,40}\b(?:instructions?|prompts?|rules?|above|previous|earlier|guidelines?)\b|\b(?:system|developer) (?:prompt|message|override|mode)\b|\byou are now\b|\b(?:reveal|print|repeat|recite|read out|say)\b[^.\n]{0,30}\b(?:prompt|instructions|secret|password|pin|api key)\b|<\/?(?:system|assistant|tool|data|instructions?)\b|```|\bnew instructions?\b/i;
+export function scrubText(s: string): string {
+  const t = s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/https?:\/\/\S+|www\.\S+|[\w.+-]+@[\w-]+\.[\w.]+/gi, '').replace(/\s+/g, ' ').trim();
+  return INJECTION.test(t) ? '[removed]' : t.slice(0, 240);
+}
+function scrub(v: unknown, depth = 0): unknown {
+  if (typeof v === 'string') return scrubText(v);
+  if (depth > 6 || v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => scrub(x, depth + 1));
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, scrub(x, depth + 1)]));
+}
+
 export function voiceView(tool: string, result: unknown, asOf = ''): unknown {
   const r = rec(result);
   let view: unknown;
@@ -152,6 +169,6 @@ export function voiceView(tool: string, result: unknown, asOf = ''): unknown {
       view = result;
   }
   // belt and braces: whatever a tool returns, the voice model never sees more than VOICE_VIEW_MAX_CHARS of JSON
-  const s = fitJson(view, VOICE_VIEW_MAX_CHARS);
+  const s = fitJson(scrub(view), VOICE_VIEW_MAX_CHARS);
   return JSON.parse(s);
 }
